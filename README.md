@@ -1,36 +1,136 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Scribbl
 
-## Getting Started
+A collaborative workspace app for students and educators. Supports real-time notes, whiteboards, meetings with video, file sharing, and chat — organized into workspaces (courses, study groups, tutoring groups).
 
-First, run the development server:
+## Tech Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+| Layer | Tool |
+|---|---|
+| Framework | Next.js (App Router, server actions) |
+| Database | PostgreSQL via Prisma |
+| Auth + Storage | Supabase |
+| Real-time collaboration | Liveblocks (notes, whiteboards, chat events) |
+| Video meetings | LiveKit |
+| Email | Resend |
+| Styling | Tailwind CSS |
+
+## Project Structure
+
+```
+app/
+  page.tsx                          # Landing / dashboard
+  login/                            # Auth (Supabase)
+  auth/                             # OAuth callback
+  invites/[token]/                  # Workspace invite acceptance
+  workspaces/[id]/                  # Workspace home
+    chat/                           # Workspace-level chat channels
+    notes/[noteId]/                 # Text notes + whiteboards (Liveblocks)
+    files/                          # File upload/download
+    members/                        # Member list
+    meetings/
+      [meetingId]/                  # Meeting detail page
+        video/                      # LiveKit video room
+
+components/
+  RealtimeChatPanel.tsx             # Reusable real-time chat (Liveblocks broadcast events + DB persistence)
+  TextNoteEditor.tsx                # Rich text note editor
+  WhiteboardEditor.tsx              # Whiteboard editor
+  LiveblocksRoom.tsx                # Liveblocks room wrapper
+  PresenceBar.tsx                   # Shows who's online in a room
+
+lib/
+  prisma.ts                         # Prisma client
+  current-user.ts                   # Get authenticated user from Supabase session
+  meeting-lifecycle.ts              # Meeting state machine (upcoming, live, ended, cancelled)
+  liveblocks-room.ts                # Liveblocks server auth helper
+  livekit-room.ts                   # LiveKit token generation
+  supabase/                         # Supabase client, server, admin, proxy
+  email/                            # Resend email templates (invites, meeting notifications)
+  pdf/                              # Note PDF export
+
+prisma/
+  schema.prisma                     # Full DB schema
+  migrations/                       # All applied migrations
+  seed.sql                          # Sample dev data
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Database Models
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **User** — synced from Supabase auth
+- **Workspace** — course, study group, or tutoring group
+- **WorkspaceMember** — roles: OWNER, ADMIN, MEMBER, TUTOR, PROFESSOR
+- **WorkspaceInvite** — token-based email invites
+- **Channel** — chat channels per workspace or per meeting
+- **Message** — chat messages with soft delete + edit tracking
+- **Note** — text notes or whiteboards, with visibility + collaboration mode settings
+- **NoteCollaborator** — per-user note permissions (VIEW, COMMENT, EDIT)
+- **File** — uploaded files stored in Supabase Storage
+- **Meeting** — scheduled meetings with cancellation metadata
+- **MeetingParticipant** — RSVP + attendance tracking (INVITED, ACCEPTED, DECLINED)
+- **MeetingVideoSession** — LiveKit session tracking per user per meeting
+- **MeetingArtifact** — notes, files, recordings attached to a meeting
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## What's Been Built
 
-## Learn More
+- Supabase auth (email/password + OAuth callback)
+- Workspace creation and management
+- Workspace invite flow (token email → accept page → membership)
+- Member roles and permissions
+- Notes (text + whiteboard) with Liveblocks real-time collaboration
+- Note visibility (private vs workspace-shared) and export access controls
+- Note PDF export
+- File upload/download with Supabase Storage
+- Meetings — create, cancel, RSVP, view participants
+- LiveKit video rooms embedded in meeting pages
+- Meeting artifacts (attach notes/files to meetings)
+- Chat channels per workspace and per meeting
+- **Real-time chat using Liveblocks broadcast events + Postgres persistence** ← currently in progress
 
-To learn more about Next.js, take a look at the following resources:
+## Real-Time Chat Architecture
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Chat is implemented in `components/RealtimeChatPanel.tsx`:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Messages are **persisted to Postgres** via server actions in `app/api/chat/messages/route.ts`
+- **Real-time delivery** uses Liveblocks broadcast events (`useBroadcastEvent` / `useEventListener`) so all users in the same Liveblocks room see new/edited/deleted messages instantly without polling
+- Each channel is tied to a Liveblocks room (workspace room or meeting room)
+- Optimistic UI: messages appear immediately for the sender while the server action runs
+- Supports message edit and soft delete
 
-## Deploy on Vercel
+## Current Focus
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Real-time chat is the active development area. The `RealtimeChatPanel` component is reused for both workspace chat (`app/workspaces/[id]/chat/`) and meeting chat (`app/workspaces/[id]/meetings/[meetingId]/`).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Setup
+
+1. Clone the repo
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Add a `.env` file — get it from the project owner. It needs:
+   - `DATABASE_URL` — Supabase Postgres connection string
+   - `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` + `SUPABASE_SECRET_KEY`
+   - `LIVEBLOCKS_SECRET_KEY`
+   - `LIVEKIT_URL` + `LIVEKIT_API_KEY` + `LIVEKIT_API_SECRET`
+   - `RESEND_API_KEY` + `EMAIL_FROM`
+   - `APP_URL` — e.g. `http://localhost:3000`
+   - Supabase S3 keys for recordings storage
+
+4. Apply database migrations:
+   ```bash
+   npx prisma migrate deploy
+   ```
+5. Run the dev server:
+   ```bash
+   npm run dev
+   ```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+## Useful Commands
+
+```bash
+npx prisma migrate dev --name describe_your_change   # create + apply a new migration
+npx prisma studio                                    # visual DB browser
+npx prisma format                                    # format schema.prisma
+```
