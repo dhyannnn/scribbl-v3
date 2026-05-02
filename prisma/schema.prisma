@@ -1,0 +1,367 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceType {
+  COURSE
+  STUDY_GROUP
+  TUTORING_GROUP
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  TUTOR
+  PROFESSOR
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  REMOVED
+}
+
+enum WorkspaceInviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum ChannelType {
+  CHAT
+  ANNOUNCEMENT
+}
+
+enum NoteType {
+  TEXT
+  WHITEBOARD
+}
+
+enum NoteStorageType {
+  JSON
+  FILE
+}
+
+enum NoteVisibility {
+  /// Only the owner can see the note.
+  PRIVATE
+  /// Active workspace members can see the note.
+  WORKSPACE_SHARED
+}
+
+enum NoteCollaborationMode {
+  /// Only the owner can edit. Workspace-shared SOLO notes are view-only for other members.
+  SOLO
+  /// Active workspace members can edit.
+  COLLABORATIVE
+}
+
+enum NoteSourceDevice {
+  WEB
+  TABLET
+  IPAD
+  UNKNOWN
+}
+
+enum NotePermission {
+  VIEW
+  COMMENT
+  EDIT
+}
+
+enum NoteExportAccess {
+  /// Only the note owner plus workspace owners/admins can export workspace-shared notes.
+  OWNER_ADMIN_AND_CREATOR
+  /// Any active workspace member who can view the note can export it.
+  WORKSPACE_MEMBERS
+}
+
+enum MeetingParticipantStatus {
+  INVITED
+  ACCEPTED
+  DECLINED
+}
+
+enum MeetingArtifactType {
+  NOTE
+  WHITEBOARD
+  PDF
+  RECORDING
+  FILE
+}
+
+enum MeetingArtifactSource {
+  ATTACHED
+  CREATED_IN_MEETING
+}
+
+enum FileVisibility {
+  PRIVATE
+  WORKSPACE_SHARED
+}
+
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  email       String   @unique
+  displayName String
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdWorkspaces    Workspace[]           @relation("WorkspaceCreator")
+  memberships          WorkspaceMember[]
+  createdChannels      Channel[]             @relation("ChannelCreator")
+  sentMessages         Message[]
+  ownedNotes           Note[]
+  noteShares           NoteCollaborator[]
+  uploadedFiles        File[]
+  createdMeetings      Meeting[]             @relation("MeetingCreator")
+  meetingInvites       MeetingParticipant[]
+  meetingVideoSessions MeetingVideoSession[]
+  meetingArtifacts     MeetingArtifact[]
+  sentWorkspaceInvites WorkspaceInvite[]     @relation("WorkspaceInviteInviter")
+}
+
+model Workspace {
+  id              String        @id @default(uuid()) @db.Uuid
+  name            String
+  type            WorkspaceType
+  description     String?
+  createdByUserId String        @db.Uuid
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  createdBy User @relation("WorkspaceCreator", fields: [createdByUserId], references: [id])
+
+  members  WorkspaceMember[]
+  channels Channel[]
+  notes    Note[]
+  files    File[]
+  meetings Meeting[]
+  invites  WorkspaceInvite[]
+}
+
+model WorkspaceInvite {
+  id              String                @id @default(uuid()) @db.Uuid
+  workspaceId     String                @db.Uuid
+  email           String
+  role            WorkspaceRole
+  token           String                @unique
+  status          WorkspaceInviteStatus @default(PENDING)
+  invitedByUserId String                @db.Uuid
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  expiresAt       DateTime
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User      @relation("WorkspaceInviteInviter", fields: [invitedByUserId], references: [id])
+
+  @@unique([workspaceId, email])
+  @@index([email])
+  @@index([workspaceId, status])
+}
+
+model WorkspaceMember {
+  id          String           @id @default(uuid()) @db.Uuid
+  workspaceId String           @db.Uuid
+  userId      String           @db.Uuid
+  role        WorkspaceRole
+  status      MembershipStatus @default(ACTIVE)
+  joinedAt    DateTime?
+  createdAt   DateTime         @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Channel {
+  id              String      @id @default(uuid()) @db.Uuid
+  workspaceId     String      @db.Uuid
+  meetingId       String?     @unique @db.Uuid
+  name            String
+  type            ChannelType @default(CHAT)
+  createdByUserId String      @db.Uuid
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  meeting   Meeting?  @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  createdBy User      @relation("ChannelCreator", fields: [createdByUserId], references: [id])
+  messages  Message[]
+
+  @@index([workspaceId])
+}
+
+model Message {
+  id           String    @id @default(uuid()) @db.Uuid
+  channelId    String    @db.Uuid
+  senderUserId String    @db.Uuid
+  body         String
+  createdAt    DateTime  @default(now())
+  editedAt     DateTime?
+  deletedAt    DateTime?
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender  User    @relation(fields: [senderUserId], references: [id])
+
+  @@index([channelId, createdAt])
+  @@index([senderUserId])
+}
+
+model Note {
+  id            String                @id @default(uuid()) @db.Uuid
+  workspaceId   String?               @db.Uuid
+  ownerUserId   String                @db.Uuid
+  title         String
+  type          NoteType
+  visibility    NoteVisibility        @default(WORKSPACE_SHARED)
+  collaboration NoteCollaborationMode @default(SOLO)
+  exportAccess  NoteExportAccess      @default(WORKSPACE_MEMBERS)
+  sourceDevice  NoteSourceDevice      @default(WEB)
+  storageType   NoteStorageType       @default(JSON)
+  contentJson   Json?
+  contentFileId String?               @unique @db.Uuid
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  deletedAt     DateTime?
+
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  owner       User       @relation(fields: [ownerUserId], references: [id])
+  contentFile File?      @relation("NoteContentFile", fields: [contentFileId], references: [id])
+
+  collaborators NoteCollaborator[]
+  artifacts     MeetingArtifact[]
+
+  @@index([workspaceId])
+  @@index([ownerUserId])
+}
+
+model NoteCollaborator {
+  id         String         @id @default(uuid()) @db.Uuid
+  noteId     String         @db.Uuid
+  userId     String         @db.Uuid
+  permission NotePermission
+  createdAt  DateTime       @default(now())
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([noteId, userId])
+  @@index([userId])
+}
+
+model File {
+  id               String         @id @default(uuid()) @db.Uuid
+  workspaceId      String?        @db.Uuid
+  uploadedByUserId String         @db.Uuid
+  name             String
+  mimeType         String
+  sizeBytes        Int?
+  visibility       FileVisibility @default(WORKSPACE_SHARED)
+  storageKey       String
+  publicUrl        String?
+  createdAt        DateTime       @default(now())
+
+  workspace  Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  uploadedBy User       @relation(fields: [uploadedByUserId], references: [id])
+
+  noteContentFor Note?             @relation("NoteContentFile")
+  artifacts      MeetingArtifact[]
+
+  @@index([workspaceId])
+  @@index([uploadedByUserId])
+}
+
+model Meeting {
+  id                 String    @id @default(uuid()) @db.Uuid
+  workspaceId        String?   @db.Uuid
+  title              String
+  description        String?
+  startsAt           DateTime
+  endsAt             DateTime?
+  provider           String?
+  providerMeetingId  String?
+  meetingUrl         String?
+  createdByUserId    String    @db.Uuid
+  canceledAt         DateTime?
+  canceledByUserId   String?   @db.Uuid
+  cancellationReason String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  createdBy User       @relation("MeetingCreator", fields: [createdByUserId], references: [id])
+
+  participants  MeetingParticipant[]
+  videoSessions MeetingVideoSession[]
+  artifacts     MeetingArtifact[]
+  channel       Channel?
+
+  @@index([workspaceId, startsAt])
+  @@index([createdByUserId])
+}
+
+model MeetingParticipant {
+  id        String                   @id @default(uuid()) @db.Uuid
+  meetingId String                   @db.Uuid
+  userId    String                   @db.Uuid
+  status    MeetingParticipantStatus @default(INVITED)
+  joinedAt  DateTime?
+  leftAt    DateTime?
+  createdAt DateTime                 @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@index([userId])
+}
+
+model MeetingVideoSession {
+  id              String    @id @default(uuid()) @db.Uuid
+  meetingId       String    @db.Uuid
+  userId          String    @db.Uuid
+  clientSessionId String
+  connectedAt     DateTime  @default(now())
+  disconnectedAt  DateTime?
+  lastSeenAt      DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId, clientSessionId])
+  @@index([meetingId, userId, disconnectedAt])
+  @@index([userId])
+}
+
+model MeetingArtifact {
+  id              String                @id @default(uuid()) @db.Uuid
+  meetingId       String                @db.Uuid
+  type            MeetingArtifactType
+  source          MeetingArtifactSource @default(ATTACHED)
+  noteId          String?               @db.Uuid
+  fileId          String?               @db.Uuid
+  createdByUserId String                @db.Uuid
+  createdAt       DateTime              @default(now())
+
+  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  note      Note?   @relation(fields: [noteId], references: [id], onDelete: SetNull)
+  file      File?   @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  createdBy User    @relation(fields: [createdByUserId], references: [id])
+
+  @@index([meetingId])
+  @@index([noteId])
+  @@index([fileId])
+}

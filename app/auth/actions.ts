@@ -1,0 +1,123 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+
+export async function signInWithPassword(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  const next = getSafeNext(formData.get("next"));
+
+  if (!email || !password) {
+    redirect(createLoginUrl({ message: "Enter an email and password", next }));
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    redirect(createLoginUrl({ message: error.message, next }));
+  }
+
+  redirect(next);
+}
+
+export async function signUpWithPassword(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  const displayName = String(formData.get("displayName") ?? "").trim();
+  const next = getSafeNext(formData.get("next"));
+
+  if (!email || !password) {
+    redirect(createLoginUrl({ message: "Enter an email and password", mode: "signup", next }));
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: `${getSiteUrl()}/auth/callback?next=${encodeURIComponent(next)}`,
+      data: {
+        full_name: displayName || email.split("@")[0],
+      },
+    },
+  });
+
+  if (error) {
+    redirect(createLoginUrl({ message: error.message, mode: "signup", next }));
+  }
+
+  redirect(createLoginUrl({ message: "Check your email to confirm your account", next }));
+}
+
+export async function signInWithOAuth(formData: FormData) {
+  const provider = String(formData.get("provider") ?? "");
+  const next = getSafeNext(formData.get("next"));
+
+  if (provider !== "google" && provider !== "azure") {
+    redirect(createLoginUrl({ message: "Unknown provider", next }));
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: `${getSiteUrl()}/auth/callback?next=${encodeURIComponent(next)}`,
+      scopes: provider === "azure" ? "email" : undefined,
+    },
+  });
+
+  if (error || !data.url) {
+    redirect(createLoginUrl({ message: error?.message ?? "Could not start sign in", next }));
+  }
+
+  redirect(data.url);
+}
+
+export async function signOut() {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/login");
+}
+
+function getSiteUrl() {
+  return process.env.APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+}
+
+function getSafeNext(value: FormDataEntryValue | string | null | undefined) {
+  const next = String(value ?? "/");
+
+  if (!next.startsWith("/") || next.startsWith("//")) {
+    return "/";
+  }
+
+  return next;
+}
+
+function createLoginUrl({
+  message,
+  mode,
+  next,
+}: {
+  message: string;
+  mode?: "signup";
+  next: string;
+}) {
+  const params = new URLSearchParams({
+    message,
+  });
+
+  if (mode) {
+    params.set("mode", mode);
+  }
+
+  if (next !== "/") {
+    params.set("next", next);
+  }
+
+  return `/login?${params.toString()}`;
+}
