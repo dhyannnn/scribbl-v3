@@ -15,22 +15,34 @@ delete from "User";
 
 insert into "User" (
   "id",
+  "authUserId",
   "email",
+  "firstName",
+  "lastName",
   "displayName",
+  "role",
   "avatarUrl",
   "createdAt",
   "updatedAt"
 ) values (
   '00000000-0000-0000-0000-000000000001',
+  null,
   'karuna@example.com',
   'Karuna',
+  '',
+  'Karuna',
+  'STUDENT',
   null,
   now(),
   now()
 ), (
   '00000000-0000-0000-0000-000000000002',
+  null,
   'avery@example.com',
   'Avery',
+  '',
+  'Avery',
+  'STUDENT',
   null,
   now(),
   now()

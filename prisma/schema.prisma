@@ -106,10 +106,20 @@ enum FileVisibility {
   WORKSPACE_SHARED
 }
 
+enum UserRole {
+  STUDENT
+  EDUCATOR
+  ADMIN
+}
+
 model User {
   id          String   @id @default(uuid()) @db.Uuid
+  authUserId  String?  @unique
   email       String   @unique
+  firstName   String   @default("")
+  lastName    String   @default("")
   displayName String
+  role        UserRole @default(STUDENT)
   avatarUrl   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -137,7 +147,7 @@ model Workspace {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  createdBy User @relation("WorkspaceCreator", fields: [createdByUserId], references: [id])
+  createdBy User @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
 
   members  WorkspaceMember[]
   channels Channel[]
@@ -162,7 +172,7 @@ model WorkspaceInvite {
   updatedAt       DateTime              @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  invitedBy User      @relation("WorkspaceInviteInviter", fields: [invitedByUserId], references: [id])
+  invitedBy User      @relation("WorkspaceInviteInviter", fields: [invitedByUserId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, email])
   @@index([email])
@@ -197,7 +207,7 @@ model Channel {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   meeting   Meeting?  @relation(fields: [meetingId], references: [id], onDelete: SetNull)
-  createdBy User      @relation("ChannelCreator", fields: [createdByUserId], references: [id])
+  createdBy User      @relation("ChannelCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
   messages  Message[]
 
   @@index([workspaceId])
@@ -213,7 +223,7 @@ model Message {
   deletedAt    DateTime?
 
   channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  sender  User    @relation(fields: [senderUserId], references: [id])
+  sender  User    @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
 
   @@index([channelId, createdAt])
   @@index([senderUserId])
@@ -237,8 +247,8 @@ model Note {
   deletedAt     DateTime?
 
   workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  owner       User       @relation(fields: [ownerUserId], references: [id])
-  contentFile File?      @relation("NoteContentFile", fields: [contentFileId], references: [id])
+  owner       User       @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  contentFile File?      @relation("NoteContentFile", fields: [contentFileId], references: [id], onDelete: SetNull)
 
   collaborators NoteCollaborator[]
   artifacts     MeetingArtifact[]
@@ -274,7 +284,7 @@ model File {
   createdAt        DateTime       @default(now())
 
   workspace  Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  uploadedBy User       @relation(fields: [uploadedByUserId], references: [id])
+  uploadedBy User       @relation(fields: [uploadedByUserId], references: [id], onDelete: Cascade)
 
   noteContentFor Note?             @relation("NoteContentFile")
   artifacts      MeetingArtifact[]
@@ -301,7 +311,7 @@ model Meeting {
   updatedAt          DateTime  @updatedAt
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  createdBy User       @relation("MeetingCreator", fields: [createdByUserId], references: [id])
+  createdBy User       @relation("MeetingCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
 
   participants  MeetingParticipant[]
   videoSessions MeetingVideoSession[]
@@ -359,7 +369,7 @@ model MeetingArtifact {
   meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   note      Note?   @relation(fields: [noteId], references: [id], onDelete: SetNull)
   file      File?   @relation(fields: [fileId], references: [id], onDelete: SetNull)
-  createdBy User    @relation(fields: [createdByUserId], references: [id])
+  createdBy User    @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
 
   @@index([meetingId])
   @@index([noteId])

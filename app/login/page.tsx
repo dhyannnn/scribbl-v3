@@ -45,13 +45,33 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <form action={isSignup ? signUpWithPassword : signInWithPassword} className="mt-5 grid gap-3">
             {safeNext !== "/" ? <input type="hidden" name="next" value={safeNext} /> : null}
             {isSignup ? (
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-[#4d4f47]">Name</span>
-                <input
-                  name="displayName"
-                  className="min-h-11 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
-                />
-              </label>
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-2">
+                    <span className="text-sm font-medium text-[#4d4f47]">First name</span>
+                    <input
+                      name="firstName"
+                      required
+                      className="min-h-11 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
+                    />
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm font-medium text-[#4d4f47]">Last name</span>
+                    <input
+                      name="lastName"
+                      required
+                      className="min-h-11 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
+                    />
+                  </label>
+                </div>
+                <label className="grid gap-2">
+                  <span className="text-sm font-medium text-[#4d4f47]">Display name</span>
+                  <input
+                    name="displayName"
+                    className="min-h-11 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
+                  />
+                </label>
+              </>
             ) : null}
             <label className="grid gap-2">
               <span className="text-sm font-medium text-[#4d4f47]">Email</span>

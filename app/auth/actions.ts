@@ -28,6 +28,8 @@ export async function signInWithPassword(formData: FormData) {
 export async function signUpWithPassword(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
+  const firstName = String(formData.get("firstName") ?? "").trim();
+  const lastName = String(formData.get("lastName") ?? "").trim();
   const displayName = String(formData.get("displayName") ?? "").trim();
   const next = getSafeNext(formData.get("next"));
 
@@ -42,7 +44,10 @@ export async function signUpWithPassword(formData: FormData) {
     options: {
       emailRedirectTo: `${getSiteUrl()}/auth/callback?next=${encodeURIComponent(next)}`,
       data: {
-        full_name: displayName || email.split("@")[0],
+        first_name: firstName,
+        last_name: lastName,
+        display_name: displayName || [firstName, lastName].filter(Boolean).join(" ") || email.split("@")[0],
+        full_name: [firstName, lastName].filter(Boolean).join(" ") || displayName || email.split("@")[0],
       },
     },
   });

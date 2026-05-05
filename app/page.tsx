@@ -161,11 +161,19 @@ export default async function Home() {
             <p className="mt-1 text-lg font-semibold">{user?.displayName ?? "No user yet"}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {authUser ? (
-                <form action={signOut}>
-                  <button className="rounded-md border border-[#c8c8bd] bg-white px-3 py-1.5 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]">
-                    Sign out
-                  </button>
-                </form>
+                <>
+                  <Link
+                    href="/account"
+                    className="rounded-md border border-[#c8c8bd] bg-white px-3 py-1.5 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]"
+                  >
+                    Account
+                  </Link>
+                  <form action={signOut}>
+                    <button className="rounded-md border border-[#c8c8bd] bg-white px-3 py-1.5 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]">
+                      Sign out
+                    </button>
+                  </form>
+                </>
               ) : (
                 <Link
                   href="/login"
