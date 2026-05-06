@@ -1,6 +1,13 @@
 "use client";
 
-import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { MeetingVideoRoom } from "./MeetingVideoRoom";
 
 type FloatingMeetingVideoProps = {
@@ -54,10 +61,11 @@ export function FloatingMeetingVideo({
   meetingId,
   disabled = false,
 }: FloatingMeetingVideoProps) {
-  const initialState = loadStoredPanel(meetingId);
-  const [panel, setPanel] = useState(initialState.panel);
-  const [isMinimized, setIsMinimized] = useState(initialState.minimized);
+  const [panel, setPanel] = useState(getServerSafeDefaultPanel);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [videoSurface, setVideoSurface] = useState<VideoSurfaceState>("hub");
+  const [hasHydrated, setHasHydrated] = useState(false);
+  const hasLoadedStoredPanelRef = useRef(false);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const popoutRef = useRef<Window | null>(null);
   const interactionRef = useRef<InteractionState | null>(null);
@@ -66,11 +74,27 @@ export function FloatingMeetingVideo({
   const pendingPanelRef = useRef<PanelState | null>(null);
 
   useEffect(() => {
+    if (!hasLoadedStoredPanelRef.current) {
+      return;
+    }
+
     window.localStorage.setItem(
       getStorageKey(meetingId),
       JSON.stringify({ panel, minimized: isMinimized } satisfies StoredPanelState),
     );
   }, [isMinimized, meetingId, panel]);
+
+  useEffect(() => {
+    const storedPanel = loadStoredPanel(meetingId);
+    const restoreFrame = window.requestAnimationFrame(() => {
+      hasLoadedStoredPanelRef.current = true;
+      setPanel(storedPanel.panel);
+      setIsMinimized(storedPanel.minimized);
+      setHasHydrated(true);
+    });
+
+    return () => window.cancelAnimationFrame(restoreFrame);
+  }, [meetingId]);
 
   useEffect(() => {
     const channel = new BroadcastChannel(getChannelName(meetingId));
@@ -257,11 +281,15 @@ export function FloatingMeetingVideo({
     scrollToHubSection(hash);
   }
 
+  if (!hasHydrated) {
+    return null;
+  }
+
   if (videoSurface === "split") {
     return (
       <aside
-        className="fixed inset-y-0 right-0 z-50 flex min-w-[420px] flex-col border-l border-[#d8d8ce] bg-[#171713] text-white shadow-2xl"
-        style={{ width: splitWidth }}
+        className="scribbl-video-split-panel z-50 flex flex-col border border-[#d8d8ce] bg-[#171713] text-white shadow-2xl min-[1101px]:border-y-0 min-[1101px]:border-r-0"
+        style={{ "--scribbl-split-panel-width": splitWidth } as CSSProperties}
       >
         <header className="border-b border-white/10 px-6 py-5">
           <button
@@ -427,16 +455,16 @@ function scrollToHubSection(hash: string) {
   }
 }
 
-function getDefaultPanel(): PanelState {
-  if (typeof window === "undefined") {
-    return {
-      left: 24,
-      top: 24,
-      width: 420,
-      height: 340,
-    };
-  }
+function getServerSafeDefaultPanel(): PanelState {
+  return {
+    left: 24,
+    top: 24,
+    width: 420,
+    height: 340,
+  };
+}
 
+function getDefaultPanel(): PanelState {
   const width = Math.min(420, Math.max(minPanelWidth, window.innerWidth - 32));
   const height = Math.min(340, Math.max(minPanelHeight, window.innerHeight - 32));
 

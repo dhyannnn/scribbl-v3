@@ -327,6 +327,90 @@ export async function updateWorkspaceMemberRole(formData: FormData) {
   redirect(`/workspaces/${workspaceId}/members?invite=role-updated`);
 }
 
+export async function transferWorkspaceOwnership(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const memberId = String(formData.get("memberId") ?? "");
+  const confirmation = String(formData.get("confirmation") ?? "").trim();
+
+  if (!workspaceId || !memberId || confirmation !== "TRANSFER") {
+    redirect(workspaceId ? `/workspaces/${workspaceId}/members?invite=transfer-confirmation-required` : "/");
+  }
+
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    redirect(`/workspaces/${workspaceId}/members?invite=unauthorized`);
+  }
+
+  const [currentMembership, nextOwnerMembership] = await Promise.all([
+    prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId: currentUser.id,
+        },
+      },
+      select: {
+        id: true,
+        role: true,
+        status: true,
+      },
+    }),
+    prisma.workspaceMember.findFirst({
+      where: {
+        id: memberId,
+        workspaceId,
+        status: "ACTIVE",
+      },
+      select: {
+        id: true,
+        role: true,
+        userId: true,
+      },
+    }),
+  ]);
+
+  if (currentMembership?.role !== "OWNER" || currentMembership.status !== "ACTIVE" || !nextOwnerMembership) {
+    redirect(`/workspaces/${workspaceId}/members?invite=unauthorized`);
+  }
+
+  if (nextOwnerMembership.role === "OWNER" || nextOwnerMembership.userId === currentUser.id) {
+    redirect(`/workspaces/${workspaceId}/members?invite=transfer-invalid`);
+  }
+
+  await prisma.$transaction([
+    prisma.workspaceMember.update({
+      where: {
+        id: currentMembership.id,
+      },
+      data: {
+        role: "ADMIN",
+      },
+    }),
+    prisma.workspaceMember.update({
+      where: {
+        id: nextOwnerMembership.id,
+      },
+      data: {
+        role: "OWNER",
+      },
+    }),
+    prisma.workspace.update({
+      where: {
+        id: workspaceId,
+      },
+      data: {
+        createdByUserId: nextOwnerMembership.userId,
+      },
+    }),
+  ]);
+
+  revalidatePath(`/workspaces/${workspaceId}`);
+  revalidatePath(`/workspaces/${workspaceId}/members`);
+  revalidatePath("/");
+  redirect(`/workspaces/${workspaceId}/members?invite=ownership-transferred`);
+}
+
 export async function revokeWorkspaceInvite(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
   const inviteId = String(formData.get("inviteId") ?? "");

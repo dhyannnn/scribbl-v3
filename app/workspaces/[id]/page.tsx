@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { InviteAcceptedBroadcast } from "@/components/InviteAcceptedBroadcast";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
 import {
@@ -8,6 +9,7 @@ import {
   type MeetingLifecycleState,
 } from "@/lib/meeting-lifecycle";
 import { prisma } from "@/lib/prisma";
+import { isUuid } from "@/lib/uuid";
 import { updateWorkspaceDetails } from "./actions";
 
 type WorkspacePageProps = {
@@ -23,6 +25,10 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
   const { id } = await params;
   const { workspace: workspaceStatus } = await searchParams;
   const currentUser = await getCurrentUser();
+
+  if (!isUuid(id)) {
+    notFound();
+  }
 
   const workspace = await prisma.workspace.findUnique({
     where: {
@@ -139,6 +145,9 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
 
   return (
     <main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
+      {workspaceStatus?.startsWith("invite-accepted") ? (
+        <InviteAcceptedBroadcast href={`/workspaces/${workspace.id}`} />
+      ) : null}
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-6 sm:px-8 lg:px-10">
         <header className="border-b border-[#d8d8ce] pb-6">
           <Link href={"/"} className="text-sm font-medium text-[#2f604b]">

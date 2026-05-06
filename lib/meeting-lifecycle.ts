@@ -62,7 +62,7 @@ export function canUseMeetingSession(state: MeetingLifecycleState) {
 }
 
 export function canChangeMeetingRsvp(state: MeetingLifecycleState) {
-  return state === "scheduled" || state === "starting-soon" || state === "joinable";
+  return state === "scheduled" || state === "starting-soon" || state === "joinable" || state === "live";
 }
 
 export function canManageMeetingSchedule(state: MeetingLifecycleState) {

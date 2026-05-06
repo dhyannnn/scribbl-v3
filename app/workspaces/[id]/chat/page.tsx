@@ -33,6 +33,18 @@ export default async function ChatPage({ params, searchParams }: PageProps) {
         },
       },
       channels: {
+        where: {
+          OR: [
+            {
+              meetingId: null,
+            },
+            {
+              meeting: {
+                canceledAt: null,
+              },
+            },
+          ],
+        },
         include: {
           meeting: {
             select: {
@@ -151,8 +163,27 @@ export default async function ChatPage({ params, searchParams }: PageProps) {
 type ChannelDisplay = {
   name: string;
   meetingId: string | null;
+  meeting?: {
+    startsAt: Date;
+    canceledAt: Date | null;
+  } | null;
 };
 
 function getChannelDisplayName(channel: ChannelDisplay) {
-  return channel.meetingId ? channel.name : `#${channel.name}`;
+  if (!channel.meetingId) {
+    return `#${channel.name}`;
+  }
+
+  const startsAt = channel.meeting?.startsAt;
+
+  if (!startsAt) {
+    return channel.name;
+  }
+
+  return `${channel.name} / ${startsAt.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })}`;
 }

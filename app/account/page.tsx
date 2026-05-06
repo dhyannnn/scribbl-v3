@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/current-user";
+import { prisma } from "@/lib/prisma";
 import { deleteAccount, updateAccountPassword, updateAccountProfile } from "./actions";
 
 type AccountPageProps = {
@@ -15,6 +16,26 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   if (!currentUser) {
     redirect("/login?next=/account");
   }
+
+  const ownedWorkspaces = await prisma.workspaceMember.findMany({
+    where: {
+      userId: currentUser.id,
+      role: "OWNER",
+      status: "ACTIVE",
+    },
+    include: {
+      workspace: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+  const canDeleteAccount = ownedWorkspaces.length === 0;
 
   return (
     <main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
@@ -122,15 +143,44 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
         </section>
 
         <section className="rounded-md border border-[#d8b8b2] bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="grid gap-4">
             <div>
               <h2 className="text-xl font-semibold text-[#7a2f24]">Delete Account</h2>
               <p className="mt-1 text-sm text-[#66685f]">
-                This signs you out and removes your account from Scribbl.
+                This signs you out, deletes your login, removes you from memberships, and anonymizes your shared history.
               </p>
             </div>
-            <form action={deleteAccount}>
-              <button className="rounded-md bg-[#8a3328] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#70291f]">
+            {ownedWorkspaces.length > 0 ? (
+              <div className="rounded-md border border-[#e2c5bf] bg-[#fff7f5] p-3 text-sm text-[#7a2f24]">
+                <p className="font-medium">Account deletion is blocked while you own workspaces.</p>
+                <div className="mt-2 grid gap-1 text-[#6d413b]">
+                  {ownedWorkspaces.map((membership) => (
+                    <Link
+                      key={membership.id}
+                      href={`/workspaces/${membership.workspace.id}/members`}
+                      className="font-medium underline underline-offset-2"
+                    >
+                      {membership.workspace.name}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <form action={deleteAccount} className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <label className="grid gap-2">
+                <span className="text-sm font-medium text-[#4d4f47]">Type DELETE to confirm</span>
+                <input
+                  name="confirmation"
+                  required
+                  pattern="DELETE"
+                  disabled={!canDeleteAccount}
+                  className="min-h-11 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#8a3328] disabled:bg-[#f1f1ec] disabled:text-[#777970]"
+                />
+              </label>
+              <button
+                disabled={!canDeleteAccount}
+                className="min-h-11 rounded-md bg-[#8a3328] px-4 text-sm font-medium text-white transition hover:bg-[#70291f] disabled:cursor-not-allowed disabled:bg-[#c8c8bd]"
+              >
                 Delete Account
               </button>
             </form>

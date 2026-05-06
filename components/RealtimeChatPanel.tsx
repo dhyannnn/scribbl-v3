@@ -53,7 +53,7 @@ export function RealtimeChatPanel({ roomId, ...props }: RealtimeChatPanelProps) 
   }
 
   return (
-    <LiveblocksRoom roomId={roomId}>
+    <LiveblocksRoom key={roomId} roomId={roomId}>
       <RealtimeChatPanelContent {...props} />
     </LiveblocksRoom>
   );

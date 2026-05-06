@@ -2,7 +2,8 @@ import { AccessToken } from "livekit-server-sdk";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/current-user";
 import { createLiveKitMeetingRoomName } from "@/lib/livekit-room";
-import { startMeetingVideoSession } from "@/lib/meeting-video-session";
+import { canJoinMeeting, getMeetingLifecycle } from "@/lib/meeting-lifecycle";
+import { isValidClientSessionId } from "@/lib/meeting-video-session";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request) {
@@ -41,31 +42,45 @@ export async function POST(request: Request) {
     },
     select: {
       id: true,
+      startsAt: true,
+      endsAt: true,
+      canceledAt: true,
+      participants: {
+        where: {
+          userId: currentUser.id,
+        },
+        select: {
+          id: true,
+        },
+        take: 1,
+      },
+      workspace: {
+        select: {
+          members: {
+            where: {
+              userId: currentUser.id,
+              status: "ACTIVE",
+            },
+            select: {
+              id: true,
+            },
+            take: 1,
+          },
+        },
+      },
     },
   });
 
-  if (!meeting) {
-    return NextResponse.json({ error: "You do not have access to this meeting." }, { status: 403 });
-  }
-
-  const session = await startMeetingVideoSession({
-    workspaceId,
-    meetingId: meeting.id,
-    userId: currentUser.id,
-    clientSessionId,
-    markParticipantJoined: false,
-  });
-
-  if (!session.ok && session.reason === "not-open") {
-    return NextResponse.json({ error: "This meeting is not open for video yet." }, { status: 409 });
-  }
-
-  if (!session.ok && session.reason === "invalid-session") {
+  if (!isValidClientSessionId(clientSessionId)) {
     return NextResponse.json({ error: "Invalid video session." }, { status: 400 });
   }
 
-  if (!session.ok) {
+  if (!meeting || meeting.participants.length === 0 || meeting.workspace?.members.length === 0) {
     return NextResponse.json({ error: "You do not have access to this meeting." }, { status: 403 });
+  }
+
+  if (!canJoinMeeting(getMeetingLifecycle(meeting))) {
+    return NextResponse.json({ error: "This meeting is not open for video yet." }, { status: 409 });
   }
 
   const roomName = createLiveKitMeetingRoomName(meeting.id);

@@ -121,6 +121,8 @@ model User {
   displayName String
   role        UserRole @default(STUDENT)
   avatarUrl   String?
+  deletionRequestedAt DateTime?
+  deletedAt   DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -147,7 +149,7 @@ model Workspace {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  createdBy User @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  createdBy User @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   members  WorkspaceMember[]
   channels Channel[]
@@ -172,7 +174,7 @@ model WorkspaceInvite {
   updatedAt       DateTime              @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  invitedBy User      @relation("WorkspaceInviteInviter", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  invitedBy User      @relation("WorkspaceInviteInviter", fields: [invitedByUserId], references: [id], onDelete: Restrict)
 
   @@unique([workspaceId, email])
   @@index([email])
@@ -189,7 +191,7 @@ model WorkspaceMember {
   createdAt   DateTime         @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@unique([workspaceId, userId])
   @@index([userId])
@@ -207,7 +209,7 @@ model Channel {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   meeting   Meeting?  @relation(fields: [meetingId], references: [id], onDelete: SetNull)
-  createdBy User      @relation("ChannelCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("ChannelCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   messages  Message[]
 
   @@index([workspaceId])
@@ -223,7 +225,7 @@ model Message {
   deletedAt    DateTime?
 
   channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  sender  User    @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+  sender  User    @relation(fields: [senderUserId], references: [id], onDelete: Restrict)
 
   @@index([channelId, createdAt])
   @@index([senderUserId])
@@ -247,7 +249,7 @@ model Note {
   deletedAt     DateTime?
 
   workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  owner       User       @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  owner       User       @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
   contentFile File?      @relation("NoteContentFile", fields: [contentFileId], references: [id], onDelete: SetNull)
 
   collaborators NoteCollaborator[]
@@ -265,7 +267,7 @@ model NoteCollaborator {
   createdAt  DateTime       @default(now())
 
   note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@unique([noteId, userId])
   @@index([userId])
@@ -284,7 +286,7 @@ model File {
   createdAt        DateTime       @default(now())
 
   workspace  Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  uploadedBy User       @relation(fields: [uploadedByUserId], references: [id], onDelete: Cascade)
+  uploadedBy User       @relation(fields: [uploadedByUserId], references: [id], onDelete: Restrict)
 
   noteContentFor Note?             @relation("NoteContentFile")
   artifacts      MeetingArtifact[]
@@ -311,7 +313,7 @@ model Meeting {
   updatedAt          DateTime  @updatedAt
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  createdBy User       @relation("MeetingCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  createdBy User       @relation("MeetingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   participants  MeetingParticipant[]
   videoSessions MeetingVideoSession[]
@@ -332,7 +334,7 @@ model MeetingParticipant {
   createdAt DateTime                 @default(now())
 
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@unique([meetingId, userId])
   @@index([userId])
@@ -349,7 +351,7 @@ model MeetingVideoSession {
   createdAt       DateTime  @default(now())
 
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@unique([meetingId, userId, clientSessionId])
   @@index([meetingId, userId, disconnectedAt])
@@ -369,7 +371,7 @@ model MeetingArtifact {
   meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   note      Note?   @relation(fields: [noteId], references: [id], onDelete: SetNull)
   file      File?   @relation(fields: [fileId], references: [id], onDelete: SetNull)
-  createdBy User    @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  createdBy User    @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([meetingId])
   @@index([noteId])

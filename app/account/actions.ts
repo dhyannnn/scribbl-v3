@@ -97,33 +97,106 @@ export async function updateAccountPassword(formData: FormData) {
   redirect("/account?message=Password updated");
 }
 
-export async function deleteAccount() {
+export async function deleteAccount(formData: FormData) {
   const [currentUser, authUser] = await Promise.all([getCurrentUser(), getSupabaseAuthUser()]);
 
   if (!currentUser || !authUser) {
     redirect("/login");
   }
 
-  await prisma.user.delete({
+  const confirmation = String(formData.get("confirmation") ?? "").trim();
+
+  if (confirmation !== "DELETE") {
+    redirect("/account?message=Type DELETE to confirm account deletion");
+  }
+
+  const ownedWorkspace = await prisma.workspaceMember.findFirst({
     where: {
-      id: currentUser.id,
+      userId: currentUser.id,
+      role: "OWNER",
+      status: "ACTIVE",
+    },
+    include: {
+      workspace: {
+        select: {
+          name: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "asc",
     },
   });
 
-  let authDeleteFailed = false;
-
-  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SECRET_KEY) {
-    const admin = createAdminClient();
-    const { error } = await admin.auth.admin.deleteUser(authUser.id);
-    authDeleteFailed = Boolean(error);
+  if (ownedWorkspace) {
+    redirect(
+      `/account?message=${encodeURIComponent(
+        `You own ${ownedWorkspace.workspace.name}. Account deletion is blocked until ownership is transferred.`,
+      )}`,
+    );
   }
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) {
+    redirect("/account?message=Account deletion requires Supabase admin credentials");
+  }
+
+  const deletionRequestedAt = new Date();
+
+  await prisma.user.update({
+    where: {
+      id: currentUser.id,
+    },
+    data: {
+      deletionRequestedAt,
+    },
+  });
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(authUser.id);
+
+  if (error) {
+    await prisma.user.update({
+      where: {
+        id: currentUser.id,
+      },
+      data: {
+        deletionRequestedAt: null,
+      },
+    });
+    redirect(`/account?message=${encodeURIComponent(error.message)}`);
+  }
+
+  const deletedAt = new Date();
+
+  await prisma.$transaction([
+    prisma.workspaceMember.updateMany({
+      where: {
+        userId: currentUser.id,
+        status: "ACTIVE",
+      },
+      data: {
+        status: "REMOVED",
+      },
+    }),
+    prisma.user.update({
+      where: {
+        id: currentUser.id,
+      },
+      data: {
+        authUserId: null,
+        email: `deleted-user-${currentUser.id}@deleted.scribbl.local`,
+        firstName: "",
+        lastName: "",
+        displayName: "Deleted user",
+        avatarUrl: null,
+        deletionRequestedAt,
+        deletedAt,
+      },
+    }),
+  ]);
 
   const supabase = await createClient();
   await supabase.auth.signOut();
-
-  if (authDeleteFailed) {
-    redirect("/login?message=Account removed from Scribbl, but Supabase Auth could not delete the login");
-  }
 
   redirect("/login?message=Account deleted");
 }

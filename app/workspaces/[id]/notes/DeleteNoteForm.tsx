@@ -1,5 +1,6 @@
 "use client";
 
+import { publishScribblClientEvent } from "@/app/Providers";
 import { deleteWorkspaceNote } from "./actions";
 
 type DeleteNoteFormProps = {
@@ -23,7 +24,14 @@ export function DeleteNoteForm({
 
         if (!window.confirm(message)) {
           event.preventDefault();
+          return;
         }
+
+        publishScribblClientEvent({
+          type: "note-deleted",
+          noteId,
+          workspaceId,
+        });
       }}
     >
       <input type="hidden" name="workspaceId" value={workspaceId} />

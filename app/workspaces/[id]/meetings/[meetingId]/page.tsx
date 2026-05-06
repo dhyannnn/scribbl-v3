@@ -94,6 +94,11 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
       },
       createdBy: true,
       participants: {
+        where: {
+          user: {
+            deletedAt: null,
+          },
+        },
         include: {
           user: true,
         },
@@ -244,6 +249,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
   const meetingEndsAt = getMeetingEndAt(meeting);
   const isCanceled = lifecycle === "canceled";
   const isSessionOpen = canJoinMeeting(lifecycle);
+  const shouldPromptRsvp = currentParticipant?.status === "INVITED" && isSessionOpen;
   const canMutateArtifacts = canMutateMeetingArtifacts(lifecycle);
   const canEditNotes = canEditMeetingNotes(lifecycle);
   const canManageSchedule = canManageMeeting && canManageMeetingSchedule(lifecycle);
@@ -330,6 +336,37 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
         {canManageMeeting && !canManageSchedule && !isCanceled ? (
           <section className="rounded-md border border-[#d8d8ce] bg-white p-4 text-sm text-[#66685f] shadow-sm">
             Meeting details are locked once a session starts or ends.
+          </section>
+        ) : null}
+
+        {shouldPromptRsvp ? (
+          <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d7f70]">
+                  RSVP
+                </p>
+                <h2 className="mt-2 text-xl font-semibold">You are invited to this live session.</h2>
+              </div>
+              <form action={updateCurrentUserParticipantStatus} className="grid grid-cols-2 gap-2 sm:min-w-[260px]">
+                <input type="hidden" name="workspaceId" value={id} />
+                <input type="hidden" name="meetingId" value={meeting.id} />
+                <button
+                  name="status"
+                  value="ACCEPTED"
+                  className="rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a]"
+                >
+                  Accept
+                </button>
+                <button
+                  name="status"
+                  value="DECLINED"
+                  className="rounded-md border border-[#b65b5b] bg-white px-4 py-2 text-sm font-medium text-[#7a3434] transition hover:bg-[#fff7f5]"
+                >
+                  Decline
+                </button>
+              </form>
+            </div>
           </section>
         ) : null}
 
@@ -507,7 +544,9 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           title="Meeting Chat"
           emptyText="No messages in this meeting chat yet."
           placeholder="Message this meeting"
-          openInChannelsHref={meetingChannel ? `/workspaces/${id}/chat?channel=${meetingChannel.id}` : `/workspaces/${id}/chat`}
+          openInChannelsHref={
+            meetingChannel && !isCanceled ? `/workspaces/${id}/chat?channel=${meetingChannel.id}` : undefined
+          }
         />
 
         <section id="meeting-notes" data-split-stack className="scroll-mt-6 grid gap-6 xl:grid-cols-2">

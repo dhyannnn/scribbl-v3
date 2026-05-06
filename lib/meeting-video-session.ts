@@ -176,13 +176,6 @@ export async function endMeetingVideoSession({
         },
         select: {
           id: true,
-          meeting: {
-            select: {
-              startsAt: true,
-              endsAt: true,
-              canceledAt: true,
-            },
-          },
         },
       }),
       tx.workspaceMember.findUnique({
@@ -202,13 +195,6 @@ export async function endMeetingVideoSession({
       return {
         ok: false,
         reason: "access-denied",
-      };
-    }
-
-    if (!canJoinMeeting(getMeetingLifecycle(participant.meeting))) {
-      return {
-        ok: false,
-        reason: "not-open",
       };
     }
 

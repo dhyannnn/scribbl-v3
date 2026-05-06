@@ -8,6 +8,7 @@ import {
   removeWorkspaceMember,
   resendWorkspaceInvite,
   revokeWorkspaceInvite,
+  transferWorkspaceOwnership,
   updateWorkspaceMemberRole,
 } from "../actions";
 
@@ -198,6 +199,29 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
                     </form>
                   ) : null}
                 </div>
+                {canManageMembers && member.role !== "OWNER" ? (
+                  <form
+                    action={transferWorkspaceOwnership}
+                    className="grid gap-2 rounded-md border border-[#ead1cd] bg-[#fff7f5] p-3 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+                  >
+                    <input type="hidden" name="workspaceId" value={workspace.id} />
+                    <input type="hidden" name="memberId" value={member.id} />
+                    <label className="grid min-w-0 gap-1">
+                      <span className="text-xs font-medium text-[#7a3434]">
+                        Type TRANSFER to make {member.user.displayName} the owner
+                      </span>
+                      <input
+                        name="confirmation"
+                        required
+                        pattern="TRANSFER"
+                        className="min-h-9 min-w-0 rounded-md border border-[#d8b8b2] bg-white px-3 text-xs outline-none transition focus:border-[#8a3328]"
+                      />
+                    </label>
+                    <button className="min-h-9 rounded-md border border-[#b65b5b] px-3 text-xs font-medium text-[#7a3434] transition hover:bg-white">
+                      Transfer Ownership
+                    </button>
+                  </form>
+                ) : null}
               </div>
             ))}
           </div>
@@ -289,6 +313,12 @@ function getInviteStatusMessage(status?: string) {
       return "Owners cannot be removed from this page.";
     case "last-owner":
       return "A workspace must keep at least one owner.";
+    case "transfer-confirmation-required":
+      return "Type TRANSFER to confirm ownership transfer.";
+    case "transfer-invalid":
+      return "Choose an active non-owner member to receive ownership.";
+    case "ownership-transferred":
+      return "Workspace ownership transferred.";
     default:
       return null;
   }
