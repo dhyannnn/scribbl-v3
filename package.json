@@ -45,6 +45,7 @@
     "@tiptap/extension-underline": "^3.22.5",
     "@tiptap/react": "^3.22.5",
     "@tiptap/starter-kit": "^3.22.5",
+    "@tiptap/y-tiptap": "^3.0.3",
     "livekit-client": "^2.18.8",
     "livekit-server-sdk": "^2.15.2",
     "next": "16.2.4",
