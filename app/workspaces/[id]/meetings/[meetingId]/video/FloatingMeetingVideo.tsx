@@ -133,6 +133,15 @@ export function FloatingMeetingVideo({
     };
   }, [meetingId]);
 
+  // Re-clamp panel when window is resized (e.g. entering macOS split view)
+  useEffect(() => {
+    function onResize() {
+      setPanel((currentPanel) => clampPanel(currentPanel));
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   useEffect(() => {
     if (videoSurface !== "popout") {
       return;
