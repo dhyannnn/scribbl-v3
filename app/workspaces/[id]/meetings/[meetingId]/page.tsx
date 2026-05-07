@@ -1171,7 +1171,6 @@ function MeetingNoteEditor({
 
   return (
     <LiveblocksRoom roomId={liveblocksRoomId}>
-      <PresenceBar />
       <TextNoteEditor
         workspaceId={workspaceId}
         meetingId={meetingId}
