@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { AccessRouteRefresher } from "@/components/AccessRouteRefresher";
 import { LiveblocksRoom } from "@/components/LiveblocksRoom";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
-import { PresenceBar } from "@/components/PresenceBar";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { TextNoteEditor } from "@/components/TextNoteEditor";
 import { WhiteboardEditor } from "@/components/WhiteboardEditor";
@@ -213,7 +212,6 @@ export default async function NoteEditorPage({ params }: PageProps) {
                 }
           }
         >
-          <PresenceBar />
           {isTextNote ? (
             <TextNoteEditor
               workspaceId={id}

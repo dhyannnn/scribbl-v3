@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { LiveblocksRoom } from "@/components/LiveblocksRoom";
 import { MeetingRouteRefresher } from "@/components/MeetingRouteRefresher";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
-import { PresenceBar } from "@/components/PresenceBar";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { TextNoteEditor } from "@/components/TextNoteEditor";
 import { WhiteboardEditor } from "@/components/WhiteboardEditor";
@@ -1155,7 +1154,6 @@ function MeetingNoteEditor({
             whiteboardPages.find((page) => page.id === activeWhiteboardPageId)?.strokes ?? [],
         }}
       >
-        <PresenceBar />
         <WhiteboardEditor
           workspaceId={workspaceId}
           meetingId={meetingId}
