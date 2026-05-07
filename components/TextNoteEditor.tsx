@@ -89,8 +89,18 @@ export function TextNoteEditor({
   const hasPendingSaveRef = useRef(false);
   const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
-  const yProvider = getYjsProviderForRoom(room);
-  const yDoc = yProvider.getYDoc();
+  // Defer Yjs setup to client-side only — provider may not be ready during SSR/first render
+  const [ySetup, setYSetup] = useState<{ provider: ReturnType<typeof getYjsProviderForRoom>; yDoc: ReturnType<ReturnType<typeof getYjsProviderForRoom>["getYDoc"]> } | null>(null);
+
+  useEffect(() => {
+    try {
+      const provider = getYjsProviderForRoom(room);
+      const yDoc = provider.getYDoc();
+      setYSetup({ provider, yDoc });
+    } catch {
+      // room not ready yet — will retry on next room change
+    }
+  }, [room]);
 
   const userName = (self.info as { name?: string; email?: string } | undefined)?.name
     ?? (self.info as { name?: string; email?: string } | undefined)?.email
@@ -101,10 +111,10 @@ export function TextNoteEditor({
   const editor = useEditor({
     immediatelyRender: false,
     editable: canEdit,
-    extensions: [
+    extensions: ySetup ? [
       StarterKit,
-      Collaboration.configure({ document: yDoc, field: "tiptap-v1" }),
-      CollaborationCursor.configure({ provider: yProvider, user: { name: userName, color } }),
+      Collaboration.configure({ document: ySetup.yDoc, field: "tiptap-v1" }),
+      CollaborationCursor.configure({ provider: ySetup.provider, user: { name: userName, color } }),
       Underline,
       TextStyle,
       Color,
@@ -124,16 +134,17 @@ export function TextNoteEditor({
       CharacterCount,
       Subscript,
       Superscript,
-    ],
+    ] : [StarterKit, Placeholder.configure({ placeholder: "Connecting…" })],
     onCreate: ({ editor: e }) => {
-      const yFragment = yDoc.getXmlFragment("tiptap-v1");
+      if (!ySetup) return;
+      const yFragment = ySetup.yDoc.getXmlFragment("tiptap-v1");
       function seed() {
         if (yFragment.length === 0 && initialContent) {
           e.commands.setContent(initialContent);
         }
       }
-      if (yProvider.synced) seed();
-      else yProvider.once("sync", seed);
+      if (ySetup.provider.synced) seed();
+      else ySetup.provider.once("sync", seed);
     },
     onUpdate: () => {
       if (canEdit) queueAutosave();
