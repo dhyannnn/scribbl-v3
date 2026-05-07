@@ -1,7 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { writeAuditLog } from "@/lib/audit-log";
 import { getCurrentUser, getSupabaseAuthUser } from "@/lib/current-user";
+import { logger } from "@/lib/logger";
+import { RateLimits } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -79,6 +82,10 @@ export async function updateAccountPassword(formData: FormData) {
     redirect("/login?next=/account");
   }
 
+  if (!RateLimits.passwordUpdate(authUser.id)) {
+    redirect("/account?message=Too many password update attempts. Try again later.");
+  }
+
   const password = String(formData.get("password") ?? "");
 
   if (password.length < 6) {
@@ -102,6 +109,10 @@ export async function deleteAccount(formData: FormData) {
 
   if (!currentUser || !authUser) {
     redirect("/login");
+  }
+
+  if (!RateLimits.accountDelete(currentUser.id)) {
+    redirect("/account?message=Too many deletion attempts. Try again later.");
   }
 
   const confirmation = String(formData.get("confirmation") ?? "").trim();
@@ -155,6 +166,7 @@ export async function deleteAccount(formData: FormData) {
   const { error } = await admin.auth.admin.deleteUser(authUser.id);
 
   if (error) {
+    logger.accountDeletionError({ userId: currentUser.id }, new Error(error.message));
     await prisma.user.update({
       where: {
         id: currentUser.id,
@@ -194,6 +206,13 @@ export async function deleteAccount(formData: FormData) {
       },
     }),
   ]);
+
+  await writeAuditLog({
+    action: "ACCOUNT_DELETED",
+    actorUserId: currentUser.id,
+    targetId: currentUser.id,
+    metadata: { email: currentUser.email },
+  });
 
   const supabase = await createClient();
   await supabase.auth.signOut();

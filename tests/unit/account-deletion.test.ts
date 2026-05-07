@@ -4,6 +4,13 @@ import { makeUser, makeWorkspace, makeMembership, makeFormData, captureRedirect 
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 
+vi.mock("@/lib/rate-limit", () => ({
+  RateLimits: {
+    accountDelete: vi.fn(() => true),
+    passwordUpdate: vi.fn(() => true),
+  },
+}));
+
 const mockGetCurrentUser = vi.fn();
 const mockGetSupabaseAuthUser = vi.fn();
 vi.mock("@/lib/current-user", () => ({

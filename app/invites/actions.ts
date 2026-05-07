@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { writeAuditLog } from "@/lib/audit-log";
 import { createAppUrl } from "@/lib/app-url";
 import { getCurrentUser } from "@/lib/current-user";
 import { sendWorkspaceInviteAcceptedEmail } from "@/lib/email/invite-accepted";
@@ -157,6 +158,14 @@ export async function acceptWorkspaceInvite(formData: FormData) {
     revalidatePath(`/workspaces/${invite.workspaceId}/meetings/${meetingId}`);
   }
   revalidatePath("/");
+
+  await writeAuditLog({
+    action: "MEMBER_INVITE_ACCEPTED",
+    actorUserId: currentUser.id,
+    workspaceId: invite.workspaceId,
+    targetId: invite.id,
+    metadata: { role: invite.role },
+  });
 
   const notificationStatus = await sendInviteAcceptedNotification({
     acceptedByEmail: currentUser.email,

@@ -12,6 +12,7 @@ export function makeUser(overrides: Partial<User> = {}): User {
     firstName: "Test",
     lastName: "User",
     displayName: "Test User",
+    role: "STUDENT" as const,
     avatarUrl: null,
     deletionRequestedAt: null,
     deletedAt: null,

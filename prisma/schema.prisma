@@ -6,6 +6,37 @@ datasource db {
   provider = "postgresql"
 }
 
+enum AuditAction {
+  // Account
+  ACCOUNT_DELETED
+
+  // Workspace membership
+  MEMBER_INVITED
+  MEMBER_INVITE_RESENT
+  MEMBER_INVITE_REVOKED
+  MEMBER_INVITE_ACCEPTED
+  MEMBER_REMOVED
+  MEMBER_ROLE_CHANGED
+  OWNERSHIP_TRANSFERRED
+
+  // Meeting
+  MEETING_SCHEDULED
+  MEETING_UPDATED
+  MEETING_CANCELED
+
+  // Recording
+  RECORDING_STARTED
+  RECORDING_STOPPED
+  RECORDING_COMPLETED
+  RECORDING_FAILED
+
+  // Note
+  NOTE_DELETED
+
+  // File
+  FILE_DELETED
+}
+
 enum WorkspaceType {
   COURSE
   STUDY_GROUP
@@ -148,6 +179,7 @@ model User {
   startedRecordings    MeetingRecording[]    @relation("MeetingRecordingStarter")
   stoppedRecordings    MeetingRecording[]    @relation("MeetingRecordingStopper")
   sentWorkspaceInvites WorkspaceInvite[]     @relation("WorkspaceInviteInviter")
+  auditLogs            AuditLog[]
 }
 
 model Workspace {
@@ -416,4 +448,20 @@ model MeetingRecording {
   @@index([meetingId, status])
   @@index([startedByUserId])
   @@index([stoppedByUserId])
+}
+
+model AuditLog {
+  id          String      @id @default(uuid()) @db.Uuid
+  action      AuditAction
+  actorUserId String?     @db.Uuid
+  workspaceId String?     @db.Uuid
+  targetId    String?
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([workspaceId, createdAt])
+  @@index([action, createdAt])
 }

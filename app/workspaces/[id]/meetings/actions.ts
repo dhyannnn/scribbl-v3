@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { writeAuditLog } from "@/lib/audit-log";
 import { createAppUrl } from "@/lib/app-url";
+import { RateLimits } from "@/lib/rate-limit";
 import { getCurrentUser } from "@/lib/current-user";
 import { sendMeetingCanceledEmail, sendMeetingScheduledEmail } from "@/lib/email/meeting-notifications";
 import { createLiveKitMeetingRoomName } from "@/lib/livekit-room";
@@ -64,6 +66,10 @@ export async function scheduleMeeting(formData: FormData) {
 
   if (!workspace.members.some((member) => member.userId === currentUser.id)) {
     redirect(`/workspaces/${workspaceId}/meetings?meeting=unauthorized`);
+  }
+
+  if (!RateLimits.meetingSchedule(currentUser.id)) {
+    redirect(`/workspaces/${workspaceId}/meetings?meeting=rate-limited`);
   }
 
   const participantUserIds = Array.from(
@@ -139,6 +145,14 @@ export async function scheduleMeeting(formData: FormData) {
         createdByUserId: currentUser.id,
       },
     });
+  });
+
+  await writeAuditLog({
+    action: "MEETING_SCHEDULED",
+    actorUserId: currentUser.id,
+    workspaceId,
+    targetId: meetingId,
+    metadata: { title, startsAt: startsAt.toISOString() },
   });
 
   revalidatePath(`/workspaces/${workspaceId}`);
@@ -354,6 +368,14 @@ export async function cancelMeeting(formData: FormData) {
       canceledByUserId: currentUser.id,
       cancellationReason: cancellationReason || null,
     },
+  });
+
+  await writeAuditLog({
+    action: "MEETING_CANCELED",
+    actorUserId: currentUser.id,
+    workspaceId,
+    targetId: meeting.id,
+    metadata: { title: meeting.title, cancellationReason: cancellationReason || null },
   });
 
   revalidateMeetingPaths(workspaceId, meeting.id);

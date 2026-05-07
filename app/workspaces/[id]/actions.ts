@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { writeAuditLog } from "@/lib/audit-log";
 import { createAppUrl } from "@/lib/app-url";
+import { RateLimits } from "@/lib/rate-limit";
 import { getCurrentUser } from "@/lib/current-user";
 import { sendWorkspaceInviteEmail } from "@/lib/email/workspace-invites";
 import { prisma } from "@/lib/prisma";
@@ -109,6 +111,10 @@ export async function addWorkspaceMember(formData: FormData) {
     redirect(`/workspaces/${workspace.id}/members?invite=unauthorized`);
   }
 
+  if (!RateLimits.inviteCreate(currentUser.id)) {
+    redirect(`/workspaces/${workspace.id}/members?invite=rate-limited`);
+  }
+
   const existingUser = await prisma.user.findUnique({
     where: {
       email,
@@ -173,6 +179,14 @@ export async function addWorkspaceMember(formData: FormData) {
     inviteToken: invite.token,
     role,
     workspaceName: workspace.name,
+  });
+
+  await writeAuditLog({
+    action: "MEMBER_INVITED",
+    actorUserId: currentUser.id,
+    workspaceId: workspace.id,
+    targetId: invite.token,
+    metadata: { email, role },
   });
 
   revalidatePath(`/workspaces/${workspace.id}`);
@@ -256,6 +270,13 @@ export async function removeWorkspaceMember(formData: FormData) {
     });
   });
 
+  await writeAuditLog({
+    action: "MEMBER_REMOVED",
+    actorUserId: currentUser.id,
+    workspaceId: membership.workspaceId,
+    targetId: membership.userId,
+  });
+
   revalidatePath(`/workspaces/${membership.workspaceId}`);
   revalidatePath(`/workspaces/${membership.workspaceId}/members`);
   revalidatePath(`/workspaces/${membership.workspaceId}/meetings`);
@@ -319,6 +340,14 @@ export async function updateWorkspaceMemberRole(formData: FormData) {
     data: {
       role: roleValue as (typeof memberRoles)[number],
     },
+  });
+
+  await writeAuditLog({
+    action: "MEMBER_ROLE_CHANGED",
+    actorUserId: currentUser.id,
+    workspaceId,
+    targetId: membership.id,
+    metadata: { previousRole: membership.role, newRole: roleValue },
   });
 
   revalidatePath(`/workspaces/${workspaceId}`);
@@ -405,6 +434,13 @@ export async function transferWorkspaceOwnership(formData: FormData) {
     }),
   ]);
 
+  await writeAuditLog({
+    action: "OWNERSHIP_TRANSFERRED",
+    actorUserId: currentUser.id,
+    workspaceId,
+    targetId: nextOwnerMembership.userId,
+  });
+
   revalidatePath(`/workspaces/${workspaceId}`);
   revalidatePath(`/workspaces/${workspaceId}/members`);
   revalidatePath("/");
@@ -464,6 +500,13 @@ export async function revokeWorkspaceInvite(formData: FormData) {
     },
   });
 
+  await writeAuditLog({
+    action: "MEMBER_INVITE_REVOKED",
+    actorUserId: currentUser.id,
+    workspaceId,
+    targetId: invite.id,
+  });
+
   revalidatePath(`/workspaces/${workspaceId}/members`);
   revalidatePath(`/workspaces/${workspaceId}`);
 }
@@ -518,6 +561,10 @@ export async function resendWorkspaceInvite(formData: FormData) {
     return;
   }
 
+  if (!RateLimits.inviteResend(currentUser.id)) {
+    redirect(`/workspaces/${workspaceId}/members?invite=rate-limited`);
+  }
+
   const token = createInviteToken();
   const expiresAt = createInviteExpiry();
   await prisma.workspaceInvite.update({
@@ -537,6 +584,14 @@ export async function resendWorkspaceInvite(formData: FormData) {
     inviteToken: token,
     role: invite.role,
     workspaceName: invite.workspace.name,
+  });
+
+  await writeAuditLog({
+    action: "MEMBER_INVITE_RESENT",
+    actorUserId: currentUser.id,
+    workspaceId,
+    targetId: invite.id,
+    metadata: { email: invite.email, role: invite.role },
   });
 
   revalidatePath(`/workspaces/${workspaceId}/members`);
