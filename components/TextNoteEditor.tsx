@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { getYjsProviderForRoom } from "@liveblocks/yjs";
-import { useRoom } from "@liveblocks/react/suspense";
+import { useOthers, useRoom, useUpdateMyPresence } from "@liveblocks/react/suspense";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Collaboration from "@tiptap/extension-collaboration";
@@ -25,6 +25,7 @@ import CharacterCount from "@tiptap/extension-character-count";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import { FontSize } from "@/lib/tiptap/font-size";
+import { LiveblocksCursors, type CursorUser } from "@/lib/tiptap/liveblocks-cursors";
 import { NoteToolbar } from "@/components/NoteToolbar";
 import { noteTitleMaxLength } from "@/lib/note-title";
 
@@ -110,6 +111,8 @@ function TextNoteEditorInner({
   const changeVersionRef = useRef(0);
   const hasPendingSaveRef = useRef(false);
   const editorRef = useRef<ReturnType<typeof useEditor>>(null);
+  const updateMyPresence = useUpdateMyPresence();
+  const others = useOthers();
 
   const initialContent = tiptapInitialContent(contentJson);
 
@@ -119,6 +122,7 @@ function TextNoteEditorInner({
     extensions: [
       StarterKit,
       Collaboration.configure({ document: ySetup.yDoc, field: "tiptap-v1" }),
+      LiveblocksCursors,
       Underline,
       TextStyle,
       Color,
@@ -149,6 +153,11 @@ function TextNoteEditorInner({
       if (ySetup.provider.synced) seed();
       else ySetup.provider.once("sync", seed);
     },
+    onSelectionUpdate: ({ editor: e }) => {
+      const { from, to } = e.state.selection;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (updateMyPresence as any)({ cursor: { from, to } });
+    },
     onUpdate: () => {
       if (canEdit) queueAutosave();
     },
@@ -157,6 +166,21 @@ function TextNoteEditorInner({
   useEffect(() => {
     (editorRef as React.RefObject<typeof editor>).current = editor;
   }, [editor]);
+
+  // Push other users' cursor positions into the LiveblocksCursors extension
+  useEffect(() => {
+    if (!editor) return;
+    type OtherPresence = { cursor?: { from: number; to: number } | null };
+    type OtherInfo = { name?: string; email?: string };
+    const users: CursorUser[] = others.map((other) => ({
+      id: other.id ?? "unknown",
+      name: (other.info as OtherInfo | undefined)?.name
+        ?? (other.info as OtherInfo | undefined)?.email
+        ?? "Collaborator",
+      cursor: (other.presence as OtherPresence | null)?.cursor ?? null,
+    }));
+    editor.commands.updateLiveblocksUsers(users);
+  }, [editor, others]);
 
   const flushPendingSave = useCallback(() => {
     const e = editorRef.current;
