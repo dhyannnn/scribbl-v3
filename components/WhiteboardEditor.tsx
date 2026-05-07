@@ -383,9 +383,10 @@ export function WhiteboardEditor({
           <p className="text-xs text-[#777970]">{getStatusText(isPending ? "saving" : saveState)}</p>
           <button
             type="submit"
-            className="rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a]"
+            disabled={isPending}
+            className="rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
           >
-            Save Board
+            {isPending ? "Saving..." : "Save Board"}
           </button>
         </form>
       ) : (

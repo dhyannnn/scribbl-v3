@@ -9,12 +9,14 @@ import {
   useState,
 } from "react";
 import { MeetingVideoRoom } from "./MeetingVideoRoom";
+import type { MeetingVideoRecordingProps } from "./VideoPopoutShell";
 
 type FloatingMeetingVideoProps = {
   workspaceId: string;
   meetingId: string;
   videoHref: string;
   disabled?: boolean;
+  recording?: MeetingVideoRecordingProps;
 };
 
 type PanelState = {
@@ -45,14 +47,15 @@ type InteractionState = {
 type VideoSurfaceState = "hub" | "split" | "popout" | "popout-closed";
 
 type VideoChannelMessage =
+  | { type: "hub-ready" }
   | { type: "popout-opened" }
   | { type: "popout-ready" }
   | { type: "popout-closed" }
   | { type: "bring-back" }
   | { type: "focus-hub"; hash: string };
 
-const minPanelWidth = 320;
-const minPanelHeight = 260;
+const minPanelWidth = 360;
+const minPanelHeight = 280;
 const snapDistance = 48;
 const splitWidth = "clamp(420px, 49vw, 780px)";
 
@@ -60,6 +63,7 @@ export function FloatingMeetingVideo({
   workspaceId,
   meetingId,
   disabled = false,
+  recording,
 }: FloatingMeetingVideoProps) {
   const [panel, setPanel] = useState(getServerSafeDefaultPanel);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -119,6 +123,8 @@ export function FloatingMeetingVideo({
         scrollToHubSection(event.data.hash);
       }
     };
+
+    channel.postMessage({ type: "hub-ready" } satisfies VideoChannelMessage);
 
     return () => {
       channel.close();
@@ -321,7 +327,14 @@ export function FloatingMeetingVideo({
           </div>
         </header>
         <div className="min-h-0 flex-1 overflow-hidden p-5">
-          <MeetingVideoRoom workspaceId={workspaceId} meetingId={meetingId} disabled={disabled} mode="floating" />
+          <MeetingVideoRoom
+            workspaceId={workspaceId}
+            meetingId={meetingId}
+            disabled={disabled}
+            mode="floating"
+            recording={recording}
+            recordingReturnTo="current"
+          />
         </div>
       </aside>
     );
@@ -414,7 +427,14 @@ export function FloatingMeetingVideo({
 
       {!isMinimized ? (
         <div className="overflow-hidden" style={{ width: "100%", height: `calc(100% - 41px)` }}>
-          <MeetingVideoRoom workspaceId={workspaceId} meetingId={meetingId} disabled={disabled} mode="floating" />
+          <MeetingVideoRoom
+            workspaceId={workspaceId}
+            meetingId={meetingId}
+            disabled={disabled}
+            mode="floating"
+            recording={recording}
+            recordingReturnTo="current"
+          />
         </div>
       ) : (
         <button
@@ -530,14 +550,18 @@ function getRenderedPanelBounds(panelElement: HTMLElement | null): PanelBounds |
 function clampPanel(panel: PanelState, bounds?: PanelBounds): PanelState {
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
-  const width = bounds?.width ?? Math.min(Math.max(panel.width, minPanelWidth), Math.max(minPanelWidth, viewportWidth - 24));
-  const height = bounds?.height ?? Math.min(Math.max(panel.height, minPanelHeight), Math.max(minPanelHeight, viewportHeight - 24));
+  const maxWidth = Math.max(minPanelWidth, viewportWidth - 24);
+  const maxHeight = Math.max(minPanelHeight, viewportHeight - 24);
+  const width = Math.min(Math.max(panel.width, minPanelWidth), maxWidth);
+  const height = Math.min(Math.max(panel.height, minPanelHeight), maxHeight);
+  const positionWidth = bounds ? Math.min(Math.max(bounds.width, minPanelWidth), maxWidth) : width;
+  const positionHeight = bounds ? Math.min(Math.max(bounds.height, minPanelHeight), maxHeight) : height;
 
   return {
-    width: bounds ? panel.width : width,
-    height: bounds ? panel.height : height,
-    left: Math.min(Math.max(panel.left, 12), Math.max(12, viewportWidth - width - 12)),
-    top: Math.min(Math.max(panel.top, 12), Math.max(12, viewportHeight - height - 12)),
+    width,
+    height,
+    left: Math.min(Math.max(panel.left, 12), Math.max(12, viewportWidth - positionWidth - 12)),
+    top: Math.min(Math.max(panel.top, 12), Math.max(12, viewportHeight - positionHeight - 12)),
   };
 }
 

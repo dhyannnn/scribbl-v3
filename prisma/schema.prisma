@@ -101,6 +101,14 @@ enum MeetingArtifactSource {
   CREATED_IN_MEETING
 }
 
+enum MeetingRecordingStatus {
+  STARTING
+  ACTIVE
+  STOPPING
+  COMPLETED
+  FAILED
+}
+
 enum FileVisibility {
   PRIVATE
   WORKSPACE_SHARED
@@ -113,18 +121,18 @@ enum UserRole {
 }
 
 model User {
-  id          String   @id @default(uuid()) @db.Uuid
-  authUserId  String?  @unique
-  email       String   @unique
-  firstName   String   @default("")
-  lastName    String   @default("")
-  displayName String
-  role        UserRole @default(STUDENT)
-  avatarUrl   String?
+  id                  String    @id @default(uuid()) @db.Uuid
+  authUserId          String?   @unique
+  email               String    @unique
+  firstName           String    @default("")
+  lastName            String    @default("")
+  displayName         String
+  role                UserRole  @default(STUDENT)
+  avatarUrl           String?
   deletionRequestedAt DateTime?
-  deletedAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   createdWorkspaces    Workspace[]           @relation("WorkspaceCreator")
   memberships          WorkspaceMember[]
@@ -137,6 +145,8 @@ model User {
   meetingInvites       MeetingParticipant[]
   meetingVideoSessions MeetingVideoSession[]
   meetingArtifacts     MeetingArtifact[]
+  startedRecordings    MeetingRecording[]    @relation("MeetingRecordingStarter")
+  stoppedRecordings    MeetingRecording[]    @relation("MeetingRecordingStopper")
   sentWorkspaceInvites WorkspaceInvite[]     @relation("WorkspaceInviteInviter")
 }
 
@@ -281,6 +291,7 @@ model File {
   mimeType         String
   sizeBytes        Int?
   visibility       FileVisibility @default(WORKSPACE_SHARED)
+  storageBucket    String?
   storageKey       String
   publicUrl        String?
   createdAt        DateTime       @default(now())
@@ -290,6 +301,7 @@ model File {
 
   noteContentFor Note?             @relation("NoteContentFile")
   artifacts      MeetingArtifact[]
+  recordingFor   MeetingRecording?
 
   @@index([workspaceId])
   @@index([uploadedByUserId])
@@ -318,6 +330,7 @@ model Meeting {
   participants  MeetingParticipant[]
   videoSessions MeetingVideoSession[]
   artifacts     MeetingArtifact[]
+  recordings    MeetingRecording[]
   channel       Channel?
 
   @@index([workspaceId, startsAt])
@@ -376,4 +389,31 @@ model MeetingArtifact {
   @@index([meetingId])
   @@index([noteId])
   @@index([fileId])
+}
+
+model MeetingRecording {
+  id              String                 @id @default(uuid()) @db.Uuid
+  meetingId       String                 @db.Uuid
+  egressId        String                 @unique
+  status          MeetingRecordingStatus @default(STARTING)
+  storageBucket   String
+  storageKey      String
+  fileId          String?                @unique @db.Uuid
+  startedByUserId String                 @db.Uuid
+  stoppedByUserId String?                @db.Uuid
+  startedAt       DateTime               @default(now())
+  stoppedAt       DateTime?
+  completedAt     DateTime?
+  errorMessage    String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  file      File?   @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  startedBy User    @relation("MeetingRecordingStarter", fields: [startedByUserId], references: [id], onDelete: Restrict)
+  stoppedBy User?   @relation("MeetingRecordingStopper", fields: [stoppedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([meetingId, status])
+  @@index([startedByUserId])
+  @@index([stoppedByUserId])
 }

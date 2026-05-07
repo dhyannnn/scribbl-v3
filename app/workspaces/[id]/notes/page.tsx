@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -95,48 +96,48 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
             <form action={createTextNote}>
               <input type="hidden" name="workspaceId" value={workspace.id} />
               <input type="hidden" name="visibility" value="PRIVATE" />
-              <button className="min-h-11 w-full rounded-md border border-[#2f604b] bg-white px-4 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]">
+              <PendingSubmitButton pendingLabel="Creating..." className="min-h-11 w-full rounded-md border border-[#2f604b] bg-white px-4 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60">
                 Private Text
-              </button>
+              </PendingSubmitButton>
             </form>
             <form action={createTextNote}>
               <input type="hidden" name="workspaceId" value={workspace.id} />
               <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
               <input type="hidden" name="collaboration" value="SOLO" />
-              <button className="min-h-11 w-full rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a]">
+              <PendingSubmitButton pendingLabel="Creating..." className="min-h-11 w-full rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]">
                 Shared Text View-only
-              </button>
+              </PendingSubmitButton>
             </form>
             <form action={createWhiteboardNote}>
               <input type="hidden" name="workspaceId" value={workspace.id} />
               <input type="hidden" name="visibility" value="PRIVATE" />
-              <button className="min-h-11 w-full rounded-md border border-[#2f604b] bg-white px-4 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]">
+              <PendingSubmitButton pendingLabel="Creating..." className="min-h-11 w-full rounded-md border border-[#2f604b] bg-white px-4 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60">
                 Private Board
-              </button>
+              </PendingSubmitButton>
             </form>
             <form action={createWhiteboardNote}>
               <input type="hidden" name="workspaceId" value={workspace.id} />
               <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
               <input type="hidden" name="collaboration" value="SOLO" />
-              <button className="min-h-11 w-full rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a]">
+              <PendingSubmitButton pendingLabel="Creating..." className="min-h-11 w-full rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]">
                 Shared Board View-only
-              </button>
+              </PendingSubmitButton>
             </form>
             <form action={createTextNote}>
               <input type="hidden" name="workspaceId" value={workspace.id} />
               <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
               <input type="hidden" name="collaboration" value="COLLABORATIVE" />
-              <button className="min-h-11 w-full rounded-md border border-[#2f604b] bg-white px-4 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]">
+              <PendingSubmitButton pendingLabel="Creating..." className="min-h-11 w-full rounded-md border border-[#2f604b] bg-white px-4 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60">
                 Collaborative Text
-              </button>
+              </PendingSubmitButton>
             </form>
             <form action={createWhiteboardNote}>
               <input type="hidden" name="workspaceId" value={workspace.id} />
               <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
               <input type="hidden" name="collaboration" value="COLLABORATIVE" />
-              <button className="min-h-11 w-full rounded-md border border-[#2f604b] bg-white px-4 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]">
+              <PendingSubmitButton pendingLabel="Creating..." className="min-h-11 w-full rounded-md border border-[#2f604b] bg-white px-4 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60">
                 Collaborative Board
-              </button>
+              </PendingSubmitButton>
             </form>
           </div>
         </header>
@@ -279,9 +280,12 @@ function NoteSection({
                         <option value="OWNER_ADMIN_AND_CREATOR">Owner, admins, and creator</option>
                       </select>
                     </label>
-                    <button className="rounded-md border border-[#c8c8bd] bg-white px-3 py-2 text-sm font-medium text-[#2f604b] transition hover:border-[#2f604b] hover:bg-[#eef5ef]">
+                    <PendingSubmitButton
+                      pendingLabel="Saving..."
+                      className="rounded-md border border-[#c8c8bd] bg-white px-3 py-2 text-sm font-medium text-[#2f604b] transition hover:border-[#2f604b] hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
                       Save Export Access
-                    </button>
+                    </PendingSubmitButton>
                   </form>
                 ) : null}
               </article>

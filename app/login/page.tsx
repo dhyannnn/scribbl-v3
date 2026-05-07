@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { getSupabaseAuthUser } from "@/lib/current-user";
 import { signInWithOAuth, signInWithPassword, signUpWithPassword } from "../auth/actions";
 
@@ -92,9 +93,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 className="min-h-11 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
               />
             </label>
-            <button className="mt-2 rounded-md bg-[#2f604b] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#244b3a]">
+            <PendingSubmitButton
+              pendingLabel={isSignup ? "Creating..." : "Signing in..."}
+              className="mt-2 rounded-md bg-[#2f604b] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+            >
               {isSignup ? "Create Account" : "Sign In"}
-            </button>
+            </PendingSubmitButton>
           </form>
 
           <div className="my-5 h-px bg-[#e2e2d8]" />
@@ -103,16 +107,22 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             <form action={signInWithOAuth}>
               <input type="hidden" name="provider" value="google" />
               {safeNext !== "/" ? <input type="hidden" name="next" value={safeNext} /> : null}
-              <button className="w-full rounded-md border border-[#c8c8bd] bg-white px-4 py-3 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]">
+              <PendingSubmitButton
+                pendingLabel="Continuing..."
+                className="w-full rounded-md border border-[#c8c8bd] bg-white px-4 py-3 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 Continue with Google
-              </button>
+              </PendingSubmitButton>
             </form>
             <form action={signInWithOAuth}>
               <input type="hidden" name="provider" value="azure" />
               {safeNext !== "/" ? <input type="hidden" name="next" value={safeNext} /> : null}
-              <button className="w-full rounded-md border border-[#c8c8bd] bg-white px-4 py-3 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]">
+              <PendingSubmitButton
+                pendingLabel="Continuing..."
+                className="w-full rounded-md border border-[#c8c8bd] bg-white px-4 py-3 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 Continue with Microsoft
-              </button>
+              </PendingSubmitButton>
             </form>
           </div>
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { deleteAccount, updateAccountPassword, updateAccountProfile } from "./actions";
@@ -109,9 +110,12 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               />
             </label>
             <div className="flex justify-end">
-              <button className="rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a]">
+              <PendingSubmitButton
+                pendingLabel="Saving..."
+                className="rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+              >
                 Save Account
-              </button>
+              </PendingSubmitButton>
             </div>
           </form>
         </section>
@@ -135,9 +139,12 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               />
             </label>
             <div className="flex justify-end">
-              <button className="rounded-md border border-[#c8c8bd] bg-white px-4 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]">
+              <PendingSubmitButton
+                pendingLabel="Updating..."
+                className="rounded-md border border-[#c8c8bd] bg-white px-4 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 Update Password
-              </button>
+              </PendingSubmitButton>
             </div>
           </form>
         </section>
@@ -177,12 +184,13 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                   className="min-h-11 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#8a3328] disabled:bg-[#f1f1ec] disabled:text-[#777970]"
                 />
               </label>
-              <button
+              <PendingSubmitButton
                 disabled={!canDeleteAccount}
+                pendingLabel="Deleting..."
                 className="min-h-11 rounded-md bg-[#8a3328] px-4 text-sm font-medium text-white transition hover:bg-[#70291f] disabled:cursor-not-allowed disabled:bg-[#c8c8bd]"
               >
                 Delete Account
-              </button>
+              </PendingSubmitButton>
             </form>
           </div>
         </section>

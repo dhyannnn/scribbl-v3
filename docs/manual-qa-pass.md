@@ -29,6 +29,12 @@ Add bugs here as they are found.
 | QA-004 | Fixed | S2 | Meeting video split view | Signed-in meeting participant | Enable split video view, then narrow the browser using Chrome split tabs or OS split screen | Meeting hub and video should remain side-by-side without overlap, or collapse to a usable stacked/mobile layout | Video half overlays/hides the meeting hub content when the browser window is narrow | Fixed by making split video fixed side-by-side only on wide screens and stacked/in-flow at narrow browser widths |
 | QA-005 | Fixed | S3 | Live meeting whiteboard deletion | Meeting participants | Create a workspace-shared meeting whiteboard during a live meeting, keep it open for participants, then delete it from the workspace Notes page | Active viewers should immediately see that the whiteboard was deleted, editing should stop, and the meeting should switch to another artifact or empty state | Backend removes the artifact/note and refresh fixes it, but already-open viewers may temporarily remain in a ghost Liveblocks whiteboard room without a clear deleted state | Fixed with a cross-tab note-deleted event that refreshes active meeting/note viewers immediately and again after deletion settles |
 | QA-006 | Fixed | S2 | Meeting participants | Workspace member | Delete a user account that had been invited to a live/upcoming meeting, then open the meeting hub | Deleted/removed users should not appear as invited participants or be counted in the active meeting roster | Deleted user appeared in the participants list with anonymized email and `invited` status | Fixed by filtering soft-deleted users out of meeting hub participant queries |
+| QA-007 | Fixed | S2 | Meeting recordings | Meeting host/admin | Use recording controls from the meeting hub before joining video | Recording should be managed from actual video context, with empty-room recording blocked | Recording controls were available on the hub and felt disconnected from the room | Fixed by moving recording controls into video surfaces while keeping saved recording artifacts/status visible on the hub |
+| QA-008 | Fixed | S2 | Meeting video tab UX | Meeting participant | Open the video room from the meeting hub | Hub should remain available for notes/chat; standalone video should act like a companion tab | Same-tab navigation replaced the meeting hub, and recording redirects could force a rejoin | Fixed by opening the video room in a new tab, returning focus/closing from the video tab, and preserving in-place recording actions for split/floating video |
+| QA-009 | Fixed | S2 | Meeting video surface state | Meeting participant | Open video in a companion tab, then create a new meeting note/board from the hub | Hub should remember that video is already open elsewhere after route refresh/remount | Hub remount forgot the companion video tab and rendered an extra floating video surface | Fixed with a `hub-ready` / `popout-ready` BroadcastChannel handshake after hub remounts |
+| QA-010 | Fixed | S2 | Meeting video leave | Meeting participant | Join LiveKit video, then press Leave | Video should disconnect, mark the user left, and return the panel to `Join Video` | Leave marked attendance but left the local room UI mounted | Fixed by clearing the local video connection state on disconnect |
+| QA-011 | Fixed | S3 | Floating video resize | Meeting participant | Resize floating video panel very small, then try to recover it | Panel should have a usable minimum size and restored saved state should be clamped | Panel could become too small to resize back manually | Fixed by enforcing a `360x280` minimum during resize and localStorage restore |
+| QA-012 | Fixed | S3 | Meeting list participant counts | Workspace member | Delete a user who was invited to meetings, then view meetings list/dashboard cards | Deleted users should not be counted in visible participant totals | Meetings list/dashboard counted raw meeting participant rows, including soft-deleted users | Fixed by filtering `participants` to users with `deletedAt: null` on list/dashboard queries |
 
 Severity guide:
 
@@ -225,6 +231,7 @@ Notes:
 Notes:
 
 - Code review: `app/workspaces/[id]/meetings/actions.ts` allows create by active workspace members, update/cancel by creator/owner/admin, and blocks schedule changes once lifecycle is no longer manageable.
+- Manual QA: duplicate meeting creation from double submit was fixed with a pending submit button and a server duplicate guard.
 
 ### RSVP Before And During Live Meeting
 
@@ -272,26 +279,29 @@ Notes:
 Notes:
 
 - Code review: artifact mutation checks active workspace membership and blocks canceled/ended meetings. Shared meeting-created notes are locked after canceled/ended lifecycle.
+- Manual QA: creating a workspace-shared meeting whiteboard while a companion video tab is open no longer creates a duplicate video surface after the hub refreshes.
 
 ## Pass 5: Video And LiveKit
 
 Use a meeting that is live/joinable.
 
-- [ ] As Karuna, join video from the meeting hub.
+- [x] As Karuna, join video from the meeting hub.
   - Expected: video connects and a video session starts only after connection.
-- [ ] Leave video.
+- [x] Leave video.
   - Expected: active session is cleaned up.
-- [ ] Join again and refresh the page while connected.
+- [x] Join again and refresh the page while connected.
   - Expected: reconnect behavior is reasonable and duplicate active sessions are cleaned up.
 - [x] Open the same user in a duplicate tab and try to join.
   - Expected: client session handling prevents broken duplicate session state.
-- [ ] Join as Avery in a second browser.
+- [x] Join as Avery in a second browser.
   - Expected: both users can see/hear each other if device permissions are granted.
-- [ ] Use floating video PiP.
+- [x] Use floating video PiP.
   - Expected: no hydration mismatch, position restores after refresh, and controls remain usable.
-- [ ] Use popout or split video if available.
+- [x] Use popout/new-tab or split video if available.
   - Expected: video remains connected and navigation does not orphan active sessions.
-- [ ] End or cancel the meeting while video is active.
+- [x] Press Leave after joining video.
+  - Expected: LiveKit disconnects, the active session is cleaned up, and the panel returns to `Join Video`.
+- [x] End or cancel the meeting while video is active.
   - Expected: leaving afterward still cleans up active sessions; new token requests are blocked after lifecycle closes.
 - [x] Try to request/join video as a non-member or uninvited optional Aloe user.
   - Expected: token access is denied.
@@ -301,13 +311,41 @@ Notes:
 - Code review: `POST /api/livekit-token` is stateless and checks auth, active workspace membership, participant access, meeting lifecycle, and client session ID before issuing a token.
 - Smoke API check: unauthenticated `POST /api/livekit-token` returned `401 Authentication required`.
 - Code review: `markCurrentUserVideoJoined` calls `startMeetingVideoSession` after client connection; `markCurrentUserVideoLeft` closes sessions even when lifecycle has ended/canceled because end does not require `canJoinMeeting`.
-- Dev log still shows a previous hydration mismatch in `FloatingMeetingVideo`; logged as QA-002.
+- Previous hydration mismatch in `FloatingMeetingVideo` was fixed under QA-002.
 - Positive token check: Dhyan received `200 OK` and a LiveKit room payload for the live `Capter 4 Review` meeting.
 - Negative permission check: Avery received `403` for the same Study Group meeting.
 - Invalid session check: Dhyan received `400 Invalid video session` for a short/invalid client session ID.
 - Manual QA: duplicate tab behavior appears sane. The newer tab becomes active; tab A remains on the meeting hub but camera/microphone stop, avoiding duplicate active media for the same user.
-- Manual QA issue logged as QA-004: split video overlaps the meeting hub when the browser is narrowed by Chrome split tabs or OS split screen.
-- Actual camera/microphone join/leave/reload/duplicate-tab behavior still needs manual browser QA.
+- Manual QA: split/floating/new-tab video behavior passed, including Chrome split tabs.
+- Manual QA: companion video tab opens separately from the hub, can focus notes/chat on the hub, and `Bring video back` returns focus to the hub and closes the video tab.
+- Manual QA: pressing Leave returns the video panel to `Join Video`.
+- Manual QA: floating panel resize minimum is usable and bad saved tiny panel state is clamped on reload.
+
+### LiveKit Recording
+
+- [x] Start recording from split video.
+  - Expected: recording starts without leaving the hub or forcing a video rejoin.
+- [x] Stop recording from split video.
+  - Expected: recording enters finalizing/saved state and remains accessible.
+- [x] Start/stop recording from floating video.
+  - Expected: recording works regardless of floating or split presentation.
+- [x] Start/stop recording from the standalone video tab.
+  - Expected: recording works in the companion video tab and returns to the correct video context.
+- [x] Try starting recording before any active video participant exists.
+  - Expected: start is blocked by UI and server action.
+- [x] Confirm completed recording appears in meeting artifacts.
+- [x] Confirm completed recording appears in workspace Files.
+- [x] Open completed recording.
+  - Expected: `/api/files/[fileId]` serves the recording through a signed storage URL.
+- [x] Confirm non-owner/non-admin/non-creator cannot manage recording if applicable.
+
+Notes:
+
+- Manual QA: LiveKit Egress recording works from split, floating, and companion-tab video surfaces.
+- Manual QA: saved recording artifacts and workspace Files entry appear after finalization.
+- Manual QA: recording controls are no longer interactive on the meeting hub; the hub only shows saved recording status/artifact actions.
+- Code review: recording server actions still enforce active workspace membership, creator/owner/admin permission, joinable meeting lifecycle, active video session presence, and single active recording.
+- Code review: active/finalizing recording status auto-syncs from the video room instead of requiring a manual refresh button.
 
 ## Pass 6: Notes And Whiteboards
 
@@ -400,12 +438,14 @@ Notes:
 - [ ] Confirm terminal logs do not show repeated database, Liveblocks, LiveKit, Resend, or storage failures.
 - [x] Run `npm run lint`.
 - [x] Run `npx tsc --noEmit`.
+- [x] Run `npm run build`.
 - [x] Record all remaining bugs in the bug log.
 
 Notes:
 
 - `npm run lint` passed.
 - `npx tsc --noEmit` passed.
+- `npm run build` passed. A sandboxed Turbopack build hit an internal port-binding restriction, then passed when rerun outside the sandbox.
 - Dev log includes intermittent Liveblocks websocket `1006` warnings and LiveKit connection retries; not logged as app bugs yet because they may be transient/network-dependent and need browser confirmation.
 
 ## QA Session Summary
@@ -436,15 +476,15 @@ Karuna, Avery, Dhyan, signed-out sessions, and invite recipient flow. No destruc
 
 Overall result:
 
-MVP manual QA pass completed. Auth, account profile/password update, account deletion, workspace invite flow, ownership transfer, admin role behavior, workspace access boundaries, realtime chat, canceled meeting channel visibility, LiveKit/video behavior, collaborative notes/whiteboards, private/shared note access, file flows, meeting artifacts, and remaining manual checks passed unless listed in the bug log. Lint and TypeScript pass. Known open issues are logged.
+MVP manual QA pass completed. Auth, account profile/password update, account deletion, workspace invite flow, ownership transfer, admin role behavior, workspace access boundaries, realtime chat, canceled meeting channel visibility, LiveKit/video behavior, LiveKit recording, collaborative notes/whiteboards, private/shared note access, file flows, meeting artifacts, and remaining manual checks passed unless listed in the bug log. Lint, TypeScript, and production build pass. Known open issues are logged.
 
 Open blockers:
 
-None. All logged QA bugs are fixed pending final browser spot-checks.
+None. All logged QA bugs are fixed and browser spot-checked.
 
 Follow-up fixes:
 
-Completed for the logged QA bugs. Recommended spot-checks: invalid workspace URLs, floating video reload/hydration, invite acceptance with another Scribbl tab already open, split video at narrow browser widths, and live meeting whiteboard deletion with another participant viewing.
+Completed for the logged QA bugs. Latest fixed areas include recording UX relocation, split/floating/new-tab recording controls, companion video tab return behavior, Leave returning to `Join Video`, floating panel minimum size, cross-tab video remount handshake, duplicate meeting creation guard, and deleted-user filtering in meeting participant counts.
 
 Remaining Manual QA:
 

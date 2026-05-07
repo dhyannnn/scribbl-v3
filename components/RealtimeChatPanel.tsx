@@ -269,8 +269,11 @@ function RealtimeChatPanelContent({
                     defaultValue={message.body}
                     className="min-h-10 min-w-0 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
                   />
-                  <button className="min-h-10 rounded-md border border-[#2f604b] bg-white px-3 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]">
-                    Save
+                  <button
+                    disabled={isPending}
+                    className="min-h-10 rounded-md border border-[#2f604b] bg-white px-3 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isPending ? "Saving..." : "Save"}
                   </button>
                   <button
                     type="button"
@@ -298,9 +301,10 @@ function RealtimeChatPanelContent({
                     <button
                       type="button"
                       onClick={() => deleteChatMessage(message.id)}
-                      className="rounded-md border border-[#c8c8bd] px-3 py-1.5 text-xs font-medium text-[#7a3434] transition hover:border-[#b65b5b] hover:bg-[#fff7f5]"
+                      disabled={isPending}
+                      className="rounded-md border border-[#c8c8bd] px-3 py-1.5 text-xs font-medium text-[#7a3434] transition hover:border-[#b65b5b] hover:bg-[#fff7f5] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Delete
+                      {isPending ? "Working..." : "Delete"}
                     </button>
                   ) : null}
                 </div>

@@ -138,6 +138,7 @@ export async function deleteWorkspaceFile(formData: FormData) {
         id: true,
         uploadedByUserId: true,
         visibility: true,
+        storageBucket: true,
         storageKey: true,
         noteContentFor: {
           select: {
@@ -174,7 +175,9 @@ export async function deleteWorkspaceFile(formData: FormData) {
 
   if (!file.storageKey.startsWith("uploads/")) {
     const supabase = createAdminClient();
-    const { error } = await supabase.storage.from(getStorageBucketName()).remove([file.storageKey]);
+    const { error } = await supabase.storage
+      .from(file.storageBucket ?? getStorageBucketName())
+      .remove([file.storageKey]);
 
     if (error) {
       redirect(`/workspaces/${workspaceId}/files?file=delete-failed`);

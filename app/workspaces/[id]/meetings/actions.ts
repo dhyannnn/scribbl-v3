@@ -69,6 +69,30 @@ export async function scheduleMeeting(formData: FormData) {
   const participantUserIds = Array.from(
     new Set([currentUser.id, ...workspace.members.map((member) => member.userId)]),
   );
+  const duplicateWindowStart = new Date(Date.now() - 2 * 60 * 1000);
+  const recentDuplicate = await prisma.meeting.findFirst({
+    where: {
+      workspaceId: workspace.id,
+      createdByUserId: currentUser.id,
+      title,
+      startsAt,
+      endsAt,
+      canceledAt: null,
+      createdAt: {
+        gte: duplicateWindowStart,
+      },
+    },
+    select: {
+      id: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  if (recentDuplicate) {
+    redirect(`/workspaces/${workspaceId}/meetings?meeting=scheduled`);
+  }
 
   let meetingId = "";
 

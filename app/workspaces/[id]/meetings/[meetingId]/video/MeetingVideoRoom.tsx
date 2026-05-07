@@ -12,10 +12,18 @@ import {
   useTracks,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useFormStatus } from "react-dom";
+import type { MeetingVideoRecordingProps } from "./VideoPopoutShell";
 import {
   markCurrentUserVideoJoined,
   markCurrentUserVideoLeft,
+  startMeetingRecording,
+  stopMeetingRecording,
+  syncMeetingRecordingStatus,
 } from "../actions";
 
 type MeetingVideoRoomProps = {
@@ -23,6 +31,8 @@ type MeetingVideoRoomProps = {
   meetingId: string;
   disabled?: boolean;
   mode?: "full" | "floating";
+  recording?: MeetingVideoRecordingProps;
+  recordingReturnTo?: "current" | "hub" | "video";
 };
 
 type TokenResponse = {
@@ -36,9 +46,12 @@ export function MeetingVideoRoom({
   meetingId,
   disabled = false,
   mode = "full",
+  recording,
+  recordingReturnTo = "video",
 }: MeetingVideoRoomProps) {
   const [connection, setConnection] = useState<TokenResponse | null>(null);
   const [error, setError] = useState("");
+  const [hasMarkedJoined, setHasMarkedJoined] = useState(false);
   const [isPending, startTransition] = useTransition();
   const clientSessionIdRef = useRef("");
   const connectedRef = useRef(false);
@@ -52,6 +65,7 @@ export function MeetingVideoRoom({
     }
 
     connectedRef.current = false;
+    setHasMarkedJoined(false);
 
     if (leaveTimeoutRef.current !== null) {
       window.clearTimeout(leaveTimeoutRef.current);
@@ -62,6 +76,12 @@ export function MeetingVideoRoom({
       void markCurrentUserVideoLeft(workspaceId, meetingId, clientSessionId);
     }, 1200);
   }, [meetingId, workspaceId]);
+
+  const leaveRoom = useCallback(() => {
+    markLeft();
+    clientSessionIdRef.current = "";
+    setConnection(null);
+  }, [markLeft]);
 
   useEffect(() => {
     return () => {
@@ -143,14 +163,23 @@ export function MeetingVideoRoom({
 
         connectedRef.current = true;
         startTransition(() => {
-          void markCurrentUserVideoJoined(workspaceId, meetingId, clientSessionIdRef.current);
+          void markCurrentUserVideoJoined(workspaceId, meetingId, clientSessionIdRef.current).then(() => {
+            setHasMarkedJoined(true);
+          });
         });
       }}
-      onDisconnected={markLeft}
+      onDisconnected={leaveRoom}
       data-lk-theme="default"
       className={getRoomClassName(mode)}
     >
-      <ConferenceSurface mode={mode} />
+      <ConferenceSurface
+        workspaceId={workspaceId}
+        meetingId={meetingId}
+        mode={mode}
+        recording={recording}
+        hasJoinedVideo={hasMarkedJoined}
+        recordingReturnTo={recordingReturnTo}
+      />
       <RoomAudioRenderer />
     </LiveKitRoom>
   );
@@ -164,7 +193,21 @@ function createClientSessionId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
 }
 
-function ConferenceSurface({ mode }: { mode: "full" | "floating" }) {
+function ConferenceSurface({
+  hasJoinedVideo,
+  meetingId,
+  mode,
+  recording,
+  recordingReturnTo,
+  workspaceId,
+}: {
+  hasJoinedVideo: boolean;
+  meetingId: string;
+  mode: "full" | "floating";
+  recording?: MeetingVideoRecordingProps;
+  recordingReturnTo: "current" | "hub" | "video";
+  workspaceId: string;
+}) {
   const [showLocalPreview, setShowLocalPreview] = useState(false);
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
     onlySubscribed: false,
@@ -216,6 +259,16 @@ function ConferenceSurface({ mode }: { mode: "full" | "floating" }) {
         )}
       </div>
       <div className={mode === "floating" ? "flex flex-wrap items-center justify-center gap-2 border-t border-white/10 bg-[#171713] p-2" : "flex flex-wrap items-center justify-center gap-2 border-t border-white/10 bg-[#171713] p-3"}>
+        {recording ? (
+          <RecordingControls
+            workspaceId={workspaceId}
+            meetingId={meetingId}
+            recording={recording}
+            hasJoinedVideo={hasJoinedVideo}
+            mode={mode}
+            recordingReturnTo={recordingReturnTo}
+          />
+        ) : null}
         <StartMediaButton className={getControlClassName(mode)}>
           Start Media
         </StartMediaButton>
@@ -252,6 +305,216 @@ function ConferenceSurface({ mode }: { mode: "full" | "floating" }) {
       </div>
     </div>
   );
+}
+
+function RecordingControls({
+  hasJoinedVideo,
+  meetingId,
+  recording,
+  recordingReturnTo,
+  workspaceId,
+  mode,
+}: {
+  hasJoinedVideo: boolean;
+  meetingId: string;
+  mode: "full" | "floating";
+  recording: MeetingVideoRecordingProps;
+  recordingReturnTo: "current" | "hub" | "video";
+  workspaceId: string;
+}) {
+  const router = useRouter();
+  const activeRecording = recording.activeRecording;
+  const latestRecording = recording.latestRecording;
+  const isRecordingMutable =
+    activeRecording && ["STARTING", "ACTIVE", "STOPPING"].includes(activeRecording.status);
+  const canStartRecording = recording.canManage && hasJoinedVideo && !activeRecording;
+  async function submitStartRecording(formData: FormData) {
+    await startMeetingRecording(formData);
+    router.refresh();
+  }
+
+  async function submitStopRecording(formData: FormData) {
+    await stopMeetingRecording(formData);
+    router.refresh();
+  }
+
+  useEffect(() => {
+    if (!isRecordingMutable) {
+      return;
+    }
+
+    let isCanceled = false;
+    const interval = window.setInterval(() => {
+      void syncMeetingRecordingStatus({
+        workspaceId,
+        meetingId,
+        recordingId: activeRecording.id,
+      }).then((result) => {
+        if (!isCanceled && result.ok) {
+          router.refresh();
+        }
+      });
+    }, 4000);
+
+    return () => {
+      isCanceled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeRecording?.id, isRecordingMutable, meetingId, router, workspaceId]);
+
+  if (!recording.canManage && !latestRecording) {
+    return null;
+  }
+
+  return (
+    <div className={getRecordingControlsClassName(mode)}>
+      <div>
+        <p className={mode === "floating" ? "text-xs font-medium text-white" : "font-medium text-white"}>
+          {getRecordingTitle(latestRecording)}
+        </p>
+        <p className={mode === "floating" ? "mt-1 text-xs" : "mt-1"}>
+          {getRecordingDetail({
+            hasJoinedVideo,
+            latestRecording,
+            canManage: recording.canManage,
+          })}
+        </p>
+        {latestRecording?.errorMessage ? (
+          <p className="mt-1 text-[#f1c7c2]">{latestRecording.errorMessage}</p>
+        ) : null}
+      </div>
+
+      <div className={mode === "floating" ? "flex shrink-0 flex-wrap gap-2" : "flex flex-wrap gap-2"}>
+        {recording.canManage && !activeRecording ? (
+          <form action={submitStartRecording}>
+            <input type="hidden" name="workspaceId" value={workspaceId} />
+            <input type="hidden" name="meetingId" value={meetingId} />
+            <input type="hidden" name="recordingReturnTo" value={recordingReturnTo} />
+            <RecordingSubmitButton disabled={!canStartRecording} mode={mode} variant="start">
+              Start Recording
+            </RecordingSubmitButton>
+          </form>
+        ) : null}
+
+        {recording.canManage && activeRecording ? (
+          <form action={submitStopRecording}>
+            <input type="hidden" name="workspaceId" value={workspaceId} />
+            <input type="hidden" name="meetingId" value={meetingId} />
+            <input type="hidden" name="recordingId" value={activeRecording.id} />
+            <input type="hidden" name="recordingReturnTo" value={recordingReturnTo} />
+            <RecordingSubmitButton disabled={activeRecording.status === "STOPPING"} mode={mode} variant="stop">
+              Stop Recording
+            </RecordingSubmitButton>
+          </form>
+        ) : null}
+
+        {latestRecording?.file ? (
+          <Link
+            href={`/api/files/${latestRecording.file.id}`}
+            target="_blank"
+            className={getRecordingLinkClassName(mode)}
+          >
+            Open Recording
+          </Link>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function RecordingSubmitButton({
+  children,
+  disabled,
+  mode,
+  variant,
+}: {
+  children: ReactNode;
+  disabled: boolean;
+  mode: "full" | "floating";
+  variant: "start" | "stop";
+}) {
+  const { pending } = useFormStatus();
+
+  return (
+    <button disabled={disabled || pending} className={getRecordingButtonClassName(mode, variant)}>
+      {pending ? "Working..." : children}
+    </button>
+  );
+}
+
+function getRecordingControlsClassName(mode: "full" | "floating") {
+  if (mode === "floating") {
+    return "flex w-full flex-col gap-2 rounded-md border border-white/10 bg-white/5 p-2 text-xs text-white/75 sm:flex-row sm:items-center sm:justify-between";
+  }
+
+  return "flex w-full flex-col gap-2 rounded-md border border-white/10 bg-white/5 p-3 text-sm text-white/75 md:flex-row md:items-center md:justify-between";
+}
+
+function getRecordingButtonClassName(mode: "full" | "floating", variant: "start" | "stop") {
+  const sizeClassName = mode === "floating" ? "min-h-8 px-3 text-xs" : "min-h-10 px-4 text-sm";
+
+  if (variant === "stop") {
+    return `${sizeClassName} rounded-md border border-[#f1c7c2] bg-[#fff7f5] font-medium text-[#7a3434] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60`;
+  }
+
+  return `${sizeClassName} rounded-md bg-white font-medium text-[#20201d] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60`;
+}
+
+function getRecordingLinkClassName(mode: "full" | "floating") {
+  if (mode === "floating") {
+    return "inline-flex min-h-8 items-center rounded-md bg-white px-3 text-xs font-medium text-[#20201d] transition hover:bg-[#eef5ef]";
+  }
+
+  return "inline-flex min-h-10 items-center rounded-md bg-white px-4 text-sm font-medium text-[#20201d] transition hover:bg-[#eef5ef]";
+}
+
+function getRecordingTitle(recording?: MeetingVideoRecordingProps["latestRecording"]) {
+  switch (recording?.status) {
+    case "STARTING":
+      return "Recording is starting";
+    case "ACTIVE":
+      return "Recording live";
+    case "STOPPING":
+      return "Finalizing recording";
+    case "COMPLETED":
+      return "Recording saved";
+    case "FAILED":
+      return "Recording failed";
+    default:
+      return "Recording";
+  }
+}
+
+function getRecordingDetail({
+  canManage,
+  hasJoinedVideo,
+  latestRecording,
+}: {
+  canManage: boolean;
+  hasJoinedVideo: boolean;
+  latestRecording?: MeetingVideoRecordingProps["latestRecording"];
+}) {
+  if (!canManage) {
+    return latestRecording ? "Recording status is visible here." : "You do not have permission to manage recording.";
+  }
+
+  if (!hasJoinedVideo) {
+    return "Join video to manage recording.";
+  }
+
+  if (latestRecording?.status === "COMPLETED") {
+    return "Saved to this meeting's artifacts and workspace Files.";
+  }
+
+  if (latestRecording?.status === "STOPPING") {
+    return "The MP4 is being finalized and will appear automatically.";
+  }
+
+  if (latestRecording?.status === "ACTIVE") {
+    return "This video room is being recorded.";
+  }
+
+  return "Start recording from this video room.";
 }
 
 function getDisplayTracks(

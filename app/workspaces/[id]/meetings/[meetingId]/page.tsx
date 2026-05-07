@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LiveblocksRoom } from "@/components/LiveblocksRoom";
 import { MeetingRouteRefresher } from "@/components/MeetingRouteRefresher";
+import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { PresenceBar } from "@/components/PresenceBar";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { TextNoteEditor } from "@/components/TextNoteEditor";
@@ -43,6 +44,7 @@ type PageProps = {
     privateNoteId?: string;
     meeting?: string;
     chat?: string;
+    recording?: string;
   }>;
 };
 
@@ -65,7 +67,13 @@ type WhiteboardPageData = {
 
 export default async function MeetingSessionPage({ params, searchParams }: PageProps) {
   const { id, meetingId } = await params;
-  const { sharedNoteId, privateNoteId, meeting: meetingStatus, chat: chatStatus } = await searchParams;
+  const {
+    sharedNoteId,
+    privateNoteId,
+    meeting: meetingStatus,
+    chat: chatStatus,
+    recording: recordingStatus,
+  } = await searchParams;
 
   const currentUser = await getCurrentUser();
 
@@ -145,6 +153,16 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
             },
           },
           createdBy: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      },
+      recordings: {
+        include: {
+          startedBy: true,
+          stoppedBy: true,
+          file: true,
         },
         orderBy: {
           createdAt: "desc",
@@ -254,6 +272,10 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
   const canEditNotes = canEditMeetingNotes(lifecycle);
   const canManageSchedule = canManageMeeting && canManageMeetingSchedule(lifecycle);
   const canUpdateRsvp = Boolean(currentParticipant) && canChangeMeetingRsvp(lifecycle);
+  const activeRecording = meeting.recordings.find((recording) =>
+    ["STARTING", "ACTIVE", "STOPPING"].includes(recording.status),
+  );
+  const latestRecording = activeRecording ?? meeting.recordings[0];
   const meetingChannel = meeting.channel
     ? {
         id: meeting.channel.id,
@@ -317,6 +339,12 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           </p>
         ) : null}
 
+        {getRecordingStatusMessage(recordingStatus) ? (
+          <p className="rounded-md border border-[#d8d8ce] bg-white px-4 py-3 text-sm text-[#4d4f47] shadow-sm">
+            {getRecordingStatusMessage(recordingStatus)}
+          </p>
+        ) : null}
+
         {isCanceled ? (
           <section className="rounded-md border border-[#ead1cd] bg-[#fff7f5] p-4 text-sm text-[#7a3434] shadow-sm">
             <p className="font-semibold">This meeting was canceled.</p>
@@ -351,20 +379,22 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               <form action={updateCurrentUserParticipantStatus} className="grid grid-cols-2 gap-2 sm:min-w-[260px]">
                 <input type="hidden" name="workspaceId" value={id} />
                 <input type="hidden" name="meetingId" value={meeting.id} />
-                <button
+                <PendingSubmitButton
                   name="status"
                   value="ACCEPTED"
-                  className="rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a]"
+                  pendingLabel="Saving..."
+                  className="rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
                 >
                   Accept
-                </button>
-                <button
+                </PendingSubmitButton>
+                <PendingSubmitButton
                   name="status"
                   value="DECLINED"
-                  className="rounded-md border border-[#b65b5b] bg-white px-4 py-2 text-sm font-medium text-[#7a3434] transition hover:bg-[#fff7f5]"
+                  pendingLabel="Saving..."
+                  className="rounded-md border border-[#b65b5b] bg-white px-4 py-2 text-sm font-medium text-[#7a3434] transition hover:bg-[#fff7f5] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Decline
-                </button>
+                </PendingSubmitButton>
               </form>
             </div>
           </section>
@@ -409,9 +439,12 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 </select>
               </label>
               <div className="flex items-end">
-                <button className="min-h-11 w-full rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a]">
+                <PendingSubmitButton
+                  pendingLabel="Saving..."
+                  className="min-h-11 w-full rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+                >
                   Save
-                </button>
+                </PendingSubmitButton>
               </div>
               <label className="grid gap-2 lg:col-span-4">
                 <span className="text-sm font-medium text-[#4d4f47]">Description</span>
@@ -432,6 +465,20 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
             workspaceId={id}
             meetingId={meeting.id}
             videoHref={`/workspaces/${id}/meetings/${meeting.id}/video`}
+            recording={{
+              activeRecording,
+              canManage: canManageMeeting,
+              latestRecording,
+            }}
+          />
+        ) : null}
+
+        {latestRecording && !isCanceled ? (
+          <RecordingStatusPanel
+            workspaceId={id}
+            meetingId={meeting.id}
+            activeRecording={activeRecording}
+            latestRecording={latestRecording}
           />
         ) : null}
 
@@ -491,20 +538,22 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                   <form action={updateCurrentUserParticipantStatus} className="mt-5 grid grid-cols-2 gap-2">
                     <input type="hidden" name="workspaceId" value={id} />
                     <input type="hidden" name="meetingId" value={meeting.id} />
-                    <button
+                    <PendingSubmitButton
                       name="status"
                       value="ACCEPTED"
-                      className="rounded-md border border-[#2f604b] bg-white px-3 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]"
+                      pendingLabel="Saving..."
+                      className="rounded-md border border-[#2f604b] bg-white px-3 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Accept
-                    </button>
-                    <button
+                    </PendingSubmitButton>
+                    <PendingSubmitButton
                       name="status"
                       value="DECLINED"
-                      className="rounded-md border border-[#b65b5b] bg-white px-3 py-2 text-sm font-medium text-[#7a3434] transition hover:bg-[#fff7f5]"
+                      pendingLabel="Saving..."
+                      className="rounded-md border border-[#b65b5b] bg-white px-3 py-2 text-sm font-medium text-[#7a3434] transition hover:bg-[#fff7f5] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Decline
-                    </button>
+                    </PendingSubmitButton>
                   </form>
                 ) : (
                   <p className="mt-5 rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] p-3 text-sm text-[#66685f]">
@@ -522,7 +571,12 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 <p>Ends: {formatShortDateTime(meetingEndsAt)}</p>
                 <p>
                   {meeting.meetingUrl ? (
-                    <Link href={meeting.meetingUrl} className="font-medium text-[#2f604b]">
+                    <Link
+                      href={meeting.meetingUrl}
+                      target="_blank"
+                      rel="opener"
+                      className="font-medium text-[#2f604b]"
+                    >
                       Open video room
                     </Link>
                   ) : (
@@ -648,9 +702,12 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                       ))}
                     </select>
                   </label>
-                  <button className="min-h-11 rounded-md bg-[#2f604b] px-4 text-sm font-medium text-white transition hover:bg-[#244b3a]">
+                  <PendingSubmitButton
+                    pendingLabel="Attaching..."
+                    className="min-h-11 rounded-md bg-[#2f604b] px-4 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+                  >
                     Attach Note
-                  </button>
+                  </PendingSubmitButton>
                 </form>
               ) : null}
 
@@ -671,9 +728,12 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                       ))}
                     </select>
                   </label>
-                  <button className="min-h-11 rounded-md bg-[#2f604b] px-4 text-sm font-medium text-white transition hover:bg-[#244b3a]">
+                  <PendingSubmitButton
+                    pendingLabel="Attaching..."
+                    className="min-h-11 rounded-md bg-[#2f604b] px-4 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+                  >
                     Attach File
-                  </button>
+                  </PendingSubmitButton>
                 </form>
               ) : null}
             </div>
@@ -754,6 +814,84 @@ type ArtifactWithNote = {
   } | null;
 };
 
+type RecordingCard = {
+  id: string;
+  status: string;
+  startedAt: Date;
+  stoppedAt: Date | null;
+  completedAt: Date | null;
+  errorMessage: string | null;
+  startedBy: {
+    displayName: string;
+  };
+  stoppedBy: {
+    displayName: string;
+  } | null;
+  file: {
+    id: string;
+    name: string;
+    sizeBytes: number | null;
+  } | null;
+};
+
+function RecordingStatusPanel({
+  activeRecording,
+  latestRecording,
+  meetingId,
+  workspaceId,
+}: {
+  activeRecording: RecordingCard | undefined;
+  latestRecording: RecordingCard | undefined;
+  meetingId: string;
+  workspaceId: string;
+}) {
+  return (
+    <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d7f70]">Recording</p>
+          <h2 className="mt-2 text-xl font-semibold">{getRecordingPanelTitle(latestRecording)}</h2>
+          {latestRecording ? (
+            <p className="mt-2 text-sm leading-6 text-[#66685f]">
+              Started by {latestRecording.startedBy.displayName} / {formatShortDateTime(latestRecording.startedAt)}
+              {latestRecording.stoppedBy ? ` / stopped by ${latestRecording.stoppedBy.displayName}` : ""}
+              {latestRecording.file?.sizeBytes ? ` / ${formatFileSize(latestRecording.file.sizeBytes)}` : ""}
+            </p>
+          ) : (
+            <p className="mt-2 text-sm leading-6 text-[#66685f]">
+              Recordings saved from video appear here and in this workspace&apos;s Files.
+            </p>
+          )}
+          {latestRecording?.errorMessage ? (
+            <p className="mt-2 text-sm text-[#7a3434]">{latestRecording.errorMessage}</p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {activeRecording ? (
+            <Link
+              href={`/workspaces/${workspaceId}/meetings/${meetingId}/video`}
+              className="inline-flex min-h-11 items-center rounded-md border border-[#c8c8bd] bg-white px-4 text-sm font-medium text-[#4d4f47] transition hover:bg-[#fbfbf8]"
+            >
+              Manage in Video
+            </Link>
+          ) : null}
+
+          {latestRecording?.file ? (
+            <Link
+              href={`/api/files/${latestRecording.file.id}`}
+              target="_blank"
+              className="inline-flex min-h-11 items-center rounded-md bg-[#2f604b] px-4 text-sm font-medium text-white transition hover:bg-[#244b3a]"
+            >
+              Open Recording
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function MeetingNoteHeader({
   title,
   badge,
@@ -783,24 +921,26 @@ function MeetingNoteHeader({
           <input type="hidden" name="meetingId" value={meetingId} />
           <input type="hidden" name="scope" value={scope} />
           <input type="hidden" name="type" value="TEXT" />
-          <button
+          <PendingSubmitButton
             className="rounded-md bg-[#2f604b] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:opacity-50"
             disabled={disabled}
+            pendingLabel="Creating..."
           >
             New Note
-          </button>
+          </PendingSubmitButton>
         </form>
         <form action={createMeetingNote}>
           <input type="hidden" name="workspaceId" value={workspaceId} />
           <input type="hidden" name="meetingId" value={meetingId} />
           <input type="hidden" name="scope" value={scope} />
           <input type="hidden" name="type" value="WHITEBOARD" />
-          <button
+          <PendingSubmitButton
             className="rounded-md border border-[#2f604b] bg-white px-3 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-50"
             disabled={disabled}
+            pendingLabel="Creating..."
           >
             New Board
-          </button>
+          </PendingSubmitButton>
         </form>
       </div>
     </div>
@@ -1071,6 +1211,60 @@ function getMeetingStatusMessage(status?: string) {
     default:
       return null;
   }
+}
+
+function getRecordingStatusMessage(status?: string) {
+  switch (status) {
+    case "started":
+      return "Recording started.";
+    case "stopped":
+      return "Recording stopped. The file may need a moment to finish processing.";
+    case "refreshed":
+      return "Recording status refreshed.";
+    case "already-active":
+      return "This meeting is already being recorded.";
+    case "already-complete":
+      return "This recording is already complete.";
+    case "not-open":
+      return "Recording is available only while the meeting video room is open.";
+    case "no-video-participants":
+      return "Recording starts after at least one participant joins video.";
+    case "unauthorized":
+      return "You do not have permission to manage recordings.";
+    case "start-failed":
+      return "Recording could not be started. Check LiveKit and recording storage settings.";
+    case "stop-failed":
+      return "Recording could not be stopped.";
+    case "refresh-failed":
+      return "Recording status could not be refreshed.";
+    default:
+      return null;
+  }
+}
+
+function getRecordingPanelTitle(recording?: RecordingCard) {
+  switch (recording?.status) {
+    case "STARTING":
+      return "Recording is starting";
+    case "ACTIVE":
+      return "Recording live";
+    case "STOPPING":
+      return "Recording is finalizing";
+    case "COMPLETED":
+      return "Recording saved";
+    case "FAILED":
+      return "Recording failed";
+    default:
+      return "Record this meeting";
+  }
+}
+
+function formatFileSize(sizeBytes: number) {
+  if (sizeBytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(sizeBytes / 1024))} KB`;
+  }
+
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function getMeetingPhaseLabel(state: MeetingLifecycleState) {

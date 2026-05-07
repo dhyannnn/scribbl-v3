@@ -10,6 +10,7 @@ import {
 } from "@/lib/meeting-lifecycle";
 import { prisma } from "@/lib/prisma";
 import { scheduleMeeting } from "./actions";
+import { ScheduleMeetingSubmitButton } from "./ScheduleMeetingSubmitButton";
 
 type MeetingView = "upcoming" | "past" | "canceled" | "all";
 
@@ -42,7 +43,14 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
       },
       meetings: {
         include: {
-          participants: { include: { user: true } },
+          participants: {
+            where: {
+              user: {
+                deletedAt: null,
+              },
+            },
+            include: { user: true },
+          },
           artifacts: {
             where: {
               OR: [
@@ -150,9 +158,7 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
               </select>
             </label>
             <div className="flex items-end">
-              <button className="min-h-11 w-full rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a]">
-                Schedule
-              </button>
+              <ScheduleMeetingSubmitButton />
             </div>
             <label className="grid gap-2 lg:col-span-4">
               <span className="text-sm font-medium text-[#4d4f47]">Description</span>

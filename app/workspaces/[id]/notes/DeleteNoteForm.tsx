@@ -1,6 +1,7 @@
 "use client";
 
 import { publishScribblClientEvent } from "@/app/Providers";
+import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { deleteWorkspaceNote } from "./actions";
 
 type DeleteNoteFormProps = {
@@ -36,9 +37,12 @@ export function DeleteNoteForm({
     >
       <input type="hidden" name="workspaceId" value={workspaceId} />
       <input type="hidden" name="noteId" value={noteId} />
-      <button className="rounded-md border border-[#c8c8bd] px-3 py-2 text-sm font-medium text-[#7a3434] transition hover:border-[#b65b5b] hover:bg-[#fff7f5]">
+      <PendingSubmitButton
+        pendingLabel="Deleting..."
+        className="rounded-md border border-[#c8c8bd] px-3 py-2 text-sm font-medium text-[#7a3434] transition hover:border-[#b65b5b] hover:bg-[#fff7f5] disabled:cursor-not-allowed disabled:opacity-60"
+      >
         Delete
-      </button>
+      </PendingSubmitButton>
     </form>
   );
 }

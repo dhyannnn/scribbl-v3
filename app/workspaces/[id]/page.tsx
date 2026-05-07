@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InviteAcceptedBroadcast } from "@/components/InviteAcceptedBroadcast";
+import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
 import {
@@ -77,6 +78,11 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
       meetings: {
         include: {
           participants: {
+            where: {
+              user: {
+                deletedAt: null,
+              },
+            },
             include: {
               user: true,
             },
@@ -210,9 +216,12 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
                 </select>
               </label>
               <div className="flex items-end">
-                <button className="min-h-11 w-full rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a]">
+                <PendingSubmitButton
+                  pendingLabel="Saving..."
+                  className="min-h-11 w-full rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+                >
                   Save
-                </button>
+                </PendingSubmitButton>
               </div>
               <label className="grid gap-2 lg:col-span-3">
                 <span className="text-sm font-medium text-[#4d4f47]">Description</span>

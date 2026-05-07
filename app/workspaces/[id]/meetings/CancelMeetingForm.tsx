@@ -1,5 +1,6 @@
 "use client";
 
+import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { cancelMeeting } from "./actions";
 
 type CancelMeetingFormProps = {
@@ -30,9 +31,12 @@ export function CancelMeetingForm({ meetingId, workspaceId }: CancelMeetingFormP
         />
       </label>
       <div className="flex justify-end">
-        <button className="rounded-md border border-[#b65b5b] bg-white px-4 py-2 text-sm font-medium text-[#7a3434] transition hover:bg-[#fff0ed]">
+        <PendingSubmitButton
+          pendingLabel="Canceling..."
+          className="rounded-md border border-[#b65b5b] bg-white px-4 py-2 text-sm font-medium text-[#7a3434] transition hover:bg-[#fff0ed] disabled:cursor-not-allowed disabled:opacity-60"
+        >
           Cancel Meeting
-        </button>
+        </PendingSubmitButton>
       </div>
     </form>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { deleteWorkspaceFile } from "./actions";
 
 type DeleteFileFormProps = {
@@ -30,12 +31,13 @@ export function DeleteFileForm({
     >
       <input type="hidden" name="workspaceId" value={workspaceId} />
       <input type="hidden" name="fileId" value={fileId} />
-      <button
+      <PendingSubmitButton
         className="rounded-md border border-[#c8c8bd] px-4 py-2 text-sm font-medium text-[#7a3434] transition hover:border-[#b65b5b] hover:bg-[#fff7f5] disabled:cursor-not-allowed disabled:opacity-50"
         disabled={disabled}
+        pendingLabel="Deleting..."
       >
         Delete
-      </button>
+      </PendingSubmitButton>
     </form>
   );
 }

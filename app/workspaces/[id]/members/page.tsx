@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -140,9 +141,12 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
                 </select>
               </label>
               <div className="flex items-end">
-                <button className="min-h-11 w-full rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a]">
+                <PendingSubmitButton
+                  pendingLabel="Inviting..."
+                  className="min-h-11 w-full rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+                >
                   Invite
-                </button>
+                </PendingSubmitButton>
               </div>
             </form>
           </section>
@@ -180,9 +184,12 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
                         <option value="PROFESSOR">Professor</option>
                         <option value="ADMIN">Admin</option>
                       </select>
-                      <button className="rounded-md border border-[#c8c8bd] px-3 py-1 text-xs font-medium text-[#2f604b] transition hover:border-[#2f604b] hover:bg-[#eef5ef]">
+                      <PendingSubmitButton
+                        pendingLabel="Saving..."
+                        className="rounded-md border border-[#c8c8bd] px-3 py-1 text-xs font-medium text-[#2f604b] transition hover:border-[#2f604b] hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
                         Save Role
-                      </button>
+                      </PendingSubmitButton>
                     </form>
                   ) : (
                     <span className="rounded-md bg-[#e7eee7] px-3 py-1 text-xs font-medium text-[#2f604b]">
@@ -193,9 +200,12 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
                     <form action={removeWorkspaceMember}>
                       <input type="hidden" name="workspaceId" value={workspace.id} />
                       <input type="hidden" name="memberId" value={member.id} />
-                      <button className="rounded-md border border-[#c8c8bd] px-3 py-1 text-xs font-medium text-[#7a3434] transition hover:border-[#b65b5b] hover:bg-[#fff7f5]">
+                      <PendingSubmitButton
+                        pendingLabel="Removing..."
+                        className="rounded-md border border-[#c8c8bd] px-3 py-1 text-xs font-medium text-[#7a3434] transition hover:border-[#b65b5b] hover:bg-[#fff7f5] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
                         Remove
-                      </button>
+                      </PendingSubmitButton>
                     </form>
                   ) : null}
                 </div>
@@ -217,9 +227,12 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
                         className="min-h-9 min-w-0 rounded-md border border-[#d8b8b2] bg-white px-3 text-xs outline-none transition focus:border-[#8a3328]"
                       />
                     </label>
-                    <button className="min-h-9 rounded-md border border-[#b65b5b] px-3 text-xs font-medium text-[#7a3434] transition hover:bg-white">
+                    <PendingSubmitButton
+                      pendingLabel="Transferring..."
+                      className="min-h-9 rounded-md border border-[#b65b5b] px-3 text-xs font-medium text-[#7a3434] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
                       Transfer Ownership
-                    </button>
+                    </PendingSubmitButton>
                   </form>
                 ) : null}
               </div>
@@ -259,16 +272,22 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
                         <form action={resendWorkspaceInvite}>
                           <input type="hidden" name="workspaceId" value={workspace.id} />
                           <input type="hidden" name="inviteId" value={invite.id} />
-                          <button className="rounded-md border border-[#c8c8bd] px-3 py-2 text-xs font-medium text-[#2f604b] transition hover:border-[#2f604b] hover:bg-[#eef5ef]">
+                          <PendingSubmitButton
+                            pendingLabel="Sending..."
+                            className="rounded-md border border-[#c8c8bd] px-3 py-2 text-xs font-medium text-[#2f604b] transition hover:border-[#2f604b] hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
                             Resend Email
-                          </button>
+                          </PendingSubmitButton>
                         </form>
                         <form action={revokeWorkspaceInvite}>
                           <input type="hidden" name="workspaceId" value={workspace.id} />
                           <input type="hidden" name="inviteId" value={invite.id} />
-                          <button className="rounded-md border border-[#c8c8bd] px-3 py-2 text-xs font-medium text-[#7a3434] transition hover:border-[#b65b5b] hover:bg-[#fff7f5]">
+                          <PendingSubmitButton
+                            pendingLabel="Revoking..."
+                            className="rounded-md border border-[#c8c8bd] px-3 py-2 text-xs font-medium text-[#7a3434] transition hover:border-[#b65b5b] hover:bg-[#fff7f5] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
                             Revoke
-                          </button>
+                          </PendingSubmitButton>
                         </form>
                       </div>
                     </div>

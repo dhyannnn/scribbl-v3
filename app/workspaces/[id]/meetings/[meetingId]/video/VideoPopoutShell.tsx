@@ -13,9 +13,38 @@ type VideoPopoutShellProps = {
   lifecycleLabel: string;
   hubHref: string;
   disabled: boolean;
+  recording: MeetingVideoRecordingProps;
+  recordingStatusMessage: string | null;
+};
+
+export type MeetingVideoRecording = {
+  id: string;
+  status: string;
+  startedAt: Date;
+  stoppedAt: Date | null;
+  completedAt: Date | null;
+  errorMessage: string | null;
+  startedBy: {
+    displayName: string;
+  };
+  stoppedBy: {
+    displayName: string;
+  } | null;
+  file: {
+    id: string;
+    name: string;
+    sizeBytes: number | null;
+  } | null;
+};
+
+export type MeetingVideoRecordingProps = {
+  activeRecording?: MeetingVideoRecording;
+  canManage: boolean;
+  latestRecording?: MeetingVideoRecording;
 };
 
 type VideoChannelMessage =
+  | { type: "hub-ready" }
   | { type: "popout-ready" }
   | { type: "popout-closed" }
   | { type: "bring-back" }
@@ -29,6 +58,8 @@ export function VideoPopoutShell({
   lifecycleLabel,
   hubHref,
   disabled,
+  recording,
+  recordingStatusMessage,
 }: VideoPopoutShellProps) {
   const router = useRouter();
   const [isReturning, setIsReturning] = useState(false);
@@ -43,6 +74,7 @@ export function VideoPopoutShell({
       setIsReturning(true);
 
       if (openedByHub) {
+        window.opener?.focus();
         window.setTimeout(() => {
           window.close();
           activeChannel.close();
@@ -76,6 +108,10 @@ export function VideoPopoutShell({
     }
 
     channel.onmessage = (event: MessageEvent<VideoChannelMessage>) => {
+      if (event.data.type === "hub-ready" && openedByHub) {
+        channel.postMessage({ type: "popout-ready" } satisfies VideoChannelMessage);
+      }
+
       if (event.data.type === "bring-back" && openedByHub) {
         closeToHub(channel, openedByHub);
       }
@@ -153,12 +189,23 @@ export function VideoPopoutShell({
           </p>
         ) : null}
 
+        {recordingStatusMessage ? (
+          <p className="rounded-md border border-white/10 bg-white/10 px-4 py-3 text-sm text-white/80">
+            {recordingStatusMessage}
+          </p>
+        ) : null}
+
         {isReturning ? (
           <div className="flex min-h-[420px] items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-6 text-center">
             <p className="text-sm font-medium text-white/70">Returning video to the meeting hub...</p>
           </div>
         ) : (
-          <MeetingVideoRoom workspaceId={workspaceId} meetingId={meetingId} disabled={disabled} />
+          <MeetingVideoRoom
+            workspaceId={workspaceId}
+            meetingId={meetingId}
+            disabled={disabled}
+            recording={recording}
+          />
         )}
       </div>
     </main>

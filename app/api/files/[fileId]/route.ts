@@ -31,6 +31,7 @@ export async function GET(_request: NextRequest, { params }: RouteProps) {
       name: true,
       mimeType: true,
       visibility: true,
+      storageBucket: true,
       storageKey: true,
     },
   });
@@ -65,7 +66,7 @@ export async function GET(_request: NextRequest, { params }: RouteProps) {
 
   const supabase = createAdminClient();
   const { data, error } = await supabase.storage
-    .from(getStorageBucketName())
+    .from(file.storageBucket ?? getStorageBucketName())
     .createSignedUrl(file.storageKey, 60);
 
   if (error || !data?.signedUrl) {

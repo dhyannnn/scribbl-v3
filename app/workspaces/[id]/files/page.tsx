@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -127,9 +128,12 @@ export default async function FilesPage({ params, searchParams }: PageProps) {
               </select>
             </label>
             <div className="flex items-end">
-              <button className="min-h-11 w-full rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a]">
+              <PendingSubmitButton
+                pendingLabel="Uploading..."
+                className="min-h-11 w-full rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+              >
                 Upload
-              </button>
+              </PendingSubmitButton>
             </div>
           </form>
         </section>
@@ -242,9 +246,12 @@ function FileSection({
                           />
                         </label>
                         <div className="flex items-end">
-                          <button className="min-h-10 w-full rounded-md border border-[#2f604b] bg-white px-3 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] sm:w-auto">
+                          <PendingSubmitButton
+                            pendingLabel="Renaming..."
+                            className="min-h-10 w-full rounded-md border border-[#2f604b] bg-white px-3 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                          >
                             Rename
-                          </button>
+                          </PendingSubmitButton>
                         </div>
                       </form>
                     ) : null}

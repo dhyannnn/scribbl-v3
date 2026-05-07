@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AccessRouteRefresher } from "@/components/AccessRouteRefresher";
 import { LiveblocksRoom } from "@/components/LiveblocksRoom";
+import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { PresenceBar } from "@/components/PresenceBar";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { TextNoteEditor } from "@/components/TextNoteEditor";
@@ -195,9 +196,12 @@ export default async function NoteEditorPage({ params }: PageProps) {
                 </select>
               </label>
               <div className="flex items-end">
-                <button className="min-h-11 w-full rounded-md border border-[#2f604b] bg-white px-4 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] sm:w-auto">
+                <PendingSubmitButton
+                  pendingLabel="Saving..."
+                  className="min-h-11 w-full rounded-md border border-[#2f604b] bg-white px-4 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
                   Save Access
-                </button>
+                </PendingSubmitButton>
               </div>
             </form>
           </section>

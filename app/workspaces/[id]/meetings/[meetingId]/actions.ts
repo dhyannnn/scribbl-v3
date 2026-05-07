@@ -1,6 +1,7 @@
 "use server";
 
 import type { Prisma } from "@prisma/client";
+import type { EgressInfo } from "livekit-server-sdk";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/current-user";
@@ -12,6 +13,14 @@ import {
   getMeetingLifecycle,
 } from "@/lib/meeting-lifecycle";
 import { endMeetingVideoSession, startMeetingVideoSession } from "@/lib/meeting-video-session";
+import {
+  createMeetingRecordingStorageKey,
+  getRecordingStatus,
+  getRoomRecording,
+  startRoomRecording,
+  stopRoomRecording,
+} from "@/lib/meeting-recording";
+import { createLiveKitMeetingRoomName } from "@/lib/livekit-room";
 import { createDefaultNoteTitle, sanitizeNoteTitle } from "@/lib/note-title";
 import { prisma } from "@/lib/prisma";
 
@@ -22,6 +31,7 @@ const noteArtifactTypes = {
   TEXT: "NOTE",
   WHITEBOARD: "WHITEBOARD",
 } as const;
+const activeRecordingStatuses = ["STARTING", "ACTIVE", "STOPPING"] as const;
 
 export async function updateCurrentUserParticipantStatus(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
@@ -262,6 +272,401 @@ export async function markCurrentUserVideoLeft(
   clientSessionId: string,
 ) {
   await updateCurrentUserAttendance(workspaceId, meetingId, clientSessionId, "left");
+}
+
+export async function startMeetingRecording(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const meetingId = String(formData.get("meetingId") ?? "");
+
+  if (!workspaceId || !meetingId) {
+    return;
+  }
+
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    redirect(`/login?next=${encodeURIComponent(getRecordingRedirectPath(formData, workspaceId, meetingId))}`);
+  }
+
+  const [meeting, membership, activeRecording] = await Promise.all([
+    prisma.meeting.findFirst({
+      where: {
+        id: meetingId,
+        workspaceId,
+      },
+      select: {
+        id: true,
+        title: true,
+        createdByUserId: true,
+        startsAt: true,
+        endsAt: true,
+        canceledAt: true,
+        videoSessions: {
+          where: {
+            disconnectedAt: null,
+          },
+          select: {
+            id: true,
+          },
+          take: 1,
+        },
+      },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId: currentUser.id,
+        },
+      },
+      select: {
+        role: true,
+        status: true,
+      },
+    }),
+    prisma.meetingRecording.findFirst({
+      where: {
+        meetingId,
+        status: {
+          in: [...activeRecordingStatuses],
+        },
+      },
+      select: {
+        id: true,
+      },
+    }),
+  ]);
+
+  if (!meeting || membership?.status !== "ACTIVE") {
+    return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
+  }
+
+  if (!canManageMeetingRecording(meeting.createdByUserId, currentUser.id, membership.role)) {
+    return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
+  }
+
+  if (!canJoinMeeting(getMeetingLifecycle(meeting))) {
+    return finishRecordingAction(formData, workspaceId, meetingId, "not-open");
+  }
+
+  if (meeting.videoSessions.length === 0) {
+    return finishRecordingAction(formData, workspaceId, meetingId, "no-video-participants");
+  }
+
+  if (activeRecording) {
+    return finishRecordingAction(formData, workspaceId, meetingId, "already-active");
+  }
+
+  const storageKey = createMeetingRecordingStorageKey({
+    meetingId,
+    workspaceId,
+  });
+  const recording = await startRoomRecording({
+    roomName: createLiveKitMeetingRoomName(meeting.id),
+    storageKey,
+  });
+
+  if (!recording.info) {
+    return finishRecordingAction(formData, workspaceId, meetingId, "start-failed");
+  }
+
+  try {
+    await prisma.meetingRecording.create({
+      data: {
+        meetingId,
+        egressId: recording.info.egressId,
+        status: getRecordingStatus(recording.info),
+        storageBucket: recording.storageBucket,
+        storageKey,
+        startedByUserId: currentUser.id,
+        errorMessage: recording.info.error || null,
+      },
+    });
+  } catch {
+    await stopRoomRecording(recording.info.egressId);
+    return finishRecordingAction(formData, workspaceId, meetingId, "start-failed");
+  }
+
+  return finishRecordingAction(formData, workspaceId, meetingId, "started");
+}
+
+export async function stopMeetingRecording(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const meetingId = String(formData.get("meetingId") ?? "");
+  const recordingId = String(formData.get("recordingId") ?? "");
+
+  if (!workspaceId || !meetingId || !recordingId) {
+    return;
+  }
+
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    redirect(`/login?next=${encodeURIComponent(getRecordingRedirectPath(formData, workspaceId, meetingId))}`);
+  }
+
+  const [recording, membership] = await Promise.all([
+    prisma.meetingRecording.findFirst({
+      where: {
+        id: recordingId,
+        meetingId,
+        meeting: {
+          workspaceId,
+        },
+      },
+      select: {
+        id: true,
+        egressId: true,
+        status: true,
+        storageBucket: true,
+        storageKey: true,
+        fileId: true,
+        startedByUserId: true,
+        meeting: {
+          select: {
+            id: true,
+            title: true,
+            createdByUserId: true,
+          },
+        },
+      },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId: currentUser.id,
+        },
+      },
+      select: {
+        role: true,
+        status: true,
+      },
+    }),
+  ]);
+
+  if (!recording || membership?.status !== "ACTIVE") {
+    return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
+  }
+
+  if (!canManageMeetingRecording(recording.meeting.createdByUserId, currentUser.id, membership.role)) {
+    return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
+  }
+
+  if (recording.status === "COMPLETED") {
+    return finishRecordingAction(formData, workspaceId, meetingId, "already-complete");
+  }
+
+  const stoppedRecording = await stopRoomRecording(recording.egressId);
+
+  if (!stoppedRecording.info) {
+    await prisma.meetingRecording.update({
+      where: {
+        id: recording.id,
+      },
+      data: {
+        status: "FAILED",
+        stoppedByUserId: currentUser.id,
+        stoppedAt: new Date(),
+        errorMessage: stoppedRecording.error,
+      },
+    });
+    return finishRecordingAction(formData, workspaceId, meetingId, "stop-failed");
+  }
+
+  await persistRecordingEgressResult({
+    recording,
+    workspaceId,
+    info: stoppedRecording.info,
+    stoppedByUserId: currentUser.id,
+  });
+
+  return finishRecordingAction(formData, workspaceId, meetingId, "stopped");
+}
+
+export async function refreshMeetingRecordingStatus(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const meetingId = String(formData.get("meetingId") ?? "");
+  const recordingId = String(formData.get("recordingId") ?? "");
+
+  if (!workspaceId || !meetingId || !recordingId) {
+    return;
+  }
+
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    redirect(`/login?next=${encodeURIComponent(`/workspaces/${workspaceId}/meetings/${meetingId}`)}`);
+  }
+
+  const [recording, membership] = await Promise.all([
+    prisma.meetingRecording.findFirst({
+      where: {
+        id: recordingId,
+        meetingId,
+        meeting: {
+          workspaceId,
+        },
+      },
+      select: {
+        id: true,
+        egressId: true,
+        status: true,
+        storageBucket: true,
+        storageKey: true,
+        fileId: true,
+        startedByUserId: true,
+        meeting: {
+          select: {
+            id: true,
+            title: true,
+            createdByUserId: true,
+          },
+        },
+      },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId: currentUser.id,
+        },
+      },
+      select: {
+        role: true,
+        status: true,
+      },
+    }),
+  ]);
+
+  if (!recording || membership?.status !== "ACTIVE") {
+    redirect(`/workspaces/${workspaceId}/meetings/${meetingId}?recording=unauthorized`);
+  }
+
+  if (!canManageMeetingRecording(recording.meeting.createdByUserId, currentUser.id, membership.role)) {
+    redirect(`/workspaces/${workspaceId}/meetings/${meetingId}?recording=unauthorized`);
+  }
+
+  const latestRecording = await getRoomRecording(recording.egressId);
+
+  if (!latestRecording.info) {
+    await prisma.meetingRecording.update({
+      where: {
+        id: recording.id,
+      },
+      data: {
+        errorMessage: latestRecording.error,
+      },
+    });
+    redirect(`/workspaces/${workspaceId}/meetings/${meetingId}?recording=refresh-failed`);
+  }
+
+  await persistRecordingEgressResult({
+    recording,
+    workspaceId,
+    info: latestRecording.info,
+  });
+
+  revalidateMeetingPaths(workspaceId, meetingId);
+  redirect(`/workspaces/${workspaceId}/meetings/${meetingId}?recording=refreshed`);
+}
+
+export async function syncMeetingRecordingStatus({
+  meetingId,
+  recordingId,
+  workspaceId,
+}: {
+  meetingId: string;
+  recordingId: string;
+  workspaceId: string;
+}) {
+  if (!workspaceId || !meetingId || !recordingId) {
+    return { ok: false };
+  }
+
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    return { ok: false };
+  }
+
+  const [recording, membership] = await Promise.all([
+    prisma.meetingRecording.findFirst({
+      where: {
+        id: recordingId,
+        meetingId,
+        meeting: {
+          workspaceId,
+        },
+      },
+      select: {
+        id: true,
+        egressId: true,
+        status: true,
+        storageBucket: true,
+        storageKey: true,
+        fileId: true,
+        startedByUserId: true,
+        meeting: {
+          select: {
+            id: true,
+            title: true,
+            createdByUserId: true,
+          },
+        },
+      },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId: currentUser.id,
+        },
+      },
+      select: {
+        role: true,
+        status: true,
+      },
+    }),
+  ]);
+
+  if (!recording || membership?.status !== "ACTIVE") {
+    return { ok: false };
+  }
+
+  if (!canManageMeetingRecording(recording.meeting.createdByUserId, currentUser.id, membership.role)) {
+    return { ok: false };
+  }
+
+  if (recording.status === "COMPLETED" || recording.status === "FAILED") {
+    return { ok: true, status: recording.status };
+  }
+
+  const latestRecording = await getRoomRecording(recording.egressId);
+
+  if (!latestRecording.info) {
+    await prisma.meetingRecording.update({
+      where: {
+        id: recording.id,
+      },
+      data: {
+        errorMessage: latestRecording.error,
+      },
+    });
+    return { ok: false };
+  }
+
+  const status = getRecordingStatus(latestRecording.info);
+
+  await persistRecordingEgressResult({
+    recording,
+    workspaceId,
+    info: latestRecording.info,
+  });
+
+  revalidateMeetingPaths(workspaceId, meetingId);
+
+  return { ok: true, status };
 }
 
 export async function attachNoteToMeeting(formData: FormData) {
@@ -754,7 +1159,132 @@ function revalidateMeetingPaths(workspaceId: string, meetingId: string) {
   revalidatePath(`/workspaces/${workspaceId}`);
   revalidatePath(`/workspaces/${workspaceId}/meetings`);
   revalidatePath(`/workspaces/${workspaceId}/meetings/${meetingId}`);
+  revalidatePath(`/workspaces/${workspaceId}/meetings/${meetingId}/video`);
+  revalidatePath(`/workspaces/${workspaceId}/files`);
   revalidatePath("/");
+}
+
+function getRecordingRedirectPath(formData: FormData, workspaceId: string, meetingId: string, status?: string) {
+  const destination = formData.get("recordingReturnTo") === "video" ? "video" : "hub";
+  const basePath =
+    destination === "video"
+      ? `/workspaces/${workspaceId}/meetings/${meetingId}/video`
+      : `/workspaces/${workspaceId}/meetings/${meetingId}`;
+
+  return status ? `${basePath}?recording=${status}` : basePath;
+}
+
+function finishRecordingAction(formData: FormData, workspaceId: string, meetingId: string, status: string) {
+  revalidateMeetingPaths(workspaceId, meetingId);
+
+  if (formData.get("recordingReturnTo") === "current") {
+    return {
+      ok: !["unauthorized", "not-open", "no-video-participants", "start-failed", "stop-failed"].includes(status),
+      status,
+    };
+  }
+
+  redirect(getRecordingRedirectPath(formData, workspaceId, meetingId, status));
+}
+
+type PersistableRecording = {
+  id: string;
+  egressId: string;
+  storageBucket: string;
+  storageKey: string;
+  fileId: string | null;
+  startedByUserId: string;
+  meeting: {
+    id: string;
+    title: string;
+  };
+};
+
+async function persistRecordingEgressResult({
+  info,
+  recording,
+  stoppedByUserId,
+  workspaceId,
+}: {
+  info: EgressInfo;
+  recording: PersistableRecording;
+  stoppedByUserId?: string;
+  workspaceId: string;
+}) {
+  const status = getRecordingStatus(info);
+  const fileResult = info.fileResults[0];
+  const completedAt = status === "COMPLETED" ? new Date() : undefined;
+  const shouldCreateArtifact = status === "COMPLETED" && !recording.fileId;
+
+  await prisma.$transaction(async (tx) => {
+    let fileId = recording.fileId;
+
+    if (shouldCreateArtifact) {
+      const file = await tx.file.create({
+        data: {
+          workspaceId,
+          uploadedByUserId: recording.startedByUserId,
+          name: createRecordingFileName(recording.meeting.title),
+          mimeType: "video/mp4",
+          sizeBytes: fileResult ? getSafeFileSize(fileResult.size) : null,
+          visibility: "WORKSPACE_SHARED",
+          storageBucket: recording.storageBucket,
+          storageKey: recording.storageKey,
+          publicUrl: null,
+        },
+        select: {
+          id: true,
+        },
+      });
+      fileId = file.id;
+
+      await tx.meetingArtifact.create({
+        data: {
+          meetingId: recording.meeting.id,
+          type: "RECORDING",
+          source: "CREATED_IN_MEETING",
+          fileId,
+          createdByUserId: recording.startedByUserId,
+        },
+      });
+    }
+
+    await tx.meetingRecording.update({
+      where: {
+        id: recording.id,
+      },
+      data: {
+        status,
+        fileId,
+        stoppedByUserId,
+        stoppedAt: stoppedByUserId ? new Date() : undefined,
+        completedAt,
+        errorMessage: info.error || null,
+      },
+    });
+  });
+}
+
+function canManageMeetingRecording(createdByUserId: string, currentUserId: string, role: string) {
+  return createdByUserId === currentUserId || role === "OWNER" || role === "ADMIN";
+}
+
+function createRecordingFileName(meetingTitle: string) {
+  const safeTitle = meetingTitle
+    .trim()
+    .replaceAll(/[/\\]/g, "-")
+    .replaceAll(/[^a-zA-Z0-9._ -]/g, "")
+    .replaceAll(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+
+  return `${safeTitle || "Meeting"} recording ${new Date().toISOString().slice(0, 10)}.mp4`;
+}
+
+function getSafeFileSize(size: bigint) {
+  const fileSize = Number(size);
+
+  return Number.isSafeInteger(fileSize) ? fileSize : null;
 }
 
 async function updateCurrentUserAttendance(
