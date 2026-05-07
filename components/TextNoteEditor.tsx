@@ -93,13 +93,25 @@ export function TextNoteEditor({
   const [ySetup, setYSetup] = useState<{ provider: ReturnType<typeof getYjsProviderForRoom>; yDoc: ReturnType<ReturnType<typeof getYjsProviderForRoom>["getYDoc"]> } | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     try {
       const provider = getYjsProviderForRoom(room);
-      const yDoc = provider.getYDoc();
-      setYSetup({ provider, yDoc });
+
+      function onSync() {
+        if (cancelled) return;
+        const yDoc = provider.getYDoc();
+        if (yDoc) setYSetup({ provider, yDoc });
+      }
+
+      if (provider.synced) {
+        onSync();
+      } else {
+        provider.once("sync", onSync);
+      }
     } catch {
-      // room not ready yet — will retry on next room change
+      // room not ready yet
     }
+    return () => { cancelled = true; };
   }, [room]);
 
   const userName = (self.info as { name?: string; email?: string } | undefined)?.name
