@@ -31,6 +31,11 @@ import { noteTitleMaxLength } from "@/lib/note-title";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
+type YSetup = {
+  provider: ReturnType<typeof getYjsProviderForRoom>;
+  yDoc: ReturnType<ReturnType<typeof getYjsProviderForRoom>["getYDoc"]>;
+};
+
 const CURSOR_COLORS = [
   "#2f604b", "#4a6fa5", "#8b4513", "#6a0dad",
   "#c0392b", "#e67e22", "#16a085", "#8e44ad",
@@ -43,11 +48,10 @@ function cursorColor(id: string | number): string {
   return CURSOR_COLORS[Math.abs(hash) % CURSOR_COLORS.length];
 }
 
-function tiptapInitialContent(contentJson: unknown): object | string | null {
+function tiptapInitialContent(contentJson: unknown): object | null {
   const c = contentJson as Record<string, unknown> | null;
   if (c?.type === "tiptap" && c.content) return c.content as object;
   if (typeof c?.text === "string" && c.text) {
-    // Migrate old plain-text format into TipTap paragraphs
     return {
       type: "doc",
       content: c.text.split(/\r?\n/).map((line) => ({
@@ -59,16 +63,7 @@ function tiptapInitialContent(contentJson: unknown): object | string | null {
   return null;
 }
 
-export function TextNoteEditor({
-  workspaceId,
-  meetingId,
-  noteId,
-  title,
-  contentJson,
-  saveAction,
-  canEdit,
-  onExit,
-}: {
+type EditorProps = {
   workspaceId: string;
   meetingId?: string;
   noteId: string;
@@ -77,8 +72,48 @@ export function TextNoteEditor({
   saveAction: (formData: FormData) => void | Promise<void>;
   canEdit: boolean;
   onExit?: () => void;
-}) {
+};
+
+// Outer shell — waits for Yjs provider to be synced before mounting the editor.
+export function TextNoteEditor(props: EditorProps) {
   const room = useRoom();
+  const [ySetup, setYSetup] = useState<YSetup | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    try {
+      const provider = getYjsProviderForRoom(room);
+      function onSync() {
+        if (cancelled) return;
+        const yDoc = provider.getYDoc();
+        if (yDoc) setYSetup({ provider, yDoc });
+      }
+      if (provider.synced) onSync();
+      else provider.once("sync", onSync);
+    } catch {
+      // room not ready yet
+    }
+    return () => { cancelled = true; };
+  }, [room]);
+
+  if (!ySetup) {
+    return (
+      <div className="grid gap-4">
+        <TitleInput title={props.title} canEdit={false} onChange={() => {}} />
+        <div className="rounded-md border border-[#c8c8bd] bg-white" style={{ minHeight: "360px" }}>
+          <p className="p-4 text-sm text-[#9a9c92]">Connecting to live session…</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <TextNoteEditorInner {...props} ySetup={ySetup} />;
+}
+
+// Inner editor — only mounts once Yjs is confirmed ready.
+function TextNoteEditorInner({
+  workspaceId, meetingId, noteId, title, contentJson, saveAction, canEdit, onExit, ySetup,
+}: EditorProps & { ySetup: YSetup }) {
   const self = useSelf();
   const [titleValue, setTitleValue] = useState(title);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -89,31 +124,6 @@ export function TextNoteEditor({
   const hasPendingSaveRef = useRef(false);
   const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
-  // Defer Yjs setup to client-side only — provider may not be ready during SSR/first render
-  const [ySetup, setYSetup] = useState<{ provider: ReturnType<typeof getYjsProviderForRoom>; yDoc: ReturnType<ReturnType<typeof getYjsProviderForRoom>["getYDoc"]> } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    try {
-      const provider = getYjsProviderForRoom(room);
-
-      function onSync() {
-        if (cancelled) return;
-        const yDoc = provider.getYDoc();
-        if (yDoc) setYSetup({ provider, yDoc });
-      }
-
-      if (provider.synced) {
-        onSync();
-      } else {
-        provider.once("sync", onSync);
-      }
-    } catch {
-      // room not ready yet
-    }
-    return () => { cancelled = true; };
-  }, [room]);
-
   const userName = (self.info as { name?: string; email?: string } | undefined)?.name
     ?? (self.info as { name?: string; email?: string } | undefined)?.email
     ?? "Collaborator";
@@ -123,7 +133,7 @@ export function TextNoteEditor({
   const editor = useEditor({
     immediatelyRender: false,
     editable: canEdit,
-    extensions: ySetup ? [
+    extensions: [
       StarterKit,
       Collaboration.configure({ document: ySetup.yDoc, field: "tiptap-v1" }),
       CollaborationCursor.configure({ provider: ySetup.provider, user: { name: userName, color } }),
@@ -146,9 +156,8 @@ export function TextNoteEditor({
       CharacterCount,
       Subscript,
       Superscript,
-    ] : [StarterKit, Placeholder.configure({ placeholder: "Connecting…" })],
+    ],
     onCreate: ({ editor: e }) => {
-      if (!ySetup) return;
       const yFragment = ySetup.yDoc.getXmlFragment("tiptap-v1");
       function seed() {
         if (yFragment.length === 0 && initialContent) {
@@ -161,9 +170,8 @@ export function TextNoteEditor({
     onUpdate: () => {
       if (canEdit) queueAutosave();
     },
-  }, [ySetup]);
+  });
 
-  // Keep editorRef in sync for the flush-on-hide logic
   useEffect(() => {
     (editorRef as React.RefObject<typeof editor>).current = editor;
   }, [editor]);
@@ -223,21 +231,14 @@ export function TextNoteEditor({
 
   return (
     <div className="grid gap-4">
-      {/* Title */}
-      <label className="grid gap-2">
-        <span className="text-sm font-medium text-[#4d4f47]">Title</span>
-        <input
-          value={titleValue}
-          maxLength={noteTitleMaxLength}
-          readOnly={!canEdit}
-          onChange={(e) => { setTitleValue(e.target.value); queueAutosave(); }}
-          className="min-h-12 rounded-md border border-[#c8c8bd] bg-white px-4 text-lg font-semibold outline-none transition focus:border-[#2f604b]"
-        />
-      </label>
+      <TitleInput
+        title={titleValue}
+        canEdit={canEdit}
+        onChange={(v) => { setTitleValue(v); queueAutosave(); }}
+      />
 
-      {/* Editor */}
       <div className="grid gap-0">
-        {canEdit && editor && ySetup && <NoteToolbar editor={editor} />}
+        {canEdit && editor && <NoteToolbar editor={editor} />}
         <div
           className={`overflow-auto rounded-md border border-[#c8c8bd] bg-white transition focus-within:border-[#2f604b] ${canEdit ? "rounded-t-none border-t-0" : ""}`}
           style={{ minHeight: "360px" }}
@@ -246,7 +247,6 @@ export function TextNoteEditor({
         </div>
       </div>
 
-      {/* Status bar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-[#777970]">{getStatusText(isPending ? "saving" : saveState)}</p>
         <div className="flex gap-2">
@@ -278,6 +278,23 @@ export function TextNoteEditor({
         </p>
       )}
     </div>
+  );
+}
+
+function TitleInput({
+  title, canEdit, onChange,
+}: { title: string; canEdit: boolean; onChange: (v: string) => void }) {
+  return (
+    <label className="grid gap-2">
+      <span className="text-sm font-medium text-[#4d4f47]">Title</span>
+      <input
+        value={title}
+        maxLength={noteTitleMaxLength}
+        readOnly={!canEdit}
+        onChange={(e) => onChange(e.target.value)}
+        className="min-h-12 rounded-md border border-[#c8c8bd] bg-white px-4 text-lg font-semibold outline-none transition focus:border-[#2f604b]"
+      />
+    </label>
   );
 }
 
