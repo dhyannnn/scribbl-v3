@@ -99,6 +99,7 @@ export function TextNoteEditor({
   const initialContent = tiptapInitialContent(contentJson);
 
   const editor = useEditor({
+    immediatelyRender: false,
     editable: canEdit,
     extensions: [
       StarterKit,
