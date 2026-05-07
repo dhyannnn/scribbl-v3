@@ -20,10 +20,6 @@ type PageProps = {
   }>;
 };
 
-type TextContent = {
-  text?: string;
-};
-
 type Stroke = {
   points: {
     x: number;
@@ -109,8 +105,6 @@ export default async function NoteEditorPage({ params }: PageProps) {
     );
   }
 
-  const content = note.contentJson as TextContent | null;
-  const text = typeof content?.text === "string" ? content.text : "";
   const isTextNote = note.type === "TEXT";
   const isLockedByMeeting = note.artifacts.some(
     (artifact) =>
@@ -225,10 +219,9 @@ export default async function NoteEditorPage({ params }: PageProps) {
               workspaceId={id}
               noteId={note.id}
               title={note.title}
-              text={text}
+              contentJson={note.contentJson}
               saveAction={saveTextNote}
               canEdit={canEdit}
-              controlsClassName="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
             />
           ) : (
             <section className="rounded-md border border-[#d8d8ce] bg-white p-6 shadow-sm">

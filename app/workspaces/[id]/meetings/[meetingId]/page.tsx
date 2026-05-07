@@ -48,10 +48,6 @@ type PageProps = {
   }>;
 };
 
-type TextContent = {
-  text?: string;
-};
-
 type Stroke = {
   points: {
     x: number;
@@ -385,8 +381,6 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
   const selectedPrivateContentJson = selectedPrivateArtifact?.noteId
     ? selectedNoteContentById.get(selectedPrivateArtifact.noteId)
     : undefined;
-  const selectedSharedText = getTextContent(selectedSharedContentJson);
-  const selectedPrivateText = getTextContent(selectedPrivateContentJson);
   const [attachableNotes, attachableFiles] = attachableArtifacts;
   const unattachedNotes = attachableNotes.filter((note) => !attachedNoteIds.has(note.id));
   const unattachedFiles = attachableFiles.filter((file) => !attachedFileIds.has(file.id));
@@ -749,7 +743,6 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 meetingId={meeting.id}
                 artifact={selectedSharedArtifact}
                 contentJson={selectedSharedContentJson}
-                text={selectedSharedText}
                 currentUserId={currentUser.id}
                 emptyText="Create a shared note or board for everyone in the meeting."
                 disabled={isLockedMeetingNoteArtifact(selectedSharedArtifact, lifecycle)}
@@ -782,7 +775,6 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 meetingId={meeting.id}
                 artifact={selectedPrivateArtifact}
                 contentJson={selectedPrivateContentJson}
-                text={selectedPrivateText}
                 currentUserId={currentUser.id}
                 emptyText="Create private notes while the lesson is happening. They will not appear in shared artifacts."
                 disabled={isLockedMeetingNoteArtifact(selectedPrivateArtifact, lifecycle)}
@@ -1124,7 +1116,6 @@ function MeetingNoteEditor({
   meetingId,
   artifact,
   contentJson,
-  text,
   currentUserId,
   emptyText,
   disabled,
@@ -1133,7 +1124,6 @@ function MeetingNoteEditor({
   meetingId: string;
   artifact: ArtifactWithNote | undefined;
   contentJson: unknown;
-  text: string;
   currentUserId?: string;
   emptyText: string;
   disabled: boolean;
@@ -1189,26 +1179,14 @@ function MeetingNoteEditor({
         meetingId={meetingId}
         noteId={artifact.note.id}
         title={artifact.note.title}
-        text={text}
+        contentJson={contentJson}
         saveAction={saveMeetingNote}
         canEdit={canEdit}
-        rows={9}
-        bodyLabel="Notes"
-        placeholder="Capture decisions, examples, questions, and follow-ups..."
-        formClassName="mt-5 grid gap-3"
-        titleInputClassName="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm font-semibold outline-none transition focus:border-[#2f604b] focus:bg-white"
-        textAreaClassName="min-h-[220px] resize-y rounded-md border border-[#c8c8bd] bg-[#fbfbf8] p-4 text-sm leading-6 outline-none transition focus:border-[#2f604b] focus:bg-white"
-        controlsClassName="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-        readOnlyMessage="View-only here. Only the owner or collaborative editors can change this note."
       />
     </LiveblocksRoom>
   );
 }
 
-function getTextContent(contentJson: unknown) {
-  const content = contentJson as TextContent | null;
-  return typeof content?.text === "string" ? content.text : "";
-}
 
 function getWhiteboardStrokes(contentJson: unknown) {
   const content = contentJson as { strokes?: unknown } | null;

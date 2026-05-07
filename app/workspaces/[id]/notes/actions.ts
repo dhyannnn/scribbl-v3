@@ -76,7 +76,9 @@ export async function createTextNote(formData: FormData) {
       sourceDevice: "WEB",
       storageType: "JSON",
       contentJson: {
-        text: "",
+        type: "tiptap",
+        content: { type: "doc", content: [] },
+        html: "",
       },
     },
   });
@@ -166,7 +168,7 @@ export async function saveTextNote(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
   const noteId = String(formData.get("noteId") ?? "");
   const title = sanitizeNoteTitle(formData.get("title"), "Untitled note");
-  const text = String(formData.get("text") ?? "");
+  const contentJsonRaw = String(formData.get("contentJson") ?? "");
 
   if (!workspaceId || !noteId) {
     return;
@@ -237,15 +239,25 @@ export async function saveTextNote(formData: FormData) {
     return;
   }
 
+  let parsedContent: Prisma.InputJsonValue = { type: "tiptap", content: { type: "doc", content: [] }, html: "" };
+  if (contentJsonRaw) {
+    try {
+      const parsed = JSON.parse(contentJsonRaw) as unknown;
+      if (parsed && typeof parsed === "object") {
+        parsedContent = parsed as Prisma.InputJsonValue;
+      }
+    } catch {
+      // keep default empty doc
+    }
+  }
+
   await prisma.note.update({
     where: {
       id: note.id,
     },
     data: {
       title,
-      contentJson: {
-        text,
-      },
+      contentJson: parsedContent,
     },
   });
 

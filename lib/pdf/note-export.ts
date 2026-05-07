@@ -2,6 +2,8 @@ import "server-only";
 
 type TextContent = {
   text?: string;
+  type?: string;
+  html?: string;
 };
 
 type Stroke = {
@@ -54,7 +56,13 @@ export function createPdfFileName(title: string) {
 
 function createTextPages(note: ExportNoteInput) {
   const content = note.contentJson as TextContent | null;
-  const text = typeof content?.text === "string" && content.text.trim() ? content.text : "No note body yet.";
+  const rawText =
+    content?.type === "tiptap" && typeof content.html === "string"
+      ? htmlToPlainText(content.html)
+      : typeof content?.text === "string"
+        ? content.text
+        : "";
+  const text = rawText.trim() || "No note body yet.";
   const lines = [
     note.title,
     `${note.workspaceName} / ${note.ownerName} / updated ${formatDate(note.updatedAt)}`,
@@ -286,6 +294,26 @@ function isStroke(value: unknown): value is Stroke {
         typeof (point as { y?: unknown }).y === "number",
     )
   );
+}
+
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<h[1-6][^>]*>/gi, "\n")
+    .replace(/<\/h[1-6]>/gi, "\n")
+    .replace(/<p[^>]*>/gi, "")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function escapePdfText(value: string) {
