@@ -47,8 +47,20 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
             },
           ],
         },
-        include: {
-          owner: true,
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          visibility: true,
+          collaboration: true,
+          exportAccess: true,
+          ownerUserId: true,
+          updatedAt: true,
+          owner: {
+            select: {
+              displayName: true,
+            },
+          },
           artifacts: {
             select: {
               id: true,

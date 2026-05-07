@@ -88,7 +88,9 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
     },
     include: {
       workspace: {
-        include: {
+        select: {
+          id: true,
+          name: true,
           members: {
             where: {
               status: "ACTIVE",
@@ -100,15 +102,29 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           },
         },
       },
-      createdBy: true,
+      createdBy: {
+        select: {
+          displayName: true,
+        },
+      },
       participants: {
         where: {
           user: {
             deletedAt: null,
           },
         },
-        include: {
-          user: true,
+        select: {
+          id: true,
+          userId: true,
+          status: true,
+          joinedAt: true,
+          leftAt: true,
+          user: {
+            select: {
+              displayName: true,
+              email: true,
+            },
+          },
         },
         orderBy: {
           createdAt: "asc",
@@ -141,38 +157,99 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               : []),
           ],
         },
-        include: {
+        select: {
+          id: true,
+          type: true,
+          source: true,
+          noteId: true,
+          fileId: true,
           note: {
-            include: {
-              owner: true,
+            select: {
+              id: true,
+              title: true,
+              type: true,
+              visibility: true,
+              ownerUserId: true,
+              collaboration: true,
+              updatedAt: true,
+              deletedAt: true,
+              owner: {
+                select: {
+                  displayName: true,
+                },
+              },
             },
           },
           file: {
-            include: {
-              uploadedBy: true,
+            select: {
+              id: true,
+              name: true,
+              visibility: true,
+              uploadedBy: {
+                select: {
+                  displayName: true,
+                },
+              },
             },
           },
-          createdBy: true,
+          createdBy: {
+            select: {
+              displayName: true,
+            },
+          },
         },
         orderBy: {
           createdAt: "desc",
         },
       },
       recordings: {
-        include: {
-          startedBy: true,
-          stoppedBy: true,
-          file: true,
+        select: {
+          id: true,
+          status: true,
+          startedAt: true,
+          stoppedAt: true,
+          completedAt: true,
+          errorMessage: true,
+          startedBy: {
+            select: {
+              displayName: true,
+            },
+          },
+          stoppedBy: {
+            select: {
+              displayName: true,
+            },
+          },
+          file: {
+            select: {
+              id: true,
+              name: true,
+              sizeBytes: true,
+            },
+          },
         },
         orderBy: {
           createdAt: "desc",
         },
       },
       channel: {
-        include: {
+        select: {
+          id: true,
+          name: true,
           messages: {
-            include: {
-              sender: true,
+            select: {
+              id: true,
+              channelId: true,
+              senderUserId: true,
+              body: true,
+              createdAt: true,
+              editedAt: true,
+              deletedAt: true,
+              sender: {
+                select: {
+                  displayName: true,
+                },
+              },
             },
             orderBy: {
               createdAt: "desc",
@@ -197,31 +274,6 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
     );
   }
 
-  const [attachableNotes, attachableFiles] = await Promise.all([
-    prisma.note.findMany({
-      where: {
-        workspaceId: id,
-        deletedAt: null,
-        visibility: "WORKSPACE_SHARED",
-      },
-      include: {
-        owner: true,
-      },
-      orderBy: {
-        updatedAt: "desc",
-      },
-    }),
-    prisma.file.findMany({
-      where: {
-        workspaceId: id,
-        visibility: "WORKSPACE_SHARED",
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    }),
-  ]);
-
   const sharedArtifacts = meeting.artifacts.filter(
     (artifact) =>
       (artifact.note?.visibility === "WORKSPACE_SHARED" && !artifact.note.deletedAt) ||
@@ -244,16 +296,11 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
   const attachedFileIds = new Set(
     sharedArtifacts.map((artifact) => artifact.fileId).filter((fileId): fileId is string => Boolean(fileId)),
   );
-  const unattachedNotes = attachableNotes.filter((note) => !attachedNoteIds.has(note.id));
-  const unattachedFiles = attachableFiles.filter((file) => !attachedFileIds.has(file.id));
-  const hasAttachableArtifacts = unattachedNotes.length > 0 || unattachedFiles.length > 0;
 
   const selectedSharedArtifact =
     sharedNoteArtifacts.find((artifact) => artifact.noteId === sharedNoteId) ?? sharedNoteArtifacts[0];
   const selectedPrivateArtifact =
     privateNoteArtifacts.find((artifact) => artifact.noteId === privateNoteId) ?? privateNoteArtifacts[0];
-  const selectedSharedText = getTextContent(selectedSharedArtifact?.note?.contentJson);
-  const selectedPrivateText = getTextContent(selectedPrivateArtifact?.note?.contentJson);
   const currentParticipant = meeting.participants.find(
     (participant) => participant.userId === currentUser.id,
   );
@@ -272,6 +319,78 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
   const canEditNotes = canEditMeetingNotes(lifecycle);
   const canManageSchedule = canManageMeeting && canManageMeetingSchedule(lifecycle);
   const canUpdateRsvp = Boolean(currentParticipant) && canChangeMeetingRsvp(lifecycle);
+  const selectedNoteIds = [
+    selectedSharedArtifact?.noteId,
+    selectedPrivateArtifact?.noteId,
+  ].filter((noteId): noteId is string => Boolean(noteId));
+  const [selectedNoteContents, attachableArtifacts] = await Promise.all([
+    selectedNoteIds.length > 0
+      ? prisma.note.findMany({
+          where: {
+            id: {
+              in: selectedNoteIds,
+            },
+          },
+          select: {
+            id: true,
+            contentJson: true,
+          },
+        })
+      : [],
+    canMutateArtifacts
+      ? Promise.all([
+          prisma.note.findMany({
+            where: {
+              workspaceId: id,
+              deletedAt: null,
+              visibility: "WORKSPACE_SHARED",
+            },
+            select: {
+              id: true,
+              title: true,
+              type: true,
+              updatedAt: true,
+              owner: {
+                select: {
+                  displayName: true,
+                },
+              },
+            },
+            orderBy: {
+              updatedAt: "desc",
+            },
+          }),
+          prisma.file.findMany({
+            where: {
+              workspaceId: id,
+              visibility: "WORKSPACE_SHARED",
+            },
+            select: {
+              id: true,
+              name: true,
+            },
+            orderBy: {
+              createdAt: "desc",
+            },
+          }),
+        ])
+      : [[], []],
+  ]);
+  const selectedNoteContentById = new Map(
+    selectedNoteContents.map((note) => [note.id, note.contentJson]),
+  );
+  const selectedSharedContentJson = selectedSharedArtifact?.noteId
+    ? selectedNoteContentById.get(selectedSharedArtifact.noteId)
+    : undefined;
+  const selectedPrivateContentJson = selectedPrivateArtifact?.noteId
+    ? selectedNoteContentById.get(selectedPrivateArtifact.noteId)
+    : undefined;
+  const selectedSharedText = getTextContent(selectedSharedContentJson);
+  const selectedPrivateText = getTextContent(selectedPrivateContentJson);
+  const [attachableNotes, attachableFiles] = attachableArtifacts;
+  const unattachedNotes = attachableNotes.filter((note) => !attachedNoteIds.has(note.id));
+  const unattachedFiles = attachableFiles.filter((file) => !attachedFileIds.has(file.id));
+  const hasAttachableArtifacts = unattachedNotes.length > 0 || unattachedFiles.length > 0;
   const activeRecording = meeting.recordings.find((recording) =>
     ["STARTING", "ACTIVE", "STOPPING"].includes(recording.status),
   );
@@ -629,6 +748,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 workspaceId={id}
                 meetingId={meeting.id}
                 artifact={selectedSharedArtifact}
+                contentJson={selectedSharedContentJson}
                 text={selectedSharedText}
                 currentUserId={currentUser.id}
                 emptyText="Create a shared note or board for everyone in the meeting."
@@ -661,6 +781,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 workspaceId={id}
                 meetingId={meeting.id}
                 artifact={selectedPrivateArtifact}
+                contentJson={selectedPrivateContentJson}
                 text={selectedPrivateText}
                 currentUserId={currentUser.id}
                 emptyText="Create private notes while the lesson is happening. They will not appear in shared artifacts."
@@ -683,16 +804,16 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           </div>
 
           {hasAttachableArtifacts && canMutateArtifacts ? (
-            <div data-split-stack className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div data-split-stack className="mt-5 grid min-w-0 gap-4 lg:grid-cols-2">
               {unattachedNotes.length > 0 ? (
-                <form action={attachNoteToMeeting} className="grid gap-3 rounded-md bg-[#fbfbf8] p-4">
+                <form action={attachNoteToMeeting} className="grid min-w-0 gap-3 rounded-md bg-[#fbfbf8] p-4">
                   <input type="hidden" name="workspaceId" value={id} />
                   <input type="hidden" name="meetingId" value={meeting.id} />
-                  <label className="grid gap-2">
+                  <label className="grid min-w-0 gap-2">
                     <span className="text-sm font-medium text-[#4d4f47]">Attach shared note or whiteboard</span>
                     <select
                       name="noteId"
-                      className="min-h-11 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
+                      className="min-h-11 min-w-0 max-w-full rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
                     >
                       {unattachedNotes.map((note) => (
                         <option key={note.id} value={note.id}>
@@ -704,7 +825,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                   </label>
                   <PendingSubmitButton
                     pendingLabel="Attaching..."
-                    className="min-h-11 rounded-md bg-[#2f604b] px-4 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+                    className="min-h-11 w-full rounded-md bg-[#2f604b] px-4 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
                   >
                     Attach Note
                   </PendingSubmitButton>
@@ -712,14 +833,14 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               ) : null}
 
               {unattachedFiles.length > 0 ? (
-                <form action={attachFileToMeeting} className="grid gap-3 rounded-md bg-[#fbfbf8] p-4">
+                <form action={attachFileToMeeting} className="grid min-w-0 gap-3 rounded-md bg-[#fbfbf8] p-4">
                   <input type="hidden" name="workspaceId" value={id} />
                   <input type="hidden" name="meetingId" value={meeting.id} />
-                  <label className="grid gap-2">
+                  <label className="grid min-w-0 gap-2">
                     <span className="text-sm font-medium text-[#4d4f47]">Attach shared file</span>
                     <select
                       name="fileId"
-                      className="min-h-11 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
+                      className="min-h-11 min-w-0 max-w-full rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
                     >
                       {unattachedFiles.map((file) => (
                         <option key={file.id} value={file.id}>
@@ -730,7 +851,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                   </label>
                   <PendingSubmitButton
                     pendingLabel="Attaching..."
-                    className="min-h-11 rounded-md bg-[#2f604b] px-4 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+                    className="min-h-11 w-full rounded-md bg-[#2f604b] px-4 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
                   >
                     Attach File
                   </PendingSubmitButton>
@@ -810,7 +931,6 @@ type ArtifactWithNote = {
     owner?: {
       displayName: string;
     };
-    contentJson: unknown;
   } | null;
 };
 
@@ -1003,6 +1123,7 @@ function MeetingNoteEditor({
   workspaceId,
   meetingId,
   artifact,
+  contentJson,
   text,
   currentUserId,
   emptyText,
@@ -1011,6 +1132,7 @@ function MeetingNoteEditor({
   workspaceId: string;
   meetingId: string;
   artifact: ArtifactWithNote | undefined;
+  contentJson: unknown;
   text: string;
   currentUserId?: string;
   emptyText: string;
@@ -1031,8 +1153,8 @@ function MeetingNoteEditor({
   const liveblocksRoomId = createNoteRoomId(workspaceId, artifact.note.id);
 
   if (artifact.note.type === "WHITEBOARD") {
-    const whiteboardPages = getWhiteboardPages(artifact.note.contentJson);
-    const activeWhiteboardPageId = getActiveWhiteboardPageId(artifact.note.contentJson, whiteboardPages);
+    const whiteboardPages = getWhiteboardPages(contentJson);
+    const activeWhiteboardPageId = getActiveWhiteboardPageId(contentJson, whiteboardPages);
 
     return (
       <LiveblocksRoom

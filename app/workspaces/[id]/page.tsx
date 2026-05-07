@@ -36,25 +36,51 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
       id,
     },
     include: {
+      _count: {
+        select: {
+          members: {
+            where: {
+              status: "ACTIVE",
+            },
+          },
+          notes: {
+            where: {
+              deletedAt: null,
+              visibility: "WORKSPACE_SHARED",
+            },
+          },
+          meetings: true,
+        },
+      },
       members: {
         where: {
           status: "ACTIVE",
         },
-        include: {
-          user: true,
+        select: {
+          id: true,
+          userId: true,
+          role: true,
         },
         orderBy: {
           createdAt: "asc",
         },
       },
       channels: {
-        include: {
+        select: {
+          name: true,
           messages: {
             where: {
               deletedAt: null,
             },
-            include: {
-              sender: true,
+            select: {
+              id: true,
+              body: true,
+              createdAt: true,
+              sender: {
+                select: {
+                  displayName: true,
+                },
+              },
             },
             orderBy: {
               createdAt: "desc",
@@ -71,20 +97,33 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
           deletedAt: null,
           visibility: "WORKSPACE_SHARED",
         },
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          updatedAt: true,
+        },
         orderBy: {
           updatedAt: "desc",
         },
+        take: 4,
       },
       meetings: {
-        include: {
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          startsAt: true,
+          endsAt: true,
+          canceledAt: true,
           participants: {
             where: {
               user: {
                 deletedAt: null,
               },
             },
-            include: {
-              user: true,
+            select: {
+              id: true,
             },
           },
           artifacts: {
@@ -102,26 +141,36 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
                 },
               ],
             },
-            include: {
-              note: true,
-              file: true,
+            select: {
+              id: true,
             },
           },
         },
         orderBy: {
           startsAt: "asc",
         },
+        take: 5,
       },
       files: {
         where: {
           visibility: "WORKSPACE_SHARED",
         },
-        include: {
-          uploadedBy: true,
+        select: {
+          id: true,
+          name: true,
+          mimeType: true,
+          sizeBytes: true,
+          createdAt: true,
+          uploadedBy: {
+            select: {
+              displayName: true,
+            },
+          },
         },
         orderBy: {
           createdAt: "desc",
         },
+        take: 4,
       },
     },
   });
@@ -174,11 +223,11 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
             <div className="grid grid-cols-3 gap-3 sm:min-w-[360px]">
               <MiniMetric
                 label="Members"
-                value={workspace.members.length}
+                value={workspace._count.members}
                 href={`/workspaces/${workspace.id}/members`}
               />
-              <MiniMetric label="Notes" value={workspace.notes.length} />
-              <MiniMetric label="Meetings" value={workspace.meetings.length} />
+              <MiniMetric label="Notes" value={workspace._count.notes} />
+              <MiniMetric label="Meetings" value={workspace._count.meetings} />
             </div>
           </div>
         </header>

@@ -56,6 +56,7 @@ type VideoChannelMessage =
 
 const minPanelWidth = 360;
 const minPanelHeight = 280;
+const minimizedPanelWidth = 260;
 const snapDistance = 48;
 const splitWidth = "clamp(420px, 49vw, 780px)";
 
@@ -388,14 +389,18 @@ export function FloatingMeetingVideo({
     );
   }
 
+  const renderedPanel = isMinimized
+    ? clampPanel(panel, { width: getMinimizedPanelWidth(), height: 92 })
+    : panel;
+
   return (
     <aside
       ref={panelRef}
       className="fixed z-50 overflow-hidden rounded-md border border-[#2f604b]/40 bg-[#171713] text-white shadow-2xl"
       style={{
-        left: panel.left,
-        top: panel.top,
-        width: isMinimized ? 260 : panel.width,
+        left: renderedPanel.left,
+        top: renderedPanel.top,
+        width: isMinimized ? `min(${minimizedPanelWidth}px, calc(100vw - 24px))` : renderedPanel.width,
         height: isMinimized ? "auto" : panel.height,
         touchAction: "none",
       }}
@@ -406,14 +411,16 @@ export function FloatingMeetingVideo({
       >
         <p className="truncate text-sm font-medium">Video</p>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={openSplitView}
-            className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
-          >
-            Split View
-          </button>
+          {!isMinimized ? (
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={openSplitView}
+              className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+            >
+              Split View
+            </button>
+          ) : null}
           <button
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
@@ -547,6 +554,14 @@ function getRenderedPanelBounds(panelElement: HTMLElement | null): PanelBounds |
   };
 }
 
+function getMinimizedPanelWidth() {
+  if (typeof window === "undefined") {
+    return minimizedPanelWidth;
+  }
+
+  return Math.min(minimizedPanelWidth, window.innerWidth - 24);
+}
+
 function clampPanel(panel: PanelState, bounds?: PanelBounds): PanelState {
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
@@ -554,8 +569,8 @@ function clampPanel(panel: PanelState, bounds?: PanelBounds): PanelState {
   const maxHeight = Math.max(minPanelHeight, viewportHeight - 24);
   const width = Math.min(Math.max(panel.width, minPanelWidth), maxWidth);
   const height = Math.min(Math.max(panel.height, minPanelHeight), maxHeight);
-  const positionWidth = bounds ? Math.min(Math.max(bounds.width, minPanelWidth), maxWidth) : width;
-  const positionHeight = bounds ? Math.min(Math.max(bounds.height, minPanelHeight), maxHeight) : height;
+  const positionWidth = bounds ? Math.min(Math.max(bounds.width, 1), maxWidth) : width;
+  const positionHeight = bounds ? Math.min(Math.max(bounds.height, 1), maxHeight) : height;
 
   return {
     width,

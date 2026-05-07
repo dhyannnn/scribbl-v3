@@ -11,6 +11,8 @@ import { signOut } from "./auth/actions";
 import { createWorkspace } from "./actions";
 import { acceptWorkspaceInvite } from "./invites/actions";
 
+const DASHBOARD_RECENT_LIMIT = 6;
+
 export default async function Home() {
   const [currentUser, authUser] = await Promise.all([getCurrentUser(), getSupabaseAuthUser()]);
   const now = new Date();
@@ -21,68 +23,23 @@ export default async function Home() {
         where: {
           id: currentUser.id,
         },
-        include: {
+        select: {
+          displayName: true,
           memberships: {
             where: {
               status: "ACTIVE",
             },
-            include: {
+            select: {
               workspace: {
-                include: {
-                  channels: {
-                    include: {
-                      messages: {
-                        where: {
-                          deletedAt: null,
-                        },
-                        include: {
-                          sender: true,
-                        },
-                        orderBy: {
-                          createdAt: "desc",
-                        },
-                        take: 3,
-                      },
+                select: {
+                  id: true,
+                  name: true,
+                  type: true,
+                  description: true,
+                  _count: {
+                    select: {
+                      channels: true,
                     },
-                  },
-                  notes: {
-                    where: {
-                      deletedAt: null,
-                      OR: [
-                        {
-                          visibility: "WORKSPACE_SHARED",
-                        },
-                        {
-                          visibility: "PRIVATE",
-                          ownerUserId: currentUser.id,
-                        },
-                      ],
-                    },
-                    orderBy: {
-                      updatedAt: "desc",
-                    },
-                    take: 3,
-                  },
-                  meetings: {
-                    where: {
-                      canceledAt: null,
-                      OR: [
-                        {
-                          startsAt: {
-                            gte: fallbackLiveStartsAt,
-                          },
-                        },
-                        {
-                          endsAt: {
-                            gte: now,
-                          },
-                        },
-                      ],
-                    },
-                    orderBy: {
-                      startsAt: "asc",
-                    },
-                    take: 8,
                   },
                 },
               },
@@ -93,8 +50,10 @@ export default async function Home() {
     : null;
 
   const workspaces = user?.memberships.map((membership) => membership.workspace) ?? [];
-  const pendingInvites = currentUser
-    ? await prisma.workspaceInvite.findMany({
+  const workspaceIds = workspaces.map((workspace) => workspace.id);
+  const [pendingInvites, recentMessageRows, recentNoteRows, upcomingMeetingRows] = currentUser
+    ? await Promise.all([
+      prisma.workspaceInvite.findMany({
         where: {
           email: currentUser.email,
           status: "PENDING",
@@ -102,43 +61,165 @@ export default async function Home() {
             gt: new Date(),
           },
         },
-        include: {
-          workspace: true,
-          invitedBy: true,
+        select: {
+          id: true,
+          token: true,
+          role: true,
+          expiresAt: true,
+          workspace: {
+            select: {
+              name: true,
+            },
+          },
+          invitedBy: {
+            select: {
+              displayName: true,
+            },
+          },
         },
         orderBy: {
           createdAt: "desc",
         },
-      })
-    : [];
-  const recentMessages = workspaces.flatMap((workspace) =>
-    workspace.channels.flatMap((channel) =>
-      channel.messages.map((message) => ({
-        ...message,
-        channelName: channel.name,
-        workspaceName: workspace.name,
-      })),
-    ),
-  );
-  const recentNotes = workspaces.flatMap((workspace) =>
-    workspace.notes.map((note) => ({
-      ...note,
-      workspaceName: workspace.name,
-    })),
-  );
-  const upcomingMeetings = workspaces.flatMap((workspace) =>
-    workspace.meetings.map((meeting) => ({
-      ...meeting,
-      workspaceName: workspace.name,
-    })),
-  )
-    .filter((meeting) => {
-      const lifecycle = getMeetingLifecycle(meeting, now);
-      return lifecycle !== "canceled" && lifecycle !== "ended";
-    })
-    .sort((first, second) => first.startsAt.getTime() - second.startsAt.getTime())
-    .slice(0, 3);
-
+      }),
+      workspaceIds.length > 0
+        ? prisma.message.findMany({
+            where: {
+              deletedAt: null,
+              channel: {
+                workspaceId: {
+                  in: workspaceIds,
+                },
+              },
+            },
+            select: {
+              id: true,
+              body: true,
+              sender: {
+                select: {
+                  displayName: true,
+                },
+              },
+              channel: {
+                select: {
+                  id: true,
+                  name: true,
+                  workspaceId: true,
+                  workspace: {
+                    select: {
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+            orderBy: {
+              createdAt: "desc",
+            },
+            take: DASHBOARD_RECENT_LIMIT,
+          })
+        : [],
+      workspaceIds.length > 0
+        ? prisma.note.findMany({
+            where: {
+              workspaceId: {
+                in: workspaceIds,
+              },
+              deletedAt: null,
+              OR: [
+                {
+                  visibility: "WORKSPACE_SHARED",
+                },
+                {
+                  visibility: "PRIVATE",
+                  ownerUserId: currentUser.id,
+                },
+              ],
+            },
+            select: {
+              id: true,
+              workspaceId: true,
+              title: true,
+              type: true,
+              updatedAt: true,
+              workspace: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+            orderBy: {
+              updatedAt: "desc",
+            },
+            take: DASHBOARD_RECENT_LIMIT,
+          })
+        : [],
+      workspaceIds.length > 0
+        ? prisma.meeting.findMany({
+            where: {
+              workspaceId: {
+                in: workspaceIds,
+              },
+              canceledAt: null,
+              OR: [
+                {
+                  startsAt: {
+                    gte: fallbackLiveStartsAt,
+                  },
+                },
+                {
+                  endsAt: {
+                    gte: now,
+                  },
+                },
+              ],
+            },
+            select: {
+              id: true,
+              workspaceId: true,
+              title: true,
+              startsAt: true,
+              endsAt: true,
+              canceledAt: true,
+              workspace: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+            orderBy: {
+              startsAt: "asc",
+            },
+            take: 3,
+          })
+        : [],
+    ])
+    : [[], [], [], []];
+  const recentMessages = recentMessageRows.map((message) => ({
+    id: message.id,
+    body: message.body,
+    sender: message.sender,
+    channelId: message.channel.id,
+    channelName: message.channel.name,
+    workspaceId: message.channel.workspaceId,
+    workspaceName: message.channel.workspace.name,
+  }));
+  const recentNotes = recentNoteRows.map((note) => ({
+    id: note.id,
+    workspaceId: note.workspaceId,
+    title: note.title,
+    type: note.type,
+    updatedAt: note.updatedAt,
+    workspaceName: note.workspace?.name ?? "Workspace",
+  }));
+  const upcomingMeetings = upcomingMeetingRows.map((meeting) => ({
+    id: meeting.id,
+    workspaceId: meeting.workspaceId,
+    title: meeting.title,
+    startsAt: meeting.startsAt,
+    endsAt: meeting.endsAt,
+    canceledAt: meeting.canceledAt,
+    workspaceName: meeting.workspace?.name ?? "Workspace",
+  }));
   return (
     <main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-6 sm:px-8 lg:px-10">
@@ -188,8 +269,8 @@ export default async function Home() {
 
         <section className="grid gap-4 md:grid-cols-3">
           <SummaryTile label="Workspaces" value={workspaces.length} />
-          <SummaryTile label="Recent Notes" value={recentNotes.length} />
-          <SummaryTile label="Upcoming Meetings" value={upcomingMeetings.length} />
+          <SummaryTile label="Recent Notes Shown" value={recentNotes.length} />
+          <SummaryTile label="Upcoming Shown" value={upcomingMeetings.length} />
         </section>
 
         {pendingInvites.length > 0 ? (
@@ -287,84 +368,108 @@ export default async function Home() {
               </div>
             )}
             <div className="mt-5 grid gap-4">
-              {workspaces.map((workspace) => (
-                <Link
-                  key={workspace.id}
-                  href={`/workspaces/${workspace.id}`}
-                  className="rounded-md border border-[#e2e2d8] bg-[#fbfbf8] p-4 transition hover:border-[#9ab09e] hover:bg-white"
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#6d7f70]">
-                        {workspace.type.replace("_", " ").toLowerCase()}
-                      </p>
-                      <h3 className="mt-1 text-lg font-semibold">{workspace.name}</h3>
-                      <p className="mt-2 text-sm leading-6 text-[#66685f]">
-                        {workspace.description}
-                      </p>
+              {workspaces.length > 0 ? (
+                workspaces.map((workspace) => (
+                  <Link
+                    key={workspace.id}
+                    href={`/workspaces/${workspace.id}`}
+                    className="rounded-md border border-[#e2e2d8] bg-[#fbfbf8] p-4 transition hover:border-[#9ab09e] hover:bg-white"
+                  >
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#6d7f70]">
+                          {workspace.type.replace("_", " ").toLowerCase()}
+                        </p>
+                        <h3 className="mt-1 text-lg font-semibold">{workspace.name}</h3>
+                        <p className="mt-2 text-sm leading-6 text-[#66685f]">
+                          {workspace.description || "No description yet."}
+                        </p>
+                      </div>
+                      <span className="rounded-md bg-[#e7eee7] px-3 py-1 text-sm font-medium text-[#2f604b]">
+                        {workspace._count.channels} channel{workspace._count.channels === 1 ? "" : "s"}
+                      </span>
                     </div>
-                    <span className="rounded-md bg-[#e7eee7] px-3 py-1 text-sm font-medium text-[#2f604b]">
-                      {workspace.channels.length} channel
-                    </span>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                ))
+              ) : (
+                <EmptyState text="Create or accept a workspace invite to start using Scribbl." />
+              )}
             </div>
           </div>
 
           <div className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
             <h2 className="text-xl font-semibold">Upcoming</h2>
             <div className="mt-5 grid gap-4">
-              {upcomingMeetings.map((meeting) => (
-                <Link
-                  key={meeting.id}
-                  href={`/workspaces/${meeting.workspaceId}/meetings/${meeting.id}`}
-                  className="block border-b border-[#e6e6dc] pb-4 transition hover:text-[#2f604b] last:border-0"
-                >
-                  <p className="text-sm font-medium text-[#2f604b]">{meeting.workspaceName}</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <h3 className="font-semibold">{meeting.title}</h3>
-                    <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${getMeetingBadgeClassName(getMeetingLifecycle(meeting, now))}`}>
-                      {formatMeetingLifecycleLabel(getMeetingLifecycle(meeting, now))}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-[#66685f]">
-                    {meeting.startsAt.toLocaleString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                </Link>
-              ))}
+              {upcomingMeetings.length > 0 ? (
+                upcomingMeetings.map((meeting) => (
+                  <Link
+                    key={meeting.id}
+                    href={`/workspaces/${meeting.workspaceId}/meetings/${meeting.id}`}
+                    className="block border-b border-[#e6e6dc] pb-4 transition hover:text-[#2f604b] last:border-0"
+                  >
+                    <p className="text-sm font-medium text-[#2f604b]">{meeting.workspaceName}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold">{meeting.title}</h3>
+                      <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${getMeetingBadgeClassName(getMeetingLifecycle(meeting, now))}`}>
+                        {formatMeetingLifecycleLabel(getMeetingLifecycle(meeting, now))}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-[#66685f]">
+                      {meeting.startsAt.toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </Link>
+                ))
+              ) : (
+                <EmptyState text="Upcoming sessions will appear here once they are scheduled." />
+              )}
             </div>
           </div>
         </section>
 
         <section className="grid gap-6 lg:grid-cols-2">
           <Panel title="Recent Messages">
-            {recentMessages.map((message) => (
-              <article key={message.id} className="rounded-md bg-white p-4 shadow-sm">
-                <p className="text-sm font-medium text-[#2f604b]">
-                  {message.workspaceName} / #{message.channelName}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[#4d4f47]">{message.body}</p>
-                <p className="mt-3 text-xs text-[#777970]">From {message.sender.displayName}</p>
-              </article>
-            ))}
+            {recentMessages.length > 0 ? (
+              recentMessages.map((message) => (
+                <Link
+                  key={message.id}
+                  href={`/workspaces/${message.workspaceId}/chat?channel=${message.channelId}`}
+                  className="block rounded-md bg-white p-4 shadow-sm transition hover:bg-[#fbfbf8]"
+                >
+                  <p className="text-sm font-medium text-[#2f604b]">
+                    {message.workspaceName} / #{message.channelName}
+                  </p>
+                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#4d4f47]">{message.body}</p>
+                  <p className="mt-3 text-xs text-[#777970]">From {message.sender.displayName}</p>
+                </Link>
+              ))
+            ) : (
+              <EmptyState text="Recent workspace chat messages will appear here." />
+            )}
           </Panel>
 
           <Panel title="Recent Notes">
-            {recentNotes.map((note) => (
-              <article key={note.id} className="rounded-md bg-white p-4 shadow-sm">
-                <p className="text-sm font-medium text-[#2f604b]">{note.workspaceName}</p>
-                <h3 className="mt-2 font-semibold">{note.title}</h3>
-                <p className="mt-3 text-xs text-[#777970]">
-                  {note.type.toLowerCase()} note updated {note.updatedAt.toLocaleDateString()}
-                </p>
-              </article>
-            ))}
+            {recentNotes.length > 0 ? (
+              recentNotes.map((note) => (
+                <Link
+                  key={note.id}
+                  href={`/workspaces/${note.workspaceId}/notes/${note.id}`}
+                  className="block rounded-md bg-white p-4 shadow-sm transition hover:bg-[#fbfbf8]"
+                >
+                  <p className="text-sm font-medium text-[#2f604b]">{note.workspaceName}</p>
+                  <h3 className="mt-2 line-clamp-1 font-semibold">{note.title}</h3>
+                  <p className="mt-3 text-xs text-[#777970]">
+                    {note.type.toLowerCase()} note updated {note.updatedAt.toLocaleDateString()}
+                  </p>
+                </Link>
+              ))
+            ) : (
+              <EmptyState text="Recent notes and whiteboards will appear here." />
+            )}
           </Panel>
         </section>
       </div>
@@ -381,11 +486,19 @@ function SummaryTile({ label, value }: { label: string; value: number }) {
   );
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function Panel({ children, title }: { children: ReactNode; title: string }) {
   return (
     <div>
       <h2 className="mb-4 text-xl font-semibold">{title}</h2>
       <div className="grid gap-4">{children}</div>
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="rounded-md border border-dashed border-[#c8c8bd] bg-white p-5 text-sm text-[#66685f]">
+      {text}
     </div>
   );
 }

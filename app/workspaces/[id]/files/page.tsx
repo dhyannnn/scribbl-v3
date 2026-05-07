@@ -46,8 +46,20 @@ export default async function FilesPage({ params, searchParams }: PageProps) {
             },
           ],
         },
-        include: {
-          uploadedBy: true,
+        select: {
+          id: true,
+          name: true,
+          mimeType: true,
+          sizeBytes: true,
+          visibility: true,
+          storageKey: true,
+          uploadedByUserId: true,
+          createdAt: true,
+          uploadedBy: {
+            select: {
+              displayName: true,
+            },
+          },
           noteContentFor: {
             select: {
               id: true,

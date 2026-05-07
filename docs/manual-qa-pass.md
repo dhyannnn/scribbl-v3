@@ -448,6 +448,22 @@ Notes:
 - `npm run build` passed. A sandboxed Turbopack build hit an internal port-binding restriction, then passed when rerun outside the sandbox.
 - Dev log includes intermittent Liveblocks websocket `1006` warnings and LiveKit connection retries; not logged as app bugs yet because they may be transient/network-dependent and need browser confirmation.
 
+## Pass 10: Loading, Performance, and Dashboard Polish
+
+- [x] Added route loading skeletons for dashboard, account, workspace dashboard, meetings, meeting hub, notes, and files.
+- [x] Reduced broad Prisma payloads on dashboard, workspace dashboard, meetings list, meeting hub, notes list, and files list.
+- [x] Dashboard recent messages, recent notes, and upcoming meetings are capped as global previews instead of growing per workspace/channel.
+- [x] Dashboard recent message and note cards are compact and link to their source pages.
+- [x] Dashboard empty states added for workspaces, upcoming meetings, recent messages, and recent notes.
+- [x] Dashboard quick links added for chat, notes, and meetings when a workspace is available.
+- [x] Browser-facing benchmark showed dashboard payload shrinking from roughly 399 KB to 3.6 KB after global preview caps.
+
+Notes:
+
+- Loading skeletons may not visibly appear when a route is prefetched or loads too quickly.
+- Mobile/narrow layout polish was handled through stacked dashboard controls, compact cards, and wrapping section actions.
+- Production build still needs to run outside the sandbox because Turbopack attempts an internal port bind.
+
 ## QA Session Summary
 
 Date:

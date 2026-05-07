@@ -42,14 +42,21 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
         },
       },
       meetings: {
-        include: {
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          startsAt: true,
+          endsAt: true,
+          canceledAt: true,
+          provider: true,
           participants: {
             where: {
               user: {
                 deletedAt: null,
               },
             },
-            include: { user: true },
+            select: { id: true },
           },
           artifacts: {
             where: {
@@ -66,7 +73,7 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
                 },
               ],
             },
-            include: { note: true, file: true },
+            select: { id: true },
           },
         },
         orderBy: { startsAt: "asc" },
