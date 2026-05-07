@@ -149,7 +149,7 @@ export function TextNoteEditor({
     onUpdate: () => {
       if (canEdit) queueAutosave();
     },
-  });
+  }, [ySetup]);
 
   // Keep editorRef in sync for the flush-on-hide logic
   useEffect(() => {
@@ -225,7 +225,7 @@ export function TextNoteEditor({
 
       {/* Editor */}
       <div className="grid gap-0">
-        {canEdit && editor && <NoteToolbar editor={editor} />}
+        {canEdit && editor && ySetup && <NoteToolbar editor={editor} />}
         <div
           className={`overflow-auto rounded-md border border-[#c8c8bd] bg-white transition focus-within:border-[#2f604b] ${canEdit ? "rounded-t-none border-t-0" : ""}`}
           style={{ minHeight: "360px" }}
