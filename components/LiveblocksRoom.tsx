@@ -14,7 +14,7 @@ export function LiveblocksRoom({
   roomId: string;
 }) {
   return (
-    <RoomProvider id={roomId} initialPresence={{}} initialStorage={initialStorage}>
+    <RoomProvider key={roomId} id={roomId} initialPresence={{}} initialStorage={initialStorage}>
       <ClientSideSuspense fallback={<div className="text-xs text-[#777970]">Connecting collaborators...</div>}>
         {children}
       </ClientSideSuspense>

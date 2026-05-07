@@ -1051,11 +1051,9 @@ export async function saveMeetingWhiteboard(formData: FormData) {
   const meetingId = String(formData.get("meetingId") ?? "");
   const noteId = String(formData.get("noteId") ?? "");
   const title = sanitizeNoteTitle(formData.get("title"), "Untitled whiteboard");
-  const strokesJson = String(formData.get("strokesJson") ?? "");
-  const pagesJson = String(formData.get("pagesJson") ?? "");
-  const activePageId = String(formData.get("activePageId") ?? "");
+  const snapshotJson = String(formData.get("snapshotJson") ?? "");
 
-  if (!workspaceId || !meetingId || !noteId || !strokesJson) {
+  if (!workspaceId || !meetingId || !noteId || !snapshotJson) {
     return;
   }
 
@@ -1131,13 +1129,10 @@ export async function saveMeetingWhiteboard(formData: FormData) {
     return;
   }
 
-  const whiteboardContent = parseWhiteboardContent({
-    activePageId,
-    pagesJson,
-    strokesJson,
-  });
-
-  if (!whiteboardContent) {
+  let snapshot: unknown;
+  try {
+    snapshot = JSON.parse(snapshotJson);
+  } catch {
     return;
   }
 
@@ -1147,7 +1142,7 @@ export async function saveMeetingWhiteboard(formData: FormData) {
     },
     data: {
       title,
-      contentJson: whiteboardContent as Prisma.InputJsonValue,
+      contentJson: { type: "tldraw", snapshot } as Prisma.InputJsonValue,
     },
   });
 
@@ -1331,97 +1326,6 @@ async function updateCurrentUserAttendance(
   return {
     ok: true,
   };
-}
-
-function parseWhiteboardContent({
-  activePageId,
-  pagesJson,
-  strokesJson,
-}: {
-  activePageId: string;
-  pagesJson: string;
-  strokesJson: string;
-}) {
-  let strokes: unknown;
-
-  try {
-    strokes = JSON.parse(strokesJson);
-  } catch {
-    return null;
-  }
-
-  if (!Array.isArray(strokes)) {
-    return null;
-  }
-
-  let pages: unknown;
-
-  if (pagesJson) {
-    try {
-      pages = JSON.parse(pagesJson);
-    } catch {
-      pages = null;
-    }
-  }
-
-  if (Array.isArray(pages)) {
-    const whiteboardPages = pages.filter(isWhiteboardPage);
-
-    if (whiteboardPages.length > 0) {
-      const safeActivePageId = whiteboardPages.some((page) => page.id === activePageId)
-        ? activePageId
-        : whiteboardPages[0].id;
-      const activePage = whiteboardPages.find((page) => page.id === safeActivePageId) ?? whiteboardPages[0];
-
-      return {
-        pages: whiteboardPages,
-        activePageId: safeActivePageId,
-        strokes: activePage.strokes,
-      };
-    }
-  }
-
-  return {
-    strokes,
-  };
-}
-
-function isWhiteboardPage(value: unknown): value is {
-  id: string;
-  title: string;
-  strokes: unknown[];
-} {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const maybePage = value as { id?: unknown; title?: unknown; strokes?: unknown };
-
-  return (
-    typeof maybePage.id === "string" &&
-    typeof maybePage.title === "string" &&
-    Array.isArray(maybePage.strokes) &&
-    maybePage.strokes.every(isStroke)
-  );
-}
-
-function isStroke(value: unknown) {
-  if (!value || typeof value !== "object" || !("points" in value)) {
-    return false;
-  }
-
-  const maybeStroke = value as { points?: unknown };
-
-  return (
-    Array.isArray(maybeStroke.points) &&
-    maybeStroke.points.every(
-      (point) =>
-        point &&
-        typeof point === "object" &&
-        typeof (point as { x?: unknown }).x === "number" &&
-        typeof (point as { y?: unknown }).y === "number",
-    )
-  );
 }
 
 function canEditNote(

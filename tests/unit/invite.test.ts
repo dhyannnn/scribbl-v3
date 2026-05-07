@@ -76,7 +76,6 @@ describe("acceptWorkspaceInvite", () => {
   const inviter = makeUser();
   const invitee = makeUser();
   const workspace = makeWorkspace(inviter.id);
-  const ownerMembership = makeMembership(workspace.id, inviter.id, { role: "OWNER" });
 
   const makeFullInvite = (overrides = {}) => ({
     ...makeInvite(workspace.id, inviter.id, { email: invitee.email }),

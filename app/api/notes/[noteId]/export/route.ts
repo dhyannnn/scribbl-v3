@@ -69,7 +69,7 @@ export async function GET(_request: NextRequest, { params }: RouteProps) {
     updatedAt: note.updatedAt,
     contentJson: note.contentJson,
   });
-  const response = new NextResponse(pdfBuffer, {
+  const response = new NextResponse(new Uint8Array(pdfBuffer), {
     headers: {
       "Cache-Control": "no-store",
       "Content-Disposition": `attachment; filename="${sanitizeHeaderValue(createPdfFileName(note.title))}"`,

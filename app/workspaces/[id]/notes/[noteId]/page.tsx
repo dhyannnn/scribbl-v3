@@ -5,7 +5,7 @@ import { LiveblocksRoom } from "@/components/LiveblocksRoom";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { TextNoteEditor } from "@/components/TextNoteEditor";
-import { WhiteboardEditor } from "@/components/WhiteboardEditor";
+import { TldrawWhiteboardEditor } from "@/components/TldrawWhiteboardEditor";
 import { getCurrentUser } from "@/lib/current-user";
 import { createNoteRoomId } from "@/lib/liveblocks-room";
 import { canEditMeetingNotes, getMeetingLifecycle } from "@/lib/meeting-lifecycle";
@@ -19,18 +19,6 @@ type PageProps = {
   }>;
 };
 
-type Stroke = {
-  points: {
-    x: number;
-    y: number;
-  }[];
-};
-
-type WhiteboardPageData = {
-  id: string;
-  title: string;
-  strokes: Stroke[];
-};
 
 export default async function NoteEditorPage({ params }: PageProps) {
   const { id, noteId } = await params;
@@ -125,8 +113,7 @@ export default async function NoteEditorPage({ params }: PageProps) {
       ? note.ownerUserId === currentUser.id
       : note.exportAccess === "WORKSPACE_MEMBERS" || canManageExport;
   const liveblocksRoomId = createNoteRoomId(id, note.id);
-  const whiteboardPages = getWhiteboardPages(note.contentJson);
-  const activeWhiteboardPageId = getActiveWhiteboardPageId(note.contentJson, whiteboardPages);
+  const tldrawSnapshot = isTextNote ? null : getTldrawSnapshot(note.contentJson);
 
   return (
     <main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
@@ -148,7 +135,7 @@ export default async function NoteEditorPage({ params }: PageProps) {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {canExport ? (
+              {canExport && isTextNote ? (
                 <a
                   href={`/api/notes/${note.id}/export`}
                   className="rounded-md bg-[#2f604b] px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-[#244b3a]"
@@ -200,18 +187,7 @@ export default async function NoteEditorPage({ params }: PageProps) {
           </section>
         ) : null}
 
-        <LiveblocksRoom
-          roomId={liveblocksRoomId}
-          initialStorage={
-            isTextNote
-              ? undefined
-              : {
-                  whiteboardPages,
-                  whiteboardStrokes:
-                    whiteboardPages.find((page) => page.id === activeWhiteboardPageId)?.strokes ?? [],
-                }
-          }
-        >
+        <LiveblocksRoom roomId={liveblocksRoomId}>
           {isTextNote ? (
             <TextNoteEditor
               workspaceId={id}
@@ -223,13 +199,11 @@ export default async function NoteEditorPage({ params }: PageProps) {
             />
           ) : (
             <section className="rounded-md border border-[#d8d8ce] bg-white p-6 shadow-sm">
-              <WhiteboardEditor
+              <TldrawWhiteboardEditor
                 workspaceId={id}
                 noteId={note.id}
                 title={note.title}
-                initialStrokes={whiteboardPages.find((page) => page.id === activeWhiteboardPageId)?.strokes ?? []}
-                initialPages={whiteboardPages}
-                initialActivePageId={activeWhiteboardPageId}
+                initialSnapshot={tldrawSnapshot}
                 saveAction={saveWhiteboardNote}
                 canEdit={canEdit}
               />
@@ -255,72 +229,7 @@ function getExportAccessLabel(visibility: string, exportAccess: string) {
     : "Owner, admins, and creator";
 }
 
-function getWhiteboardStrokes(contentJson: unknown) {
-  const content = contentJson as { strokes?: unknown } | null;
-
-  if (!Array.isArray(content?.strokes)) {
-    return [];
-  }
-
-  return content.strokes.filter(isStroke);
-}
-
-function getWhiteboardPages(contentJson: unknown) {
-  const content = contentJson as { pages?: unknown } | null;
-
-  if (Array.isArray(content?.pages)) {
-    const pages = content.pages.filter(isWhiteboardPage);
-
-    if (pages.length > 0) {
-      return pages;
-    }
-  }
-
-  return [
-    {
-      id: "page-1",
-      title: "Page 1",
-      strokes: getWhiteboardStrokes(contentJson),
-    },
-  ];
-}
-
-function getActiveWhiteboardPageId(contentJson: unknown, pages: WhiteboardPageData[]) {
-  const content = contentJson as { activePageId?: unknown } | null;
-  const activePageId = typeof content?.activePageId === "string" ? content.activePageId : null;
-
-  return activePageId && pages.some((page) => page.id === activePageId) ? activePageId : pages[0]?.id ?? "page-1";
-}
-
-function isStroke(value: unknown): value is Stroke {
-  if (!value || typeof value !== "object" || !("points" in value)) {
-    return false;
-  }
-
-  const maybeStroke = value as { points?: unknown };
-  return (
-    Array.isArray(maybeStroke.points) &&
-    maybeStroke.points.every(
-      (point) =>
-        point &&
-        typeof point === "object" &&
-        typeof (point as { x?: unknown }).x === "number" &&
-        typeof (point as { y?: unknown }).y === "number",
-    )
-  );
-}
-
-function isWhiteboardPage(value: unknown): value is WhiteboardPageData {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const maybePage = value as { id?: unknown; title?: unknown; strokes?: unknown };
-
-  return (
-    typeof maybePage.id === "string" &&
-    typeof maybePage.title === "string" &&
-    Array.isArray(maybePage.strokes) &&
-    maybePage.strokes.every(isStroke)
-  );
+function getTldrawSnapshot(contentJson: unknown) {
+  const c = contentJson as { type?: string; snapshot?: unknown } | null;
+  return c?.type === "tldraw" ? c.snapshot : null;
 }
