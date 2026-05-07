@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { getYjsProviderForRoom } from "@liveblocks/yjs";
-import { useSelf, useRoom } from "@liveblocks/react/suspense";
+import { useRoom } from "@liveblocks/react/suspense";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Collaboration from "@tiptap/extension-collaboration";
-import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
@@ -36,17 +35,6 @@ type YSetup = {
   yDoc: ReturnType<ReturnType<typeof getYjsProviderForRoom>["getYDoc"]>;
 };
 
-const CURSOR_COLORS = [
-  "#2f604b", "#4a6fa5", "#8b4513", "#6a0dad",
-  "#c0392b", "#e67e22", "#16a085", "#8e44ad",
-];
-
-function cursorColor(id: string | number): string {
-  const str = String(id);
-  let hash = 0;
-  for (const ch of str) hash = (hash << 5) - hash + ch.charCodeAt(0);
-  return CURSOR_COLORS[Math.abs(hash) % CURSOR_COLORS.length];
-}
 
 function tiptapInitialContent(contentJson: unknown): object | null {
   const c = contentJson as Record<string, unknown> | null;
@@ -114,7 +102,6 @@ export function TextNoteEditor(props: EditorProps) {
 function TextNoteEditorInner({
   workspaceId, meetingId, noteId, title, contentJson, saveAction, canEdit, onExit, ySetup,
 }: EditorProps & { ySetup: YSetup }) {
-  const self = useSelf();
   const [titleValue, setTitleValue] = useState(title);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [isPending, startTransition] = useTransition();
@@ -124,10 +111,6 @@ function TextNoteEditorInner({
   const hasPendingSaveRef = useRef(false);
   const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
-  const userName = (self.info as { name?: string; email?: string } | undefined)?.name
-    ?? (self.info as { name?: string; email?: string } | undefined)?.email
-    ?? "Collaborator";
-  const color = cursorColor(self?.id ?? 0);
   const initialContent = tiptapInitialContent(contentJson);
 
   const editor = useEditor({
@@ -136,7 +119,6 @@ function TextNoteEditorInner({
     extensions: [
       StarterKit,
       Collaboration.configure({ document: ySetup.yDoc, field: "tiptap-v1" }),
-      CollaborationCursor.configure({ provider: ySetup.provider, user: { name: userName, color } }),
       Underline,
       TextStyle,
       Color,
