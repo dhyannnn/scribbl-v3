@@ -2,7 +2,7 @@
 
 import "tldraw/tldraw.css";
 import dynamic from "next/dynamic";
-import { createContext, useCallback, useContext, useEffect, useRef, useState, useTransition } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   DefaultMainMenu,
   EditSubmenu,
@@ -21,6 +21,8 @@ import {
   type TLShapeId,
   type TLUiMainMenuProps,
 } from "tldraw";
+import { getYjsProviderForRoom } from "@liveblocks/yjs";
+import { useRoom } from "@liveblocks/react/suspense";
 import { exportWhiteboardPdf } from "@/lib/tldraw/export-pdf";
 import { noteTitleMaxLength } from "@/lib/note-title";
 import { useTldrawYjsStore } from "@/components/tldraw-yjs-store";
@@ -289,6 +291,7 @@ export function TldrawWhiteboardEditor({
   initialSnapshot,
   saveAction,
   canEdit = true,
+  canvasHeight = 600,
 }: {
   workspaceId: string;
   meetingId?: string;
@@ -297,12 +300,41 @@ export function TldrawWhiteboardEditor({
   initialSnapshot: unknown;
   saveAction: (formData: FormData) => void | Promise<void>;
   canEdit?: boolean;
+  canvasHeight?: number | string;
 }) {
+  const room = useRoom();
   const storeWithStatus = useTldrawYjsStore({
     shapeUtils: SHAPE_UTILS,
     initialSnapshot,
   });
   const [titleValue, setTitleValue] = useState(title);
+
+  const yMeta = useMemo(
+    () => getYjsProviderForRoom(room).getYDoc().getMap<string>("note-meta"),
+    [room],
+  );
+
+  // Seed title into Yjs on first open if no peer has set it yet (wait for sync)
+  useEffect(() => {
+    const provider = getYjsProviderForRoom(room);
+    function seed() {
+      if (!yMeta.get("title")) yMeta.set("title", title);
+    }
+    if (provider.synced) seed();
+    else provider.on("synced", seed);
+    return () => provider.off("synced", seed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yMeta, room]);
+
+  // Sync remote title changes into local state
+  useEffect(() => {
+    function onMeta() {
+      const remote = yMeta.get("title") ?? "";
+      setTitleValue((prev) => (prev !== remote ? remote : prev));
+    }
+    yMeta.observe(onMeta);
+    return () => yMeta.unobserve(onMeta);
+  }, [yMeta]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [isPending, startTransition] = useTransition();
   const editorRef = useRef<Editor | null>(null);
@@ -463,6 +495,7 @@ export function TldrawWhiteboardEditor({
               maxLength={noteTitleMaxLength}
               onChange={(e) => {
                 setTitleValue(e.target.value);
+                yMeta.set("title", e.target.value);
                 queueAutosave();
               }}
               className="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm font-semibold outline-none transition focus:border-[#2f604b] focus:bg-white"
@@ -477,7 +510,7 @@ export function TldrawWhiteboardEditor({
       </div>
       <div
         className="overflow-hidden rounded-md border border-[#c8c8bd] shadow-sm"
-        style={{ height: 600 }}
+        style={{ height: canvasHeight }}
       >
         <ExportCtx.Provider value={{ title: titleValue }}>
           <TldrawCanvas

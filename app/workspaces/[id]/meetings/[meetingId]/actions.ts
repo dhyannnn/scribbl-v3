@@ -918,7 +918,10 @@ export async function createMeetingNote(formData: FormData) {
       collaboration: scope === "SHARED" ? "COLLABORATIVE" : "SOLO",
       sourceDevice: "WEB",
       storageType: "JSON",
-      contentJson: type === "TEXT" ? { text: "" } : { strokes: [] },
+      contentJson:
+        type === "TEXT"
+          ? { type: "tiptap", content: { type: "doc", content: [] }, html: "" }
+          : { strokes: [] },
     },
     select: {
       id: true,
@@ -952,7 +955,7 @@ export async function saveMeetingNote(formData: FormData) {
   const meetingId = String(formData.get("meetingId") ?? "");
   const noteId = String(formData.get("noteId") ?? "");
   const title = sanitizeNoteTitle(formData.get("title"), "Shared meeting notes");
-  const text = String(formData.get("text") ?? "");
+  const contentJsonRaw = String(formData.get("contentJson") ?? "");
 
   if (!workspaceId || !meetingId || !noteId) {
     return;
@@ -1030,15 +1033,25 @@ export async function saveMeetingNote(formData: FormData) {
     return;
   }
 
+  let parsedContent: Prisma.InputJsonValue = { type: "tiptap", content: { type: "doc", content: [] }, html: "" };
+  if (contentJsonRaw) {
+    try {
+      const parsed = JSON.parse(contentJsonRaw) as unknown;
+      if (parsed && typeof parsed === "object") {
+        parsedContent = parsed as Prisma.InputJsonValue;
+      }
+    } catch {
+      // keep default empty doc
+    }
+  }
+
   await prisma.note.update({
     where: {
       id: artifact.noteId,
     },
     data: {
       title,
-      contentJson: {
-        text,
-      },
+      contentJson: parsedContent,
     },
   });
 

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { chromium } from "playwright";
+import katex from "katex";
 import { PAGE_H, PAGE_W } from "@/lib/tldraw/page-config";
 
 // ── Text note types ───────────────────────────────────────────────────────────
@@ -51,11 +53,6 @@ export type ExportNoteInput = {
 
 // ── Dimensions ────────────────────────────────────────────────────────────────
 
-// Text pages: portrait US Letter
-const TEXT_W = 612;
-const TEXT_H = 792;
-const TEXT_MARGIN = 54;
-
 // Whiteboard pages: landscape, exact 8:5 ratio matching the canvas
 const WB_W = 792;
 const WB_H = Math.round(WB_W * (PAGE_H / PAGE_W)); // 495
@@ -72,10 +69,12 @@ const DRAW_X_OFFSET = (DRAW_W - PAGE_W * DRAW_SCALE) / 2; // horizontal centerin
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-export function createNotePdfBuffer(note: ExportNoteInput) {
-  const pages =
-    note.type === "WHITEBOARD" ? createWhiteboardPages(note) : createTextPages(note);
-  return buildPdf(pages);
+export async function createNotePdfBuffer(note: ExportNoteInput) {
+  if (note.type === "TEXT") {
+    return createTextPdfBuffer(note);
+  }
+
+  return buildPdf(createWhiteboardPages(note));
 }
 
 export function createPdfFileName(title: string) {
@@ -91,50 +90,129 @@ export function createPdfFileName(title: string) {
 
 // ── Text pages ────────────────────────────────────────────────────────────────
 
-function createTextPages(note: ExportNoteInput): PageSpec[] {
-  const content = note.contentJson as TextContent | null;
-  const rawText =
-    content?.type === "tiptap" && typeof content.html === "string"
-      ? htmlToPlainText(content.html)
-      : typeof content?.text === "string"
-        ? content.text
-        : "";
-  const text = rawText.trim() || "No note body yet.";
-  const lines = [
-    note.title,
-    `${note.workspaceName} / ${note.ownerName} / updated ${formatDate(note.updatedAt)}`,
-    "",
-    ...text.split(/\r?\n/),
-  ].flatMap((line, index) =>
-    index < 2 ? wrapText(line, 78) : line ? wrapText(line, 92) : [""],
-  );
-
-  const pages: PageSpec[] = [];
-  let cursorY = TEXT_H - TEXT_MARGIN;
-  let stream = ["BT", "/F1 12 Tf", "14 TL", `${TEXT_MARGIN} ${cursorY} Td`];
-
-  lines.forEach((line, index) => {
-    const isTitle = index === 0;
-    const isMeta = index === 1;
-    const fontSize = isTitle ? 18 : isMeta ? 10 : 12;
-    const leading = isTitle ? 22 : isMeta ? 14 : 16;
-
-    if (cursorY < TEXT_MARGIN + leading) {
-      stream.push("ET");
-      pages.push({ stream: stream.join("\n"), w: TEXT_W, h: TEXT_H });
-      cursorY = TEXT_H - TEXT_MARGIN;
-      stream = ["BT", "/F1 12 Tf", "14 TL", `${TEXT_MARGIN} ${cursorY} Td`];
-    }
-
-    stream.push(`/F1 ${fontSize} Tf`);
-    stream.push(`${escapePdfText(line)} Tj`);
-    stream.push(`0 -${leading} Td`);
-    cursorY -= leading;
+async function createTextPdfBuffer(note: ExportNoteInput): Promise<Buffer> {
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
-  stream.push("ET");
-  pages.push({ stream: stream.join("\n"), w: TEXT_W, h: TEXT_H });
-  return pages;
+  try {
+    const page = await browser.newPage({ viewport: { width: 816, height: 1056 } });
+    await page.setContent(createTextPdfHtml(note), { waitUntil: "networkidle" });
+    const pdf = await page.pdf({
+      format: "Letter",
+      printBackground: true,
+      margin: {
+        top: "0.75in",
+        right: "0.75in",
+        bottom: "0.75in",
+        left: "0.75in",
+      },
+    });
+    return Buffer.from(pdf);
+  } finally {
+    await browser.close();
+  }
+}
+
+function createTextPdfHtml(note: ExportNoteInput): string {
+  const content = note.contentJson as TextContent | null;
+  const rawHtml =
+    content?.type === "tiptap" && typeof content.html === "string" && content.html.trim()
+      ? sanitizeStoredHtml(content.html)
+      : typeof content?.text === "string" && content.text.trim()
+        ? `<p>${escapeHtml(content.text).replace(/\r?\n/g, "<br>")}</p>`
+        : `<p class="empty">No note body yet.</p>`;
+  const bodyHtml = preRenderMath(rawHtml);
+  void note;
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.45/dist/katex.min.css">
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        color: #20201d;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 16px;
+        line-height: 1.75;
+      }
+      .content { min-width: 0; }
+      .content p { margin: 0 0 0.75em; }
+      .content p:last-child { margin-bottom: 0; }
+      .content h1 { font-size: 2rem; font-weight: 700; margin: 1.25em 0 0.5em; line-height: 1.25; }
+      .content h2 { font-size: 1.6rem; font-weight: 700; margin: 1.1em 0 0.45em; line-height: 1.3; }
+      .content h3 { font-size: 1.3rem; font-weight: 600; margin: 1em 0 0.4em; line-height: 1.35; }
+      .content h4 { font-size: 1.1rem; font-weight: 600; margin: 0.9em 0 0.35em; line-height: 1.4; }
+      .content h5 { font-size: 1rem; font-weight: 600; margin: 0.85em 0 0.3em; line-height: 1.45; }
+      .content h6 { font-size: 0.9rem; font-weight: 600; margin: 0.8em 0 0.3em; color: #62645c; line-height: 1.45; }
+      .content ul { list-style: disc; padding-left: 1.5em; margin: 0.5em 0 0.75em; }
+      .content ol { list-style: decimal; padding-left: 1.5em; margin: 0.5em 0 0.75em; }
+      .content li { margin: 0.2em 0; }
+      .content ul[data-type="taskList"] { list-style: none; padding-left: 0.25em; }
+      .content ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5em; }
+      .content ul[data-type="taskList"] li > label { flex-shrink: 0; margin-top: 0.25em; }
+      .content ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+      .content ul[data-type="taskList"] li[data-checked="true"] > div { text-decoration: line-through; color: #8a8c82; }
+      .content blockquote {
+        border-left: 4px solid #2f604b;
+        color: #4d4f47;
+        font-style: italic;
+        margin: 0.75em 0;
+        padding-left: 1em;
+      }
+      .content code {
+        background: #f0f0eb;
+        border-radius: 0.25em;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.875em;
+        padding: 0.1em 0.35em;
+      }
+      .content pre {
+        background: #1e1e1e;
+        border-radius: 0.5em;
+        color: #d4d4d4;
+        margin: 0.75em 0;
+        overflow-wrap: anywhere;
+        padding: 1em 1.25em;
+        white-space: pre-wrap;
+      }
+      .content pre code { background: none; color: inherit; padding: 0; }
+      .content hr {
+        border: 0;
+        border-top: 2px solid #e4e4dc;
+        margin: 1.5em 0;
+      }
+      .content a { color: #2f604b; text-decoration: underline; }
+      .content sub { vertical-align: sub; font-size: 0.8em; }
+      .content sup { vertical-align: super; font-size: 0.8em; }
+      .content table {
+        border-collapse: collapse;
+        border-radius: 0.375em;
+        margin: 0.75em 0;
+        overflow: hidden;
+        width: 100%;
+      }
+      .content table td,
+      .content table th {
+        border: 1px solid #d8d8ce;
+        min-width: 80px;
+        padding: 0.5em 0.75em;
+        vertical-align: top;
+      }
+      .content table th { background: #f5f5f0; font-weight: 600; }
+      .content img { display: block; max-width: 100%; height: auto; margin: 0.75em 0; }
+      .empty { color: #777970; font-style: italic; }
+      @page { size: Letter; margin: 0.75in; }
+    </style>
+  </head>
+  <body>
+    <main class="content">${bodyHtml}</main>
+  </body>
+</html>`;
 }
 
 // ── Whiteboard pages ──────────────────────────────────────────────────────────
@@ -479,47 +557,68 @@ function fmt(n: number): string {
   return n.toFixed(2).replace(/\.?0+$/, "");
 }
 
-function wrapText(text: string, maxChars: number): string[] {
-  if (text.length <= maxChars) return [text];
-  const words = text.split(/\s+/);
-  const lines: string[] = [];
-  let current = "";
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length <= maxChars) {
-      current = next;
-    } else {
-      if (current) lines.push(current);
-      current = word;
-    }
+function renderLatex(latex: string, displayMode: boolean): string {
+  try {
+    return katex.renderToString(latex, { displayMode, throwOnError: false, output: "html" });
+  } catch {
+    return `<span class="katex-error">${escapeHtml(latex)}</span>`;
   }
-  if (current) lines.push(current);
-  return lines;
 }
 
-function htmlToPlainText(html: string): string {
+function preRenderMath(html: string): string {
+  // Pass 1: properly stored inlineMath nodes (span with data-type="inlineMath")
+  let result = html.replace(
+    /<span\b[^>]*\bdata-type="inlineMath"\b[^>]*>[\s\S]*?<\/span>/g,
+    (match) => {
+      const latexAttr = match.match(/\bdata-latex="([^"]*)"/);
+      const displayAttr = match.match(/\bdata-display="([^"]*)"/);
+      const latex = latexAttr?.[1]
+        ? latexAttr[1]
+            .replaceAll("&amp;", "&")
+            .replaceAll("&lt;", "<")
+            .replaceAll("&gt;", ">")
+            .replaceAll("&quot;", '"')
+            .replaceAll("&#39;", "'")
+        : "";
+      return renderLatex(latex, displayAttr?.[1] === "yes");
+    },
+  );
+
+  // Pass 2: raw $$...$$ saved as plain text (fallback for notes saved before the fix)
+  result = result.replace(/\$\$([^$<]+?)\$\$/g, (_, latex) =>
+    renderLatex(latex.trim(), true),
+  );
+
+  // Pass 3: raw $...$ inline math
+  result = result.replace(/(?<!\$)\$([^$<\n]+?)\$(?!\$)/g, (_, latex) =>
+    renderLatex(latex.trim(), false),
+  );
+
+  return result;
+}
+
+function sanitizeStoredHtml(html: string): string {
   return html
-    .replace(/<h[1-6][^>]*>/gi, "\n")
-    .replace(/<\/h[1-6]>/gi, "\n")
-    .replace(/<p[^>]*>/gi, "")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<li[^>]*>/gi, "• ")
-    .replace(/<\/li>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\n{3,}/g, "\n\n")
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/\son\w+="[^"]*"/gi, "")
+    .replace(/\son\w+='[^']*'/gi, "")
+    .replace(/\shref=(["'])javascript:[\s\S]*?\1/gi, "")
+    .replace(/\ssrc=(["'])javascript:[\s\S]*?\1/gi, "")
     .trim();
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function escapePdfText(value: string): string {
   return `(${value
-    .replaceAll(/[ --￿]/g, " ")
+    .replaceAll(/[\u0000-\u001f\u007f-\uffff]/g, " ")
     .replaceAll("\\", "\\\\")
     .replaceAll("(", "\\(")
     .replaceAll(")", "\\)")})`;

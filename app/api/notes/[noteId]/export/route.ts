@@ -61,7 +61,7 @@ export async function GET(_request: NextRequest, { params }: RouteProps) {
     return NextResponse.json({ error: "You do not have permission to export this note." }, { status: 403 });
   }
 
-  const pdfBuffer = createNotePdfBuffer({
+  const pdfBuffer = await createNotePdfBuffer({
     title: note.title,
     type: note.type,
     ownerName: note.owner.displayName,

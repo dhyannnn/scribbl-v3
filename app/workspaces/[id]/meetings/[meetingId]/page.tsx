@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { LiveblocksRoom } from "@/components/LiveblocksRoom";
+import { MeetingNotesSection, type NoteArtifactData } from "@/components/MeetingNotesSection";
 import { MeetingRouteRefresher } from "@/components/MeetingRouteRefresher";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
-import { TextNoteEditor } from "@/components/TextNoteEditor";
-import { TldrawWhiteboardEditor } from "@/components/TldrawWhiteboardEditor";
 import { getCurrentUser } from "@/lib/current-user";
-import { createChatRoomId, createNoteRoomId } from "@/lib/liveblocks-room";
+import { createChatRoomId } from "@/lib/liveblocks-room";
 import {
   canChangeMeetingRsvp,
   canEditMeetingNotes,
@@ -28,8 +26,6 @@ import {
   attachFileToMeeting,
   attachNoteToMeeting,
   createMeetingNote,
-  saveMeetingNote,
-  saveMeetingWhiteboard,
   updateCurrentUserParticipantStatus,
 } from "./actions";
 
@@ -395,6 +391,20 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
       }
     : null;
 
+  // Convert Prisma artifacts to the serialisable shape the client component expects
+  const sharedNoteSlotArtifacts = sharedNoteArtifacts
+    .map(toNoteArtifactData)
+    .filter((a): a is NoteArtifactData => a !== null);
+  const privateNoteSlotArtifacts = privateNoteArtifacts
+    .map(toNoteArtifactData)
+    .filter((a): a is NoteArtifactData => a !== null);
+  const selectedSharedData = selectedSharedArtifact?.noteId
+    ? (sharedNoteSlotArtifacts.find((a) => a.noteId === selectedSharedArtifact.noteId) ?? null)
+    : null;
+  const selectedPrivateData = selectedPrivateArtifact?.noteId
+    ? (privateNoteSlotArtifacts.find((a) => a.noteId === selectedPrivateArtifact.noteId) ?? null)
+    : null;
+
   return (
     <main data-meeting-hub-main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
       <MeetingRouteRefresher />
@@ -703,71 +713,26 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           }
         />
 
-        <section id="meeting-notes" data-split-stack className="scroll-mt-6 grid gap-6 xl:grid-cols-2">
-          <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-            <MeetingNoteHeader
-              title="Shared Meeting Notes"
-              badge="Everyone"
-              workspaceId={id}
-              meetingId={meeting.id}
-              scope="SHARED"
-              disabled={!canEditNotes}
-            />
-            {sharedNoteArtifacts.length > 0 ? (
-              <NotePicker
-                label="Choose shared note or board"
-                workspaceId={id}
-                meetingId={meeting.id}
-                name="sharedNoteId"
-                selectedId={selectedSharedArtifact?.noteId ?? ""}
-                artifacts={sharedNoteArtifacts}
-                preserveName="privateNoteId"
-                preserveValue={selectedPrivateArtifact?.noteId}
-              />
-            ) : null}
-              <MeetingNoteEditor
-                workspaceId={id}
-                meetingId={meeting.id}
-                artifact={selectedSharedArtifact}
-                contentJson={selectedSharedContentJson}
-                currentUserId={currentUser.id}
-                emptyText="Create a shared note or board for everyone in the meeting."
-                disabled={isLockedMeetingNoteArtifact(selectedSharedArtifact, lifecycle)}
-              />
-          </section>
-
-          <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-            <MeetingNoteHeader
-              title="My Private Notes"
-              badge="Only you"
-              workspaceId={id}
-              meetingId={meeting.id}
-              scope="PRIVATE"
-              disabled={!canEditNotes}
-            />
-            {privateNoteArtifacts.length > 0 ? (
-              <NotePicker
-                label="Choose private note or board"
-                workspaceId={id}
-                meetingId={meeting.id}
-                name="privateNoteId"
-                selectedId={selectedPrivateArtifact?.noteId ?? ""}
-                artifacts={privateNoteArtifacts}
-                preserveName="sharedNoteId"
-                preserveValue={selectedSharedArtifact?.noteId}
-              />
-            ) : null}
-              <MeetingNoteEditor
-                workspaceId={id}
-                meetingId={meeting.id}
-                artifact={selectedPrivateArtifact}
-                contentJson={selectedPrivateContentJson}
-                currentUserId={currentUser.id}
-                emptyText="Create private notes while the lesson is happening. They will not appear in shared artifacts."
-                disabled={isLockedMeetingNoteArtifact(selectedPrivateArtifact, lifecycle)}
-              />
-          </section>
-        </section>
+        <MeetingNotesSection
+          workspaceId={id}
+          meetingId={meeting.id}
+          currentUserId={currentUser.id}
+          canEditNotes={canEditNotes}
+          shared={{
+            selected: selectedSharedData,
+            contentJson: selectedSharedContentJson,
+            all: sharedNoteSlotArtifacts,
+            disabled: isLockedMeetingNoteArtifact(selectedSharedArtifact, lifecycle),
+          }}
+          priv={{
+            selected: selectedPrivateData,
+            contentJson: selectedPrivateContentJson,
+            all: privateNoteSlotArtifacts,
+            disabled: isLockedMeetingNoteArtifact(selectedPrivateArtifact, lifecycle),
+          }}
+          selectedSharedNoteId={selectedSharedArtifact?.noteId ?? undefined}
+          selectedPrivateNoteId={selectedPrivateArtifact?.noteId ?? undefined}
+        />
 
         <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -991,179 +956,19 @@ function RecordingStatusPanel({
   );
 }
 
-function MeetingNoteHeader({
-  title,
-  badge,
-  workspaceId,
-  meetingId,
-  scope,
-  disabled,
-}: {
-  title: string;
-  badge: string;
-  workspaceId: string;
-  meetingId: string;
-  scope: "SHARED" | "PRIVATE";
-  disabled: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <h2 className="text-xl font-semibold">{title}</h2>
-        <span className="mt-2 inline-flex rounded-md bg-[#e7eee7] px-3 py-1 text-sm font-medium text-[#2f604b]">
-          {badge}
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <form action={createMeetingNote}>
-          <input type="hidden" name="workspaceId" value={workspaceId} />
-          <input type="hidden" name="meetingId" value={meetingId} />
-          <input type="hidden" name="scope" value={scope} />
-          <input type="hidden" name="type" value="TEXT" />
-          <PendingSubmitButton
-            className="rounded-md bg-[#2f604b] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={disabled}
-            pendingLabel="Creating..."
-          >
-            New Note
-          </PendingSubmitButton>
-        </form>
-        <form action={createMeetingNote}>
-          <input type="hidden" name="workspaceId" value={workspaceId} />
-          <input type="hidden" name="meetingId" value={meetingId} />
-          <input type="hidden" name="scope" value={scope} />
-          <input type="hidden" name="type" value="WHITEBOARD" />
-          <PendingSubmitButton
-            className="rounded-md border border-[#2f604b] bg-white px-3 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={disabled}
-            pendingLabel="Creating..."
-          >
-            New Board
-          </PendingSubmitButton>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function NotePicker({
-  label,
-  workspaceId,
-  meetingId,
-  name,
-  selectedId,
-  artifacts,
-  preserveName,
-  preserveValue,
-}: {
-  label: string;
-  workspaceId: string;
-  meetingId: string;
-  name: string;
-  selectedId: string;
-  artifacts: ArtifactWithNote[];
-  preserveName: string;
-  preserveValue?: string | null;
-}) {
-  return (
-    <form
-      action={`/workspaces/${workspaceId}/meetings/${meetingId}#meeting-notes`}
-      className="mt-5 grid max-w-full gap-2 min-[720px]:grid-cols-[minmax(0,1fr)_auto]"
-    >
-      {preserveValue ? <input type="hidden" name={preserveName} value={preserveValue} /> : null}
-      <label className="grid min-w-0 gap-2">
-        <span className="text-sm font-medium text-[#4d4f47]">{label}</span>
-        <select
-          name={name}
-          defaultValue={selectedId}
-          className="min-h-11 min-w-0 max-w-full rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#2f604b] focus:bg-white"
-        >
-          {artifacts.map((artifact) =>
-            artifact.note ? (
-              <option key={artifact.note.id} value={artifact.note.id}>
-                {artifact.note.title} / {formatEnumLabel(artifact.note.type)}
-                {artifact.note.owner ? ` / ${artifact.note.owner.displayName}` : ""}
-                {artifact.note.updatedAt ? ` / updated ${formatShortDate(artifact.note.updatedAt)}` : ""}
-              </option>
-            ) : null,
-          )}
-        </select>
-      </label>
-      <div className="flex min-w-0 items-end">
-        <button className="min-h-11 w-full rounded-md border border-[#2f604b] bg-white px-4 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] min-[720px]:w-auto">
-          Switch
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function MeetingNoteEditor({
-  workspaceId,
-  meetingId,
-  artifact,
-  contentJson,
-  currentUserId,
-  emptyText,
-  disabled,
-}: {
-  workspaceId: string;
-  meetingId: string;
-  artifact: ArtifactWithNote | undefined;
-  contentJson: unknown;
-  currentUserId?: string;
-  emptyText: string;
-  disabled: boolean;
-}) {
-  if (!artifact?.note) {
-    return (
-      <div className="mt-5 rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] p-5 text-sm leading-6 text-[#66685f]">
-        {emptyText}
-      </div>
-    );
-  }
-
-  const canEdit =
-    Boolean(currentUserId) &&
-    !disabled &&
-    (artifact.note.ownerUserId === currentUserId || artifact.note.collaboration === "COLLABORATIVE");
-  const liveblocksRoomId = createNoteRoomId(workspaceId, artifact.note.id);
-
-  if (artifact.note.type === "WHITEBOARD") {
-    return (
-      <LiveblocksRoom roomId={liveblocksRoomId}>
-        <TldrawWhiteboardEditor
-          workspaceId={workspaceId}
-          meetingId={meetingId}
-          noteId={artifact.note.id}
-          title={artifact.note.title}
-          initialSnapshot={getTldrawSnapshot(contentJson)}
-          saveAction={saveMeetingWhiteboard}
-          canEdit={canEdit}
-        />
-      </LiveblocksRoom>
-    );
-  }
-
-  return (
-    <LiveblocksRoom roomId={liveblocksRoomId}>
-      <TextNoteEditor
-        workspaceId={workspaceId}
-        meetingId={meetingId}
-        noteId={artifact.note.id}
-        title={artifact.note.title}
-        contentJson={contentJson}
-        saveAction={saveMeetingNote}
-        canEdit={canEdit}
-      />
-    </LiveblocksRoom>
-  );
-}
 
 
-function getTldrawSnapshot(contentJson: unknown) {
-  const c = contentJson as { type?: string; snapshot?: unknown } | null;
-  return c?.type === "tldraw" ? c.snapshot : null;
+function toNoteArtifactData(artifact: ArtifactWithNote) {
+  if (!artifact.noteId || !artifact.note) return null;
+  return {
+    noteId: artifact.noteId,
+    noteType: artifact.note.type as "TEXT" | "WHITEBOARD",
+    noteTitle: artifact.note.title,
+    noteOwnerUserId: artifact.note.ownerUserId,
+    noteCollaboration: artifact.note.collaboration,
+    noteUpdatedAt: artifact.note.updatedAt instanceof Date ? artifact.note.updatedAt.toISOString() : null,
+    noteOwnerDisplayName: artifact.note.owner?.displayName ?? null,
+  };
 }
 
 

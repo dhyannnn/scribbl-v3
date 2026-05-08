@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import "katex/dist/katex.min.css";
+
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { getYjsProviderForRoom } from "@liveblocks/yjs";
 import { useOthers, useRoom, useUpdateMyPresence } from "@liveblocks/react/suspense";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -16,18 +18,42 @@ import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import { Table } from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
-import TableHeader from "@tiptap/extension-table-header";
-import TableCell from "@tiptap/extension-table-cell";
+import TableHeaderBase from "@tiptap/extension-table-header";
+import TableCellBase from "@tiptap/extension-table-cell";
 import { TaskList } from "@tiptap/extension-task-list";
 import { TaskItem } from "@tiptap/extension-task-item";
 import Placeholder from "@tiptap/extension-placeholder";
 import CharacterCount from "@tiptap/extension-character-count";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
+import { InlineMathNode } from "@aarkue/tiptap-math-extension";
 import { FontSize } from "@/lib/tiptap/font-size";
 import { LiveblocksCursors, type CursorUser } from "@/lib/tiptap/liveblocks-cursors";
 import { NoteToolbar } from "@/components/NoteToolbar";
 import { noteTitleMaxLength } from "@/lib/note-title";
+
+// renderText returns " " (1 char) to match the atom's 1 doc-position footprint.
+// The default renderText returns the full LaTeX string, which inflates TipTap's
+// textBefore calculation and causes "Position out of range" in InputRule handlers
+// when a math atom already exists earlier in the same paragraph.
+const MathNode = InlineMathNode.extend({
+  renderText() { return " "; },
+}).configure({ evaluation: false });
+
+function bgCellAttrs() {
+  return {
+    backgroundColor: {
+      default: null,
+      parseHTML: (el: HTMLElement) => el.getAttribute("data-bgcolor") ?? null,
+      renderHTML: (attrs: Record<string, unknown>) =>
+        attrs.backgroundColor
+          ? { "data-bgcolor": attrs.backgroundColor, style: `background-color:${attrs.backgroundColor}` }
+          : {},
+    },
+  };
+}
+const TableCell = TableCellBase.extend({ addAttributes() { return { ...this.parent?.(), ...bgCellAttrs() }; } });
+const TableHeader = TableHeaderBase.extend({ addAttributes() { return { ...this.parent?.(), ...bgCellAttrs() }; } });
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
@@ -107,6 +133,26 @@ function TextNoteEditorInner({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [isPending, startTransition] = useTransition();
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const yMeta = useMemo(() => ySetup.yDoc.getMap<string>("note-meta"), [ySetup.yDoc]);
+
+  // Seed title into Yjs on first open if no peer has set it yet
+  useEffect(() => {
+    if (!yMeta.get("title")) {
+      yMeta.set("title", title);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yMeta]);
+
+  // Sync remote title changes into local state
+  useEffect(() => {
+    function onMeta() {
+      const remote = yMeta.get("title") ?? "";
+      setTitleValue((prev) => (prev !== remote ? remote : prev));
+    }
+    yMeta.observe(onMeta);
+    return () => yMeta.unobserve(onMeta);
+  }, [yMeta]);
   const latestSaveIdRef = useRef(0);
   const changeVersionRef = useRef(0);
   const hasPendingSaveRef = useRef(false);
@@ -120,7 +166,11 @@ function TextNoteEditorInner({
     immediatelyRender: false,
     editable: canEdit,
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        link: false,
+        underline: false,
+        undoRedo: false,
+      }),
       Collaboration.configure({ document: ySetup.yDoc, field: "tiptap-v1" }),
       LiveblocksCursors,
       Underline,
@@ -142,6 +192,7 @@ function TextNoteEditorInner({
       CharacterCount,
       Subscript,
       Superscript,
+      MathNode,
     ],
     onCreate: ({ editor: e }) => {
       const yFragment = ySetup.yDoc.getXmlFragment("tiptap-v1");
@@ -240,7 +291,7 @@ function TextNoteEditorInner({
       <TitleInput
         title={titleValue}
         canEdit={canEdit}
-        onChange={(v) => { setTitleValue(v); queueAutosave(); }}
+        onChange={(v) => { setTitleValue(v); yMeta.set("title", v); queueAutosave(); }}
       />
 
       <div className="grid gap-0">

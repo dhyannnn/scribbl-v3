@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type ReactNode,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -8,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { MeetingVideoRoom } from "./MeetingVideoRoom";
 import type { MeetingVideoRecordingProps } from "./VideoPopoutShell";
 
@@ -58,7 +60,17 @@ const minPanelWidth = 360;
 const minPanelHeight = 280;
 const minimizedPanelWidth = 260;
 const snapDistance = 48;
-const splitWidth = "clamp(420px, 49vw, 780px)";
+const minSplitVideoWidth = 320;   // minimum video panel width when split
+const maxSplitWidthRatio = 0.70;  // video panel can take at most 70% of viewport
+const SPLIT_WIDTH_KEY = "scribbl-video-split-width-v1";
+const portalPanelStyle = { zIndex: 2147483000, isolation: "isolate" } satisfies CSSProperties;
+
+type SplitResizeState = {
+  pointerId: number;
+  startX: number;
+  startWidth: number;
+  maxWidth: number;
+};
 
 export function FloatingMeetingVideo({
   workspaceId,
@@ -70,10 +82,12 @@ export function FloatingMeetingVideo({
   const [isMinimized, setIsMinimized] = useState(false);
   const [videoSurface, setVideoSurface] = useState<VideoSurfaceState>("hub");
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [splitVideoWidth, setSplitVideoWidth] = useState(500);
   const hasLoadedStoredPanelRef = useRef(false);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const popoutRef = useRef<Window | null>(null);
   const interactionRef = useRef<InteractionState | null>(null);
+  const splitResizeRef = useRef<SplitResizeState | null>(null);
   const frameRef = useRef<number | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const pendingPanelRef = useRef<PanelState | null>(null);
@@ -91,10 +105,12 @@ export function FloatingMeetingVideo({
 
   useEffect(() => {
     const storedPanel = loadStoredPanel(meetingId);
+    const storedSplitWidth = loadStoredSplitWidth();
     const restoreFrame = window.requestAnimationFrame(() => {
       hasLoadedStoredPanelRef.current = true;
       setPanel(storedPanel.panel);
       setIsMinimized(storedPanel.minimized);
+      setSplitVideoWidth(storedSplitWidth);
       setHasHydrated(true);
     });
 
@@ -158,26 +174,22 @@ export function FloatingMeetingVideo({
     return () => window.clearInterval(interval);
   }, [videoSurface]);
 
+  // Activates/deactivates the split class and cleans up on exit
   useEffect(() => {
-    if (videoSurface !== "split") {
-      return;
-    }
-
-    const previousSplitWidth = document.body.style.getPropertyValue("--scribbl-video-split-width");
-
-    document.body.style.setProperty("--scribbl-video-split-width", splitWidth);
+    if (videoSurface !== "split") return;
     document.body.classList.add("scribbl-video-split-active");
-
     return () => {
-      if (previousSplitWidth) {
-        document.body.style.setProperty("--scribbl-video-split-width", previousSplitWidth);
-      } else {
-        document.body.style.removeProperty("--scribbl-video-split-width");
-      }
-
       document.body.classList.remove("scribbl-video-split-active");
+      document.body.style.removeProperty("--scribbl-video-split-width");
     };
   }, [videoSurface]);
+
+  // Keeps the CSS variable in sync with the current split width (runs on enter and on every drag)
+  useEffect(() => {
+    if (videoSurface !== "split") return;
+    document.body.style.setProperty("--scribbl-video-split-width", `${splitVideoWidth}px`);
+    window.localStorage.setItem(SPLIT_WIDTH_KEY, String(splitVideoWidth));
+  }, [videoSurface, splitVideoWidth]);
 
   const commitPanel = useCallback((nextPanel: PanelState) => {
     pendingPanelRef.current = clampPanel(nextPanel, getRenderedPanelBounds(panelRef.current));
@@ -198,11 +210,18 @@ export function FloatingMeetingVideo({
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
-      const interaction = interactionRef.current;
-
-      if (!interaction || event.pointerId !== interaction.pointerId) {
+      // Split-panel resize
+      const splitResize = splitResizeRef.current;
+      if (splitResize && event.pointerId === splitResize.pointerId) {
+        const dx = splitResize.startX - event.clientX; // left = wider video
+        const next = Math.min(Math.max(splitResize.startWidth + dx, minSplitVideoWidth), splitResize.maxWidth);
+        setSplitVideoWidth(next);
         return;
       }
+
+      // Floating-panel drag / resize
+      const interaction = interactionRef.current;
+      if (!interaction || event.pointerId !== interaction.pointerId) return;
 
       if (interaction.type === "drag") {
         commitPanel({
@@ -220,16 +239,17 @@ export function FloatingMeetingVideo({
     }
 
     function handlePointerUp(event: PointerEvent) {
-      const interaction = interactionRef.current;
-
-      if (!interaction || event.pointerId !== interaction.pointerId) {
+      if (splitResizeRef.current?.pointerId === event.pointerId) {
+        splitResizeRef.current = null;
         return;
       }
+
+      const interaction = interactionRef.current;
+      if (!interaction || event.pointerId !== interaction.pointerId) return;
 
       interactionRef.current = null;
       setPanel((currentPanel) => {
         const bounds = getRenderedPanelBounds(panelRef.current);
-
         return snapPanel(clampPanel(currentPanel, bounds), bounds);
       });
     }
@@ -301,12 +321,33 @@ export function FloatingMeetingVideo({
     return null;
   }
 
+  function renderPortal(content: ReactNode) {
+    return createPortal(content, document.body);
+  }
+
   if (videoSurface === "split") {
-    return (
+    return renderPortal(
       <aside
-        className="scribbl-video-split-panel z-50 flex flex-col border border-[#d8d8ce] bg-[#171713] text-white shadow-2xl min-[1101px]:border-y-0 min-[1101px]:border-r-0"
-        style={{ "--scribbl-split-panel-width": splitWidth } as CSSProperties}
+        className="scribbl-video-split-panel flex flex-col border border-[#d8d8ce] bg-[#171713] text-white shadow-2xl min-[1101px]:border-y-0 min-[1101px]:border-r-0"
+        style={{ "--scribbl-split-panel-width": `${splitVideoWidth}px`, ...portalPanelStyle } as CSSProperties}
       >
+        {/* Drag handle — visible only on wide viewports where the split is active */}
+        <div
+          className="absolute left-0 top-0 hidden h-full w-2 cursor-col-resize touch-none min-[1101px]:flex min-[1101px]:items-center min-[1101px]:justify-center"
+          style={{ zIndex: 501 }}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.currentTarget.setPointerCapture(e.pointerId);
+            splitResizeRef.current = {
+              pointerId: e.pointerId,
+              startX: e.clientX,
+              startWidth: splitVideoWidth,
+              maxWidth: Math.floor(window.innerWidth * maxSplitWidthRatio),
+            };
+          }}
+        >
+          <div className="h-10 w-0.5 rounded-full bg-white/20 transition-colors group-hover:bg-white/50" />
+        </div>
         <header className="border-b border-white/10 px-6 py-5">
           <button
             type="button"
@@ -351,14 +392,15 @@ export function FloatingMeetingVideo({
   }
 
   if (videoSurface === "popout" || videoSurface === "popout-closed") {
-    return (
+    return renderPortal(
       <aside
-        className="fixed z-50 rounded-md border border-[#2f604b]/40 bg-[#171713] text-white shadow-2xl"
+        className="fixed rounded-md border border-[#2f604b]/40 bg-[#171713] text-white shadow-2xl"
         style={{
           left: panel.left,
           top: panel.top,
           width: 300,
           touchAction: "none",
+          ...portalPanelStyle,
         }}
       >
         <div
@@ -402,16 +444,17 @@ export function FloatingMeetingVideo({
     ? clampPanel(panel, { width: getMinimizedPanelWidth(), height: 92 })
     : panel;
 
-  return (
+  return renderPortal(
     <aside
       ref={panelRef}
-      className="fixed z-50 overflow-hidden rounded-md border border-[#2f604b]/40 bg-[#171713] text-white shadow-2xl"
+      className="fixed overflow-hidden rounded-md border border-[#2f604b]/40 bg-[#171713] text-white shadow-2xl"
       style={{
         left: renderedPanel.left,
         top: renderedPanel.top,
         width: isMinimized ? `min(${minimizedPanelWidth}px, calc(100vw - 24px))` : renderedPanel.width,
         height: isMinimized ? "auto" : panel.height,
         touchAction: "none",
+        ...portalPanelStyle,
       }}
     >
       <div
@@ -471,6 +514,19 @@ export function FloatingMeetingVideo({
       ) : null}
     </aside>
   );
+}
+
+function loadStoredSplitWidth(): number {
+  const fallback = typeof window !== "undefined"
+    ? Math.floor(window.innerWidth * 0.42)
+    : 500;
+  if (typeof window === "undefined") return fallback;
+  const stored = window.localStorage.getItem(SPLIT_WIDTH_KEY);
+  if (stored) {
+    const n = parseInt(stored, 10);
+    if (!isNaN(n) && n >= minSplitVideoWidth) return n;
+  }
+  return fallback;
 }
 
 function getStorageKey(meetingId: string) {

@@ -100,12 +100,14 @@ body {
 .ProseMirror sup { vertical-align: super; font-size: 0.8em; }
 
 /* Table */
+.tableWrapper {
+  overflow: hidden;
+  border-radius: 0.375em;
+  margin: 0.75em 0;
+}
 .ProseMirror table {
   border-collapse: collapse;
   width: 100%;
-  margin: 0.75em 0;
-  overflow: hidden;
-  border-radius: 0.375em;
 }
 .ProseMirror table td,
 .ProseMirror table th {
@@ -127,7 +129,18 @@ body {
   bottom: 0;
   width: 4px;
   background: #2f604b;
-  cursor: col-resize;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.ProseMirror table td:hover .column-resize-handle,
+.ProseMirror table th:hover .column-resize-handle {
+  opacity: 1;
+}
+.resize-cursor,
+.resize-cursor * {
+  cursor: col-resize !important;
 }
 
 /* Placeholder */
