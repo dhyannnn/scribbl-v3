@@ -15,6 +15,7 @@ type VideoPopoutShellProps = {
   disabled: boolean;
   recording: MeetingVideoRecordingProps;
   recordingStatusMessage: string | null;
+  permissions: MeetingVideoPermissionsProps;
 };
 
 export type MeetingVideoRecording = {
@@ -43,12 +44,23 @@ export type MeetingVideoRecordingProps = {
   latestRecording?: MeetingVideoRecording;
 };
 
+export type MeetingVideoPermissionsProps = {
+  canUseMic: boolean;
+  canUseCamera: boolean;
+  canShareScreen: boolean;
+  canSendReactions: boolean;
+  canRaiseHand: boolean;
+  canModerateVideo: boolean;
+  handRaised: boolean;
+};
+
 type VideoChannelMessage =
   | { type: "hub-ready" }
   | { type: "popout-ready" }
   | { type: "popout-closed" }
   | { type: "bring-back" }
-  | { type: "focus-hub"; hash: string };
+  | { type: "focus-hub"; hash: string }
+  | { type: "permissions-updated" };
 
 export function VideoPopoutShell({
   workspaceId,
@@ -58,6 +70,7 @@ export function VideoPopoutShell({
   lifecycleLabel,
   hubHref,
   disabled,
+  permissions,
   recording,
   recordingStatusMessage,
 }: VideoPopoutShellProps) {
@@ -115,6 +128,10 @@ export function VideoPopoutShell({
       if (event.data.type === "bring-back" && openedByHub) {
         closeToHub(channel, openedByHub);
       }
+
+      if (event.data.type === "permissions-updated") {
+        router.refresh();
+      }
     };
 
     function announceClosed() {
@@ -127,7 +144,7 @@ export function VideoPopoutShell({
       window.removeEventListener("beforeunload", announceClosed);
       channel.close();
     };
-  }, [channelName, closeToHub]);
+  }, [channelName, closeToHub, router]);
 
   return (
     <main className="min-h-screen bg-[#171713] text-white">
@@ -205,6 +222,7 @@ export function VideoPopoutShell({
             meetingId={meetingId}
             disabled={disabled}
             recording={recording}
+            permissions={permissions}
           />
         )}
       </div>

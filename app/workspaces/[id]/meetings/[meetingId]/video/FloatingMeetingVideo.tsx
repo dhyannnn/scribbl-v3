@@ -10,8 +10,9 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { MeetingVideoRoom } from "./MeetingVideoRoom";
-import type { MeetingVideoRecordingProps } from "./VideoPopoutShell";
+import type { MeetingVideoPermissionsProps, MeetingVideoRecordingProps } from "./VideoPopoutShell";
 
 type FloatingMeetingVideoProps = {
   workspaceId: string;
@@ -19,6 +20,9 @@ type FloatingMeetingVideoProps = {
   videoHref: string;
   disabled?: boolean;
   recording?: MeetingVideoRecordingProps;
+  permissions: MeetingVideoPermissionsProps;
+  raisedHandCount?: number;
+  pendingRequestCount?: number;
 };
 
 type PanelState = {
@@ -54,7 +58,8 @@ type VideoChannelMessage =
   | { type: "popout-ready" }
   | { type: "popout-closed" }
   | { type: "bring-back" }
-  | { type: "focus-hub"; hash: string };
+  | { type: "focus-hub"; hash: string }
+  | { type: "permissions-updated" };
 
 const minPanelWidth = 360;
 const minPanelHeight = 280;
@@ -77,7 +82,11 @@ export function FloatingMeetingVideo({
   meetingId,
   disabled = false,
   recording,
+  permissions,
+  raisedHandCount = 0,
+  pendingRequestCount = 0,
 }: FloatingMeetingVideoProps) {
+  const router = useRouter();
   const [panel, setPanel] = useState(getServerSafeDefaultPanel);
   const [isMinimized, setIsMinimized] = useState(false);
   const [videoSurface, setVideoSurface] = useState<VideoSurfaceState>("hub");
@@ -139,6 +148,10 @@ export function FloatingMeetingVideo({
         window.focus();
         scrollToHubSection(event.data.hash);
       }
+
+      if (event.data.type === "permissions-updated") {
+        router.refresh();
+      }
     };
 
     channel.postMessage({ type: "hub-ready" } satisfies VideoChannelMessage);
@@ -147,7 +160,7 @@ export function FloatingMeetingVideo({
       channel.close();
       channelRef.current = null;
     };
-  }, [meetingId]);
+  }, [meetingId, router]);
 
   // Re-clamp panel when window is resized (e.g. entering macOS split view)
   useEffect(() => {
@@ -359,7 +372,19 @@ export function FloatingMeetingVideo({
           <p className="mt-5 text-sm font-medium uppercase tracking-[0.18em] text-[#b7c8ba]">
             Split video
           </p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-normal">Meeting video</h2>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <h2 className="text-3xl font-semibold tracking-normal">Meeting video</h2>
+            {raisedHandCount > 0 ? (
+              <span className="shrink-0 rounded-full bg-[#fff7df] px-2.5 py-1 text-sm font-semibold text-[#7a5a15]">
+                ✋ {raisedHandCount}
+              </span>
+            ) : null}
+            {pendingRequestCount > 0 ? (
+              <span className="shrink-0 rounded-full bg-[#fff7df] px-2.5 py-1 text-sm font-semibold text-[#7a5a15]">
+                📝 {pendingRequestCount}
+              </span>
+            ) : null}
+          </div>
           <div className="mt-5 flex flex-wrap gap-2 text-sm">
             <button
               type="button"
@@ -385,6 +410,7 @@ export function FloatingMeetingVideo({
             mode="floating"
             recording={recording}
             recordingReturnTo="current"
+            permissions={permissions}
           />
         </div>
       </aside>
@@ -461,7 +487,19 @@ export function FloatingMeetingVideo({
         className="flex cursor-move items-center justify-between gap-3 border-b border-white/10 bg-[#20201d] px-3 py-2"
         onPointerDown={(event) => startInteraction(event, "drag")}
       >
-        <p className="truncate text-sm font-medium">Video</p>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <p className="truncate text-sm font-medium">Video</p>
+          {raisedHandCount > 0 ? (
+            <span className="shrink-0 rounded-full bg-[#fff7df] px-2 py-0.5 text-xs font-semibold text-[#7a5a15]">
+              ✋ {raisedHandCount}
+            </span>
+          ) : null}
+          {pendingRequestCount > 0 ? (
+            <span className="shrink-0 rounded-full bg-[#fff7df] px-2 py-0.5 text-xs font-semibold text-[#7a5a15]">
+              📝 {pendingRequestCount}
+            </span>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2">
           {!isMinimized ? (
             <button
@@ -493,6 +531,7 @@ export function FloatingMeetingVideo({
             mode="floating"
             recording={recording}
             recordingReturnTo="current"
+            permissions={permissions}
           />
         </div>
       ) : (

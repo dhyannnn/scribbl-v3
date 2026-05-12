@@ -8,6 +8,9 @@ import {
   StartMediaButton,
   TrackToggle,
   type TrackReference,
+  useDataChannel,
+  useLocalParticipant,
+  useLocalParticipantPermissions,
   useSpeakingParticipants,
   useTracks,
 } from "@livekit/components-react";
@@ -16,11 +19,50 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+
+// ── Emoji reactions ───────────────────────────────────────────────────────────
+
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "🎉", "👏", "🔥"] as const;
+const REACTION_TOPIC = "emoji-reaction";
+const REACTION_DURATION_MS = 3500;
+
+type EmojiReaction = { id: string; emoji: string; sender: string; x: number };
+
+function useEmojiReactions() {
+  const [reactions, setReactions] = useState<EmojiReaction[]>([]);
+
+  const addReaction = useCallback((emoji: string, sender: string) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const x = 5 + Math.random() * 75;
+    setReactions((prev) => [...prev, { id, emoji, sender, x }]);
+    setTimeout(() => setReactions((prev) => prev.filter((r) => r.id !== id)), REACTION_DURATION_MS);
+  }, []);
+
+  const { send } = useDataChannel(REACTION_TOPIC, (msg) => {
+    try {
+      const { emoji } = JSON.parse(new TextDecoder().decode(msg.payload)) as { emoji: string };
+      if (typeof emoji === "string") addReaction(emoji, msg.from?.name ?? "Someone");
+    } catch { /* malformed payload */ }
+  });
+
+  const sendReaction = useCallback(
+    (emoji: string) => {
+      addReaction(emoji, "You");
+      void send(new TextEncoder().encode(JSON.stringify({ emoji })), { reliable: false });
+    },
+    [send, addReaction],
+  );
+
+  return { reactions, sendReaction };
+}
 import { useFormStatus } from "react-dom";
 import type { MeetingVideoRecordingProps } from "./VideoPopoutShell";
+import type { MeetingVideoPermissionsProps } from "./VideoPopoutShell";
 import {
+  lowerOwnHand,
   markCurrentUserVideoJoined,
   markCurrentUserVideoLeft,
+  raiseHand,
   startMeetingRecording,
   stopMeetingRecording,
   syncMeetingRecordingStatus,
@@ -33,9 +75,11 @@ type MeetingVideoRoomProps = {
   mode?: "full" | "floating";
   recording?: MeetingVideoRecordingProps;
   recordingReturnTo?: "current" | "hub" | "video";
+  permissions: MeetingVideoPermissionsProps;
 };
 
 type TokenResponse = {
+  permissions: MeetingVideoPermissionsProps;
   roomName: string;
   serverUrl: string;
   token: string;
@@ -46,6 +90,7 @@ export function MeetingVideoRoom({
   meetingId,
   disabled = false,
   mode = "full",
+  permissions,
   recording,
   recordingReturnTo = "video",
 }: MeetingVideoRoomProps) {
@@ -179,6 +224,7 @@ export function MeetingVideoRoom({
         recording={recording}
         hasJoinedVideo={hasMarkedJoined}
         recordingReturnTo={recordingReturnTo}
+        permissions={permissions}
       />
       <RoomAudioRenderer />
     </LiveKitRoom>
@@ -199,6 +245,7 @@ function ConferenceSurface({
   mode,
   recording,
   recordingReturnTo,
+  permissions,
   workspaceId,
 }: {
   hasJoinedVideo: boolean;
@@ -206,9 +253,17 @@ function ConferenceSurface({
   mode: "full" | "floating";
   recording?: MeetingVideoRecordingProps;
   recordingReturnTo: "current" | "hub" | "video";
+  permissions: MeetingVideoPermissionsProps;
   workspaceId: string;
 }) {
   const [showLocalPreview, setShowLocalPreview] = useState(false);
+  const { reactions, sendReaction } = useEmojiReactions();
+  const livekitPermissions = useLocalParticipantPermissions();
+  const localParticipant = useLocalParticipant();
+  const effectivePermissions = useMemo(
+    () => mergeLiveKitPermissions(permissions, livekitPermissions),
+    [livekitPermissions, permissions],
+  );
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
     onlySubscribed: false,
   });
@@ -219,8 +274,30 @@ function ConferenceSurface({
   );
   const gridClassName = getVideoGridClassName(displayTracks.length, mode);
 
+  useEffect(() => {
+    if (!effectivePermissions.canUseMic && localParticipant.isMicrophoneEnabled) {
+      void localParticipant.localParticipant.setMicrophoneEnabled(false);
+    }
+
+    if (!effectivePermissions.canUseCamera && localParticipant.isCameraEnabled) {
+      void localParticipant.localParticipant.setCameraEnabled(false);
+    }
+
+    if (!effectivePermissions.canShareScreen && localParticipant.isScreenShareEnabled) {
+      void localParticipant.localParticipant.setScreenShareEnabled(false);
+    }
+  }, [
+    effectivePermissions.canShareScreen,
+    effectivePermissions.canUseCamera,
+    effectivePermissions.canUseMic,
+    localParticipant.isCameraEnabled,
+    localParticipant.isMicrophoneEnabled,
+    localParticipant.isScreenShareEnabled,
+    localParticipant.localParticipant,
+  ]);
+
   return (
-    <div className={mode === "floating" ? "flex h-full min-h-0 flex-col bg-[#11110f]" : "flex min-h-[calc(100vh-220px)] flex-col bg-[#11110f]"}>
+    <div className={mode === "floating" ? "relative flex h-full min-h-0 flex-col bg-[#11110f]" : "relative flex min-h-[calc(100vh-220px)] flex-col bg-[#11110f]"}>
       <div className={gridClassName}>
         {displayTracks.length > 0 ? (
           displayTracks.map((trackRef) => (
@@ -258,6 +335,7 @@ function ConferenceSurface({
           </div>
         )}
       </div>
+      <EmojiOverlay reactions={reactions} />
       <div className={mode === "floating" ? "flex flex-wrap items-center justify-center gap-2 border-t border-white/10 bg-[#171713] p-2" : "flex flex-wrap items-center justify-center gap-2 border-t border-white/10 bg-[#171713] p-3"}>
         {recording ? (
           <RecordingControls
@@ -269,27 +347,41 @@ function ConferenceSurface({
             recordingReturnTo={recordingReturnTo}
           />
         ) : null}
-        <StartMediaButton className={getControlClassName(mode)}>
+        <StartMediaButton
+          className={getControlClassName(mode, effectivePermissions.canUseMic || effectivePermissions.canUseCamera)}
+          disabled={!effectivePermissions.canUseMic && !effectivePermissions.canUseCamera}
+        >
           Start Media
         </StartMediaButton>
-        <TrackToggle
+        <PermissionTrackToggle
+          enabled={effectivePermissions.canUseMic}
+          mode={mode}
           source={Track.Source.Microphone}
-          className={getControlClassName(mode)}
         >
           Mic
-        </TrackToggle>
-        <TrackToggle
+        </PermissionTrackToggle>
+        <PermissionTrackToggle
+          enabled={effectivePermissions.canUseCamera}
+          mode={mode}
           source={Track.Source.Camera}
-          className={getControlClassName(mode)}
         >
           Camera
-        </TrackToggle>
-        <TrackToggle
+        </PermissionTrackToggle>
+        <PermissionTrackToggle
+          enabled={effectivePermissions.canShareScreen}
+          mode={mode}
           source={Track.Source.ScreenShare}
-          className={getControlClassName(mode)}
         >
           Share
-        </TrackToggle>
+        </PermissionTrackToggle>
+        {(permissions.canRaiseHand || permissions.handRaised) ? (
+          <HandRaiseButton
+            workspaceId={workspaceId}
+            meetingId={meetingId}
+            handRaised={permissions.handRaised}
+            mode={mode}
+          />
+        ) : null}
         {mode === "floating" ? (
           <button
             type="button"
@@ -299,12 +391,107 @@ function ConferenceSurface({
             {showLocalPreview ? "Hide Self" : "Self"}
           </button>
         ) : null}
+        <EmojiPickerButton sendReaction={sendReaction} mode={mode} />
         <DisconnectButton className={getLeaveClassName(mode)}>
           Leave
         </DisconnectButton>
       </div>
     </div>
   );
+}
+
+function HandRaiseButton({
+  handRaised,
+  meetingId,
+  mode,
+  workspaceId,
+}: {
+  handRaised: boolean;
+  meetingId: string;
+  mode: "full" | "floating";
+  workspaceId: string;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+
+  function handleClick() {
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("workspaceId", workspaceId);
+      fd.set("meetingId", meetingId);
+      await (handRaised ? lowerOwnHand(fd) : raiseHand(fd));
+      router.refresh();
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={isPending}
+      onClick={handleClick}
+      className={getControlClassName(mode, true) + (handRaised ? " !bg-white/25" : "")}
+    >
+      {handRaised ? "✋ Lower" : "✋ Raise"}
+    </button>
+  );
+}
+
+function PermissionTrackToggle({
+  children,
+  enabled,
+  mode,
+  source,
+}: {
+  children: ReactNode;
+  enabled: boolean;
+  mode: "full" | "floating";
+  source: Track.Source.Microphone | Track.Source.Camera | Track.Source.ScreenShare;
+}) {
+  if (!enabled) {
+    return (
+      <button
+        type="button"
+        disabled
+        aria-disabled="true"
+        className={getControlClassName(mode, false)}
+      >
+        {children}
+      </button>
+    );
+  }
+
+  return (
+    <TrackToggle source={source} className={getControlClassName(mode)}>
+      {children}
+    </TrackToggle>
+  );
+}
+
+function mergeLiveKitPermissions(
+  permissions: MeetingVideoPermissionsProps,
+  livekitPermissions: { canPublish?: boolean; canPublishSources?: unknown[] } | undefined,
+): MeetingVideoPermissionsProps {
+  if (!livekitPermissions) {
+    return permissions;
+  }
+
+  const canPublish = livekitPermissions.canPublish !== false;
+  const sources = livekitPermissions.canPublishSources ?? [];
+
+  return {
+    ...permissions,
+    canUseMic: permissions.canUseMic && canPublish && isLiveKitSourceAllowed(sources, 2),
+    canUseCamera: permissions.canUseCamera && canPublish && isLiveKitSourceAllowed(sources, 1),
+    canShareScreen:
+      permissions.canShareScreen &&
+      canPublish &&
+      isLiveKitSourceAllowed(sources, 3) &&
+      isLiveKitSourceAllowed(sources, 4),
+  };
+}
+
+function isLiveKitSourceAllowed(sources: unknown[], source: number) {
+  return sources.length === 0 || sources.includes(source);
 }
 
 function RecordingControls({
@@ -555,6 +742,82 @@ function dedupeTracks(tracks: TrackReference[]) {
   });
 }
 
+// ── Emoji overlay ─────────────────────────────────────────────────────────────
+
+function EmojiOverlay({ reactions }: { reactions: EmojiReaction[] }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {reactions.map((r) => (
+        <div
+          key={r.id}
+          className="absolute bottom-16 select-none text-center"
+          style={{ left: `${r.x}%`, animation: `emoji-float ${REACTION_DURATION_MS}ms ease-out forwards` }}
+        >
+          <div className="text-3xl leading-none">{r.emoji}</div>
+          <div className="mt-1 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white/90 whitespace-nowrap">
+            {r.sender}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Emoji picker button ────────────────────────────────────────────────────────
+
+function EmojiPickerButton({
+  mode,
+  sendReaction,
+}: {
+  mode: "full" | "floating";
+  sendReaction: (emoji: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e: PointerEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={getControlClassName(mode, true) + (open ? " !bg-white/25" : "")}
+        aria-label="Emoji reactions"
+      >
+        {mode === "floating" ? "😊" : "React 😊"}
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 flex gap-1 rounded-xl border border-white/15 bg-[#1e1e1b] p-2 shadow-2xl">
+          {REACTION_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => {
+                sendReaction(emoji);
+                setOpen(false);
+              }}
+              className="rounded-lg p-1.5 text-2xl transition hover:bg-white/15 active:scale-90"
+              aria-label={emoji}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getJoinSurfaceClassName(mode: "full" | "floating") {
   if (mode === "floating") {
     return "flex h-full min-h-[260px] flex-col items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-4 text-center text-white";
@@ -592,12 +855,14 @@ function getVideoGridClassName(trackCount: number, mode: "full" | "floating") {
   return `${baseClassName} grid-cols-1 sm:grid-cols-2 xl:grid-cols-3`;
 }
 
-function getControlClassName(mode: "full" | "floating") {
+function getControlClassName(mode: "full" | "floating", enabled = true) {
+  const disabledClassName = enabled ? "" : " cursor-not-allowed opacity-45";
+
   if (mode === "floating") {
-    return "rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/20";
+    return `rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/20${disabledClassName}`;
   }
 
-  return "rounded-md border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20";
+  return `rounded-md border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20${disabledClassName}`;
 }
 
 function getLeaveClassName(mode: "full" | "floating") {

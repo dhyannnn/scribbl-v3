@@ -7,6 +7,7 @@ import {
   formatMeetingLifecycleLabel,
   getMeetingLifecycle,
 } from "@/lib/meeting-lifecycle";
+import { getMeetingVideoPermissions, type MeetingPermissionOverrideInput } from "@/lib/meeting-permissions";
 import { prisma } from "@/lib/prisma";
 import { VideoPopoutShell } from "./VideoPopoutShell";
 
@@ -74,6 +75,20 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
           createdAt: "desc",
         },
       },
+      moderationSettings: true,
+      permissionOverrides: {
+        select: {
+          userId: true,
+          targetType: true,
+          artifactId: true,
+          state: true,
+        },
+      },
+      participants: {
+        where: { userId: currentUser.id },
+        select: { handRaisedAt: true, handLoweredAt: true },
+        take: 1,
+      },
     },
   });
 
@@ -102,6 +117,21 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
     meeting.createdByUserId === currentUser.id ||
     currentMembership.role === "OWNER" ||
     currentMembership.role === "ADMIN";
+  const currentParticipant = meeting.participants[0];
+  const handRaised =
+    !!currentParticipant?.handRaisedAt &&
+    (!currentParticipant.handLoweredAt ||
+      currentParticipant.handLoweredAt < currentParticipant.handRaisedAt);
+  const permissions = {
+    ...getMeetingVideoPermissions({
+      currentUserId: currentUser.id,
+      meetingCreatedByUserId: meeting.createdByUserId,
+      currentUserRole: currentMembership.role,
+      settings: meeting.moderationSettings,
+      overrides: meeting.permissionOverrides as MeetingPermissionOverrideInput[],
+    }),
+    handRaised,
+  };
 
   return (
     <>
@@ -120,6 +150,7 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
           canManage: canManageRecording,
           latestRecording,
         }}
+        permissions={permissions}
       />
     </>
   );
