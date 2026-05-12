@@ -21,8 +21,20 @@ import {
   stopRoomRecording,
 } from "@/lib/meeting-recording";
 import { createLiveKitMeetingRoomName } from "@/lib/livekit-room";
+import { enforceLiveKitVideoPermissions } from "@/lib/livekit-admin";
+import {
+  canEditMeetingSharedNote,
+  canEditMeetingWhiteboard,
+  canManageMeetingParticipantPermissions,
+  canModerateMeeting,
+  getMeetingVideoPermissions,
+  type MeetingPermissionState,
+  type MeetingPermissionTargetType,
+  type MeetingPermissionOverrideInput,
+} from "@/lib/meeting-permissions";
 import { createDefaultNoteTitle, sanitizeNoteTitle } from "@/lib/note-title";
 import { prisma } from "@/lib/prisma";
+import { RateLimits } from "@/lib/rate-limit";
 
 const participantStatuses = ["ACCEPTED", "DECLINED"] as const;
 const meetingNoteScopes = ["SHARED", "PRIVATE"] as const;
@@ -32,6 +44,8 @@ const noteArtifactTypes = {
   WHITEBOARD: "WHITEBOARD",
 } as const;
 const activeRecordingStatuses = ["STARTING", "ACTIVE", "STOPPING"] as const;
+const meetingPermissionTargets = ["SHARED_NOTES", "WHITEBOARD", "MICROPHONE", "CAMERA", "SCREEN_SHARE"] as const;
+const meetingPermissionStates = ["ALLOWED", "DENIED", "REQUESTED"] as const;
 
 export async function updateCurrentUserParticipantStatus(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
@@ -846,6 +860,193 @@ export async function createMeetingSharedNote(formData: FormData) {
   await createMeetingNote(formData);
 }
 
+export async function requestMeetingPermission(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const meetingId = String(formData.get("meetingId") ?? "");
+  const targetTypeValue = String(formData.get("targetType") ?? "");
+  const artifactId = getOptionalFormString(formData.get("artifactId"));
+
+  if (!workspaceId || !meetingId || !isMeetingPermissionTarget(targetTypeValue)) {
+    return;
+  }
+
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    return;
+  }
+
+  const [meeting, membership, artifact] = await Promise.all([
+    prisma.meeting.findFirst({
+      where: {
+        id: meetingId,
+        workspaceId,
+      },
+      select: {
+        id: true,
+      },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId: currentUser.id,
+        },
+      },
+      select: {
+        status: true,
+      },
+    }),
+    artifactId
+      ? prisma.meetingArtifact.findFirst({
+          where: {
+            id: artifactId,
+            meetingId,
+          },
+          select: {
+            id: true,
+          },
+        })
+      : null,
+  ]);
+
+  if (!meeting || membership?.status !== "ACTIVE" || (artifactId && !artifact)) {
+    return;
+  }
+
+  await upsertMeetingPermissionOverride({
+    meetingId,
+    userId: currentUser.id,
+    targetType: targetTypeValue,
+    artifactId,
+    state: "REQUESTED",
+    grantedByUserId: null,
+  });
+
+  revalidateMeetingPaths(workspaceId, meetingId);
+}
+
+export async function setMeetingPermissionOverride(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const meetingId = String(formData.get("meetingId") ?? "");
+  const userId = String(formData.get("userId") ?? "");
+  const targetTypeValue = String(formData.get("targetType") ?? "");
+  const stateValue = String(formData.get("state") ?? "");
+  const artifactId = getOptionalFormString(formData.get("artifactId"));
+
+  if (
+    !workspaceId ||
+    !meetingId ||
+    !userId ||
+    !isMeetingPermissionTarget(targetTypeValue) ||
+    !isMeetingPermissionState(stateValue)
+  ) {
+    return;
+  }
+
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    return;
+  }
+
+  const [meeting, currentMembership, targetParticipant, targetMembership, artifact] = await Promise.all([
+    prisma.meeting.findFirst({
+      where: {
+        id: meetingId,
+        workspaceId,
+      },
+      select: {
+        id: true,
+        createdByUserId: true,
+        moderationSettings: true,
+      },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId: currentUser.id,
+        },
+      },
+      select: {
+        role: true,
+        status: true,
+      },
+    }),
+    prisma.meetingParticipant.findFirst({
+      where: {
+        meetingId,
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId,
+        },
+      },
+      select: {
+        role: true,
+        status: true,
+      },
+    }),
+    artifactId
+      ? prisma.meetingArtifact.findFirst({
+          where: {
+            id: artifactId,
+            meetingId,
+          },
+          select: {
+            id: true,
+          },
+        })
+      : null,
+  ]);
+
+  if (
+    !meeting ||
+    currentMembership?.status !== "ACTIVE" ||
+    !targetParticipant ||
+    targetMembership?.status !== "ACTIVE" ||
+    (artifactId && !artifact) ||
+    !canManageMeetingParticipantPermissions({
+      currentUserId: currentUser.id,
+      meetingCreatedByUserId: meeting.createdByUserId,
+      currentUserRole: currentMembership.role,
+      targetUserId: userId,
+      targetUserRole: targetMembership.role,
+    })
+  ) {
+    return;
+  }
+
+  await upsertMeetingPermissionOverride({
+    meetingId,
+    userId,
+    targetType: targetTypeValue,
+    artifactId,
+    state: stateValue,
+    grantedByUserId: currentUser.id,
+  });
+
+  if (isVideoPermissionTarget(targetTypeValue)) {
+    await enforceParticipantVideoPermission({
+      meetingId,
+      meetingCreatedByUserId: meeting.createdByUserId,
+      settings: meeting.moderationSettings,
+      targetUserId: userId,
+      targetUserRole: targetMembership.role,
+    });
+  }
+
+  revalidateMeetingPaths(workspaceId, meetingId);
+}
+
 export async function createMeetingNote(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
   const meetingId = String(formData.get("meetingId") ?? "");
@@ -878,9 +1079,22 @@ export async function createMeetingNote(formData: FormData) {
       select: {
         id: true,
         title: true,
+        createdByUserId: true,
         startsAt: true,
         endsAt: true,
         canceledAt: true,
+        moderationSettings: true,
+        permissionOverrides: {
+          where: {
+            userId: currentUser.id,
+          },
+          select: {
+            userId: true,
+            targetType: true,
+            artifactId: true,
+            state: true,
+          },
+        },
       },
     }),
     prisma.workspaceMember.findUnique({
@@ -891,6 +1105,7 @@ export async function createMeetingNote(formData: FormData) {
         },
       },
       select: {
+        role: true,
         status: true,
       },
     }),
@@ -902,6 +1117,19 @@ export async function createMeetingNote(formData: FormData) {
 
   if (!canEditMeetingNotes(getMeetingLifecycle(meeting))) {
     redirect(`/workspaces/${workspaceId}/meetings/${meetingId}?meeting=read-only`);
+  }
+
+  if (
+    scope === "SHARED" &&
+    !(type === "WHITEBOARD" ? canEditMeetingWhiteboard : canEditMeetingSharedNote)({
+      currentUserId: currentUser.id,
+      meetingCreatedByUserId: meeting.createdByUserId,
+      currentUserRole: membership.role,
+      settings: meeting.moderationSettings,
+      overrides: meeting.permissionOverrides,
+    })
+  ) {
+    redirect(`/workspaces/${workspaceId}/meetings/${meetingId}?meeting=permission-denied`);
   }
 
   const note = await prisma.note.create({
@@ -992,13 +1220,27 @@ export async function saveMeetingNote(formData: FormData) {
         },
       },
       select: {
+        id: true,
         noteId: true,
         source: true,
         meeting: {
           select: {
+            createdByUserId: true,
             startsAt: true,
             endsAt: true,
             canceledAt: true,
+            moderationSettings: true,
+            permissionOverrides: {
+              where: {
+                userId: currentUser.id,
+              },
+              select: {
+                userId: true,
+                targetType: true,
+                artifactId: true,
+                state: true,
+              },
+            },
           },
         },
         note: {
@@ -1018,6 +1260,7 @@ export async function saveMeetingNote(formData: FormData) {
         },
       },
       select: {
+        role: true,
         status: true,
       },
     }),
@@ -1028,7 +1271,15 @@ export async function saveMeetingNote(formData: FormData) {
     !artifact.note ||
     membership?.status !== "ACTIVE" ||
     isLockedMeetingNoteArtifact(artifact) ||
-    !canEditNote(artifact.note, currentUser.id)
+    !canEditMeetingTextNoteArtifact({
+      artifactId: artifact.id,
+      currentUserId: currentUser.id,
+      currentUserRole: membership.role,
+      meetingCreatedByUserId: artifact.meeting.createdByUserId,
+      note: artifact.note,
+      overrides: artifact.meeting.permissionOverrides,
+      settings: artifact.meeting.moderationSettings,
+    })
   ) {
     return;
   }
@@ -1101,13 +1352,27 @@ export async function saveMeetingWhiteboard(formData: FormData) {
         },
       },
       select: {
+        id: true,
         noteId: true,
         source: true,
         meeting: {
           select: {
+            createdByUserId: true,
             startsAt: true,
             endsAt: true,
             canceledAt: true,
+            moderationSettings: true,
+            permissionOverrides: {
+              where: {
+                userId: currentUser.id,
+              },
+              select: {
+                userId: true,
+                targetType: true,
+                artifactId: true,
+                state: true,
+              },
+            },
           },
         },
         note: {
@@ -1127,6 +1392,7 @@ export async function saveMeetingWhiteboard(formData: FormData) {
         },
       },
       select: {
+        role: true,
         status: true,
       },
     }),
@@ -1137,7 +1403,15 @@ export async function saveMeetingWhiteboard(formData: FormData) {
     !artifact.note ||
     membership?.status !== "ACTIVE" ||
     isLockedMeetingNoteArtifact(artifact) ||
-    !canEditNote(artifact.note, currentUser.id)
+    !canEditMeetingWhiteboardArtifact({
+      artifactId: artifact.id,
+      currentUserId: currentUser.id,
+      currentUserRole: membership.role,
+      meetingCreatedByUserId: artifact.meeting.createdByUserId,
+      note: artifact.note,
+      overrides: artifact.meeting.permissionOverrides,
+      settings: artifact.meeting.moderationSettings,
+    })
   ) {
     return;
   }
@@ -1161,6 +1435,127 @@ export async function saveMeetingWhiteboard(formData: FormData) {
 
   revalidateMeetingPaths(workspaceId, meetingId);
   revalidatePath(`/workspaces/${workspaceId}/notes/${artifact.noteId}`);
+}
+
+export async function raiseHand(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const meetingId = String(formData.get("meetingId") ?? "");
+
+  if (!workspaceId || !meetingId) return;
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return;
+
+  const [participant, membership, meeting] = await Promise.all([
+    prisma.meetingParticipant.findFirst({
+      where: { meetingId, userId: currentUser.id, meeting: { workspaceId } },
+      select: { id: true },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { role: true, status: true },
+    }),
+    prisma.meeting.findFirst({
+      where: { id: meetingId, workspaceId },
+      select: { createdByUserId: true, moderationSettings: { select: { handRaiseEnabled: true } } },
+    }),
+  ]);
+
+  if (!participant || membership?.status !== "ACTIVE" || !meeting) return;
+
+  const isModerator = canModerateMeeting({
+    currentUserId: currentUser.id,
+    meetingCreatedByUserId: meeting.createdByUserId,
+    currentUserRole: membership.role,
+  });
+  const handRaiseEnabled = meeting.moderationSettings?.handRaiseEnabled ?? true;
+
+  if (!isModerator && !handRaiseEnabled) return;
+  if (!RateLimits.handRaise(currentUser.id)) return;
+
+  await prisma.meetingParticipant.update({
+    where: { id: participant.id },
+    data: { handRaisedAt: new Date(), handLoweredAt: null },
+  });
+
+  revalidateMeetingPaths(workspaceId, meetingId);
+}
+
+export async function lowerOwnHand(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const meetingId = String(formData.get("meetingId") ?? "");
+
+  if (!workspaceId || !meetingId) return;
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return;
+
+  const participant = await prisma.meetingParticipant.findFirst({
+    where: { meetingId, userId: currentUser.id, meeting: { workspaceId } },
+    select: { id: true },
+  });
+
+  if (!participant) return;
+
+  await prisma.meetingParticipant.update({
+    where: { id: participant.id },
+    data: { handLoweredAt: new Date() },
+  });
+
+  revalidateMeetingPaths(workspaceId, meetingId);
+}
+
+export async function lowerParticipantHand(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const meetingId = String(formData.get("meetingId") ?? "");
+  const userId = String(formData.get("userId") ?? "");
+
+  if (!workspaceId || !meetingId || !userId) return;
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return;
+
+  const [meeting, currentMembership, targetParticipant, targetMembership] = await Promise.all([
+    prisma.meeting.findFirst({
+      where: { id: meetingId, workspaceId },
+      select: { createdByUserId: true },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { role: true, status: true },
+    }),
+    prisma.meetingParticipant.findFirst({
+      where: { meetingId, userId },
+      select: { id: true },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { role: true, status: true },
+    }),
+  ]);
+
+  if (
+    !meeting ||
+    currentMembership?.status !== "ACTIVE" ||
+    !targetParticipant ||
+    targetMembership?.status !== "ACTIVE" ||
+    !canManageMeetingParticipantPermissions({
+      currentUserId: currentUser.id,
+      meetingCreatedByUserId: meeting.createdByUserId,
+      currentUserRole: currentMembership.role,
+      targetUserId: userId,
+      targetUserRole: targetMembership.role,
+    })
+  ) {
+    return;
+  }
+
+  await prisma.meetingParticipant.update({
+    where: { id: targetParticipant.id },
+    data: { handLoweredAt: new Date() },
+  });
+
+  revalidateMeetingPaths(workspaceId, meetingId);
 }
 
 function revalidateMeetingPaths(workspaceId: string, meetingId: string) {
@@ -1345,10 +1740,199 @@ function canEditNote(
   note: {
     ownerUserId: string;
     collaboration: string;
+    visibility?: string;
   },
   currentUserId: string,
 ) {
   return note.ownerUserId === currentUserId || note.collaboration === "COLLABORATIVE";
+}
+
+function canEditMeetingTextNoteArtifact({
+  artifactId,
+  currentUserId,
+  currentUserRole,
+  meetingCreatedByUserId,
+  note,
+  overrides,
+  settings,
+}: {
+  artifactId: string;
+  currentUserId: string;
+  currentUserRole: string;
+  meetingCreatedByUserId: string;
+  note: {
+    ownerUserId: string;
+    collaboration: string;
+    visibility: string;
+  };
+  overrides: {
+    userId: string;
+    targetType: MeetingPermissionTargetType;
+    artifactId: string | null;
+    state: MeetingPermissionState;
+  }[];
+  settings: Parameters<typeof canEditMeetingSharedNote>[0]["settings"];
+}) {
+  if (note.visibility === "PRIVATE") {
+    return canEditNote(note, currentUserId);
+  }
+
+  return canEditMeetingSharedNote({
+    artifactId,
+    currentUserId,
+    currentUserRole,
+    meetingCreatedByUserId,
+    overrides,
+    settings,
+  });
+}
+
+function canEditMeetingWhiteboardArtifact({
+  artifactId,
+  currentUserId,
+  currentUserRole,
+  meetingCreatedByUserId,
+  note,
+  overrides,
+  settings,
+}: {
+  artifactId: string;
+  currentUserId: string;
+  currentUserRole: string;
+  meetingCreatedByUserId: string;
+  note: {
+    ownerUserId: string;
+    collaboration: string;
+    visibility: string;
+  };
+  overrides: {
+    userId: string;
+    targetType: MeetingPermissionTargetType;
+    artifactId: string | null;
+    state: MeetingPermissionState;
+  }[];
+  settings: Parameters<typeof canEditMeetingWhiteboard>[0]["settings"];
+}) {
+  if (note.visibility === "PRIVATE") {
+    return canEditNote(note, currentUserId);
+  }
+
+  return canEditMeetingWhiteboard({
+    artifactId,
+    currentUserId,
+    currentUserRole,
+    meetingCreatedByUserId,
+    overrides,
+    settings,
+  });
+}
+
+function getOptionalFormString(value: FormDataEntryValue | null) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isMeetingPermissionTarget(value: string): value is MeetingPermissionTargetType {
+  return meetingPermissionTargets.includes(value as (typeof meetingPermissionTargets)[number]);
+}
+
+function isMeetingPermissionState(value: string): value is MeetingPermissionState {
+  return meetingPermissionStates.includes(value as (typeof meetingPermissionStates)[number]);
+}
+
+function isVideoPermissionTarget(value: MeetingPermissionTargetType) {
+  return value === "MICROPHONE" || value === "CAMERA" || value === "SCREEN_SHARE";
+}
+
+async function enforceParticipantVideoPermission({
+  meetingCreatedByUserId,
+  meetingId,
+  settings,
+  targetUserId,
+  targetUserRole,
+}: {
+  meetingId: string;
+  meetingCreatedByUserId: string;
+  settings: Parameters<typeof getMeetingVideoPermissions>[0]["settings"];
+  targetUserId: string;
+  targetUserRole: string;
+}) {
+  const overrides = await prisma.meetingPermissionOverride.findMany({
+    where: {
+      meetingId,
+      userId: targetUserId,
+    },
+    select: {
+      userId: true,
+      targetType: true,
+      artifactId: true,
+      state: true,
+    },
+  });
+  const permissions = getMeetingVideoPermissions({
+    currentUserId: targetUserId,
+    meetingCreatedByUserId,
+    currentUserRole: targetUserRole,
+    settings,
+    overrides: overrides as MeetingPermissionOverrideInput[],
+  });
+
+  await enforceLiveKitVideoPermissions({
+    identity: targetUserId,
+    permissions,
+    roomName: createLiveKitMeetingRoomName(meetingId),
+  });
+}
+
+async function upsertMeetingPermissionOverride({
+  artifactId,
+  grantedByUserId,
+  meetingId,
+  state,
+  targetType,
+  userId,
+}: {
+  meetingId: string;
+  userId: string;
+  targetType: MeetingPermissionTargetType;
+  artifactId: string | null;
+  state: MeetingPermissionState;
+  grantedByUserId: string | null;
+}) {
+  const existingOverride = await prisma.meetingPermissionOverride.findFirst({
+    where: {
+      meetingId,
+      userId,
+      targetType,
+      artifactId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (existingOverride) {
+    await prisma.meetingPermissionOverride.update({
+      where: {
+        id: existingOverride.id,
+      },
+      data: {
+        state,
+        grantedByUserId,
+      },
+    });
+    return;
+  }
+
+  await prisma.meetingPermissionOverride.create({
+    data: {
+      meetingId,
+      userId,
+      targetType,
+      artifactId,
+      state,
+      grantedByUserId,
+    },
+  });
 }
 
 function isLockedMeetingNoteArtifact(artifact: {

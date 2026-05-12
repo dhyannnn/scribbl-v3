@@ -1,8 +1,9 @@
-import { AccessToken } from "livekit-server-sdk";
+import { AccessToken, TrackSource } from "livekit-server-sdk";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/current-user";
 import { createLiveKitMeetingRoomName } from "@/lib/livekit-room";
 import { canJoinMeeting, getMeetingLifecycle } from "@/lib/meeting-lifecycle";
+import { getMeetingVideoPermissions, type MeetingPermissionOverrideInput } from "@/lib/meeting-permissions";
 import { isValidClientSessionId } from "@/lib/meeting-video-session";
 import { prisma } from "@/lib/prisma";
 
@@ -42,9 +43,22 @@ export async function POST(request: Request) {
     },
     select: {
       id: true,
+      createdByUserId: true,
       startsAt: true,
       endsAt: true,
       canceledAt: true,
+      moderationSettings: true,
+      permissionOverrides: {
+        where: {
+          userId: currentUser.id,
+        },
+        select: {
+          userId: true,
+          targetType: true,
+          artifactId: true,
+          state: true,
+        },
+      },
       participants: {
         where: {
           userId: currentUser.id,
@@ -63,6 +77,7 @@ export async function POST(request: Request) {
             },
             select: {
               id: true,
+              role: true,
             },
             take: 1,
           },
@@ -83,6 +98,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "This meeting is not open for video yet." }, { status: 409 });
   }
 
+  const currentMembership = meeting.workspace?.members[0];
+
+  if (!currentMembership) {
+    return NextResponse.json({ error: "You do not have access to this meeting." }, { status: 403 });
+  }
+
+  const permissions = getMeetingVideoPermissions({
+    currentUserId: currentUser.id,
+    meetingCreatedByUserId: meeting.createdByUserId,
+    currentUserRole: currentMembership.role,
+    settings: meeting.moderationSettings,
+    overrides: meeting.permissionOverrides as MeetingPermissionOverrideInput[],
+  });
+  const canPublishSources = [
+    permissions.canUseCamera ? TrackSource.CAMERA : null,
+    permissions.canUseMic ? TrackSource.MICROPHONE : null,
+    permissions.canShareScreen ? TrackSource.SCREEN_SHARE : null,
+    permissions.canShareScreen ? TrackSource.SCREEN_SHARE_AUDIO : null,
+  ].filter((source): source is TrackSource => source !== null);
+
   const roomName = createLiveKitMeetingRoomName(meeting.id);
   const token = new AccessToken(livekitApiKey, livekitApiSecret, {
     identity: currentUser.id,
@@ -93,8 +128,9 @@ export async function POST(request: Request) {
   token.addGrant({
     room: roomName,
     roomJoin: true,
-    canPublish: true,
-    canPublishData: true,
+    canPublish: canPublishSources.length > 0,
+    canPublishSources,
+    canPublishData: permissions.canSendReactions || permissions.canRaiseHand || permissions.canModerateVideo,
     canSubscribe: true,
   });
 
@@ -102,6 +138,7 @@ export async function POST(request: Request) {
     roomName,
     serverUrl: livekitUrl,
     token: await token.toJwt(),
+    permissions,
   });
 }
 

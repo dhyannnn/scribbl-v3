@@ -39,4 +39,5 @@ export const RateLimits = {
   accountDelete:     (userId: string) => checkRateLimit(`account-delete:${userId}`,   3, 60 * 60_000),
   passwordUpdate:    (userId: string) => checkRateLimit(`password-update:${userId}`,  5, 60 * 60_000),
   meetingSchedule:   (userId: string) => checkRateLimit(`meeting-schedule:${userId}`,10, 60_000),
+  handRaise:         (userId: string) => checkRateLimit(`hand-raise:${userId}`,      5, 60_000),
 };

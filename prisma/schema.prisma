@@ -140,6 +140,20 @@ enum MeetingRecordingStatus {
   FAILED
 }
 
+enum MeetingPermissionTargetType {
+  SHARED_NOTES
+  WHITEBOARD
+  MICROPHONE
+  CAMERA
+  SCREEN_SHARE
+}
+
+enum MeetingPermissionState {
+  ALLOWED
+  DENIED
+  REQUESTED
+}
+
 enum FileVisibility {
   PRIVATE
   WORKSPACE_SHARED
@@ -165,21 +179,23 @@ model User {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  createdWorkspaces    Workspace[]           @relation("WorkspaceCreator")
-  memberships          WorkspaceMember[]
-  createdChannels      Channel[]             @relation("ChannelCreator")
-  sentMessages         Message[]
-  ownedNotes           Note[]
-  noteShares           NoteCollaborator[]
-  uploadedFiles        File[]
-  createdMeetings      Meeting[]             @relation("MeetingCreator")
-  meetingInvites       MeetingParticipant[]
-  meetingVideoSessions MeetingVideoSession[]
-  meetingArtifacts     MeetingArtifact[]
-  startedRecordings    MeetingRecording[]    @relation("MeetingRecordingStarter")
-  stoppedRecordings    MeetingRecording[]    @relation("MeetingRecordingStopper")
-  sentWorkspaceInvites WorkspaceInvite[]     @relation("WorkspaceInviteInviter")
-  auditLogs            AuditLog[]
+  createdWorkspaces         Workspace[]                 @relation("WorkspaceCreator")
+  memberships               WorkspaceMember[]
+  createdChannels           Channel[]                   @relation("ChannelCreator")
+  sentMessages              Message[]
+  ownedNotes                Note[]
+  noteShares                NoteCollaborator[]
+  uploadedFiles             File[]
+  createdMeetings           Meeting[]                   @relation("MeetingCreator")
+  meetingInvites            MeetingParticipant[]
+  meetingVideoSessions      MeetingVideoSession[]
+  meetingArtifacts          MeetingArtifact[]
+  startedRecordings         MeetingRecording[]          @relation("MeetingRecordingStarter")
+  stoppedRecordings         MeetingRecording[]          @relation("MeetingRecordingStopper")
+  meetingPermissions        MeetingPermissionOverride[] @relation("MeetingPermissionUser")
+  grantedMeetingPermissions MeetingPermissionOverride[] @relation("MeetingPermissionGrantor")
+  sentWorkspaceInvites      WorkspaceInvite[]           @relation("WorkspaceInviteInviter")
+  auditLogs                 AuditLog[]
 }
 
 model Workspace {
@@ -359,24 +375,62 @@ model Meeting {
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   createdBy User       @relation("MeetingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
-  participants  MeetingParticipant[]
-  videoSessions MeetingVideoSession[]
-  artifacts     MeetingArtifact[]
-  recordings    MeetingRecording[]
-  channel       Channel?
+  participants        MeetingParticipant[]
+  videoSessions       MeetingVideoSession[]
+  artifacts           MeetingArtifact[]
+  recordings          MeetingRecording[]
+  channel             Channel?
+  moderationSettings  MeetingModerationSettings?
+  permissionOverrides MeetingPermissionOverride[]
 
   @@index([workspaceId, startsAt])
   @@index([createdByUserId])
 }
 
+model MeetingModerationSettings {
+  meetingId                 String  @id @db.Uuid
+  sharedNotesDefaultEdit    Boolean @default(false)
+  whiteboardDefaultEdit     Boolean @default(false)
+  micDefaultEnabled         Boolean @default(true)
+  cameraDefaultEnabled      Boolean @default(true)
+  screenShareDefaultEnabled Boolean @default(false)
+  reactionsEnabled          Boolean @default(true)
+  handRaiseEnabled          Boolean @default(true)
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+}
+
+model MeetingPermissionOverride {
+  id              String                      @id @default(uuid()) @db.Uuid
+  meetingId       String                      @db.Uuid
+  userId          String                      @db.Uuid
+  targetType      MeetingPermissionTargetType
+  artifactId      String?                     @db.Uuid
+  state           MeetingPermissionState
+  grantedByUserId String?                     @db.Uuid
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+
+  meeting   Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user      User             @relation("MeetingPermissionUser", fields: [userId], references: [id], onDelete: Restrict)
+  grantedBy User?            @relation("MeetingPermissionGrantor", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+  artifact  MeetingArtifact? @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId, targetType, artifactId])
+  @@index([meetingId, targetType])
+  @@index([userId])
+}
+
 model MeetingParticipant {
-  id        String                   @id @default(uuid()) @db.Uuid
-  meetingId String                   @db.Uuid
-  userId    String                   @db.Uuid
-  status    MeetingParticipantStatus @default(INVITED)
-  joinedAt  DateTime?
-  leftAt    DateTime?
-  createdAt DateTime                 @default(now())
+  id            String                   @id @default(uuid()) @db.Uuid
+  meetingId     String                   @db.Uuid
+  userId        String                   @db.Uuid
+  status        MeetingParticipantStatus @default(INVITED)
+  joinedAt      DateTime?
+  leftAt        DateTime?
+  handRaisedAt  DateTime?
+  handLoweredAt DateTime?
+  createdAt     DateTime                 @default(now())
 
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -413,10 +467,11 @@ model MeetingArtifact {
   createdByUserId String                @db.Uuid
   createdAt       DateTime              @default(now())
 
-  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  note      Note?   @relation(fields: [noteId], references: [id], onDelete: SetNull)
-  file      File?   @relation(fields: [fileId], references: [id], onDelete: SetNull)
-  createdBy User    @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  meeting             Meeting                     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  note                Note?                       @relation(fields: [noteId], references: [id], onDelete: SetNull)
+  file                File?                       @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  createdBy           User                        @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  permissionOverrides MeetingPermissionOverride[]
 
   @@index([meetingId])
   @@index([noteId])

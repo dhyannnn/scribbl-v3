@@ -139,19 +139,11 @@ export async function POST(request: Request) {
         workspaceId: parsedRoom.workspaceId,
         deletedAt: null,
         OR: [
-          {
-            visibility: "WORKSPACE_SHARED",
-          },
-          {
-            visibility: "PRIVATE",
-            ownerUserId: currentUser.id,
-          },
+          { visibility: "WORKSPACE_SHARED" },
+          { visibility: "PRIVATE", ownerUserId: currentUser.id },
         ],
       },
       select: {
-        visibility: true,
-        ownerUserId: true,
-        collaboration: true,
         artifacts: {
           select: {
             source: true,
@@ -173,9 +165,7 @@ export async function POST(request: Request) {
           userId: currentUser.id,
         },
       },
-      select: {
-        status: true,
-      },
+      select: { status: true },
     }),
   ]);
 
@@ -183,19 +173,18 @@ export async function POST(request: Request) {
     return Response.json({ error: "forbidden", reason: "No room access." }, { status: 403 });
   }
 
+  // READ_ACCESS only when the meeting has ended and the note is locked.
+  // Edit permission (canEdit prop + server action) is enforced at the TipTap/
+  // action layer — not here. Gating Liveblocks auth on permissions caused stale
+  // READ_ACCESS tokens to persist after a moderator granted access mid-session.
   const lockedByMeeting = note.artifacts.some(
     (artifact) =>
       artifact.source === "CREATED_IN_MEETING" &&
-      note.visibility === "WORKSPACE_SHARED" &&
       artifact.meeting &&
       !canEditMeetingNotes(getMeetingLifecycle(artifact.meeting)),
   );
 
-  if (!lockedByMeeting && (note.ownerUserId === currentUser.id || note.collaboration === "COLLABORATIVE")) {
-    session.allow(room, session.FULL_ACCESS);
-  } else {
-    session.allow(room, session.READ_ACCESS);
-  }
+  session.allow(room, lockedByMeeting ? session.READ_ACCESS : session.FULL_ACCESS);
 
   const { status, body } = await session.authorize();
 

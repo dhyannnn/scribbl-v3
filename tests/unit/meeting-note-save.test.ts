@@ -22,12 +22,23 @@ describe("saveMeetingNote", () => {
     mockGetCurrentUser.mockResolvedValue(user);
     prismaMock.workspaceMember.findUnique.mockResolvedValue(makeMembership(workspace.id, user.id));
     prismaMock.meetingArtifact.findFirst.mockResolvedValue({
+      id: "00000000-0000-0000-0000-000000000101",
       noteId,
       source: "CREATED_IN_MEETING",
       meeting: {
+        createdByUserId: user.id,
         startsAt: new Date(Date.now() + 60 * 60 * 1000),
         endsAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
         canceledAt: null,
+        moderationSettings: null,
+        permissionOverrides: [
+          {
+            userId: user.id,
+            targetType: "SHARED_NOTES",
+            artifactId: "00000000-0000-0000-0000-000000000101",
+            state: "ALLOWED",
+          },
+        ],
       },
       note: {
         ownerUserId: user.id,

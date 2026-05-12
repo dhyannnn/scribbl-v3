@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { MeetingNotesSection, type NoteArtifactData } from "@/components/MeetingNotesSection";
 import { MeetingRouteRefresher } from "@/components/MeetingRouteRefresher";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
+import { PermissionSubmitButton } from "@/components/PermissionSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
 import { createChatRoomId } from "@/lib/liveblocks-room";
@@ -18,6 +19,15 @@ import {
   type MeetingLifecycleState,
 } from "@/lib/meeting-lifecycle";
 import { prisma } from "@/lib/prisma";
+import {
+  canEditMeetingSharedNote,
+  canEditMeetingWhiteboard,
+  canManageMeetingParticipantPermissions,
+  getDefaultPermission,
+  getMeetingVideoPermissions,
+  type MeetingPermissionOverrideInput,
+  type MeetingPermissionTargetType,
+} from "@/lib/meeting-permissions";
 import { CancelMeetingForm } from "../CancelMeetingForm";
 import { updateMeetingDetails } from "../actions";
 import { MeetingChatPanel } from "./MeetingChatPanel";
@@ -25,7 +35,8 @@ import { FloatingMeetingVideo } from "./video/FloatingMeetingVideo";
 import {
   attachFileToMeeting,
   attachNoteToMeeting,
-  createMeetingNote,
+  lowerParticipantHand,
+  setMeetingPermissionOverride,
   updateCurrentUserParticipantStatus,
 } from "./actions";
 
@@ -98,6 +109,8 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           status: true,
           joinedAt: true,
           leftAt: true,
+          handRaisedAt: true,
+          handLoweredAt: true,
           user: {
             select: {
               displayName: true,
@@ -237,6 +250,31 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           },
         },
       },
+      moderationSettings: true,
+      permissionOverrides: {
+        select: {
+          id: true,
+          userId: true,
+          targetType: true,
+          artifactId: true,
+          state: true,
+          user: {
+            select: {
+              displayName: true,
+              email: true,
+            },
+          },
+          artifact: {
+            select: {
+              note: {
+                select: {
+                  title: true,
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
 
@@ -283,11 +321,34 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
   const currentParticipant = meeting.participants.find(
     (participant) => participant.userId === currentUser.id,
   );
-  const currentMembership = meeting.workspace.members.find((member) => member.userId === currentUser.id);
+  const workspaceMembers = meeting.workspace.members;
+  const currentMembership = workspaceMembers.find((member) => member.userId === currentUser.id);
   const canManageMeeting =
     meeting.createdByUserId === currentUser.id ||
     currentMembership?.role === "OWNER" ||
     currentMembership?.role === "ADMIN";
+  const meetingPermissionOverrides = meeting.permissionOverrides as MeetingPermissionOverrideInput[];
+  const pendingRequests = meeting.permissionOverrides.filter(
+    (override) =>
+      override.state === "REQUESTED" &&
+      canManageMeetingParticipantPermissions({
+        currentUserId: currentUser.id,
+        meetingCreatedByUserId: meeting.createdByUserId,
+        currentUserRole: currentMembership?.role,
+        targetUserId: override.userId,
+        targetUserRole: workspaceMembers.find((m) => m.userId === override.userId)?.role,
+      }),
+  );
+  const permissionContext = {
+    currentUserId: currentUser.id,
+    meetingCreatedByUserId: meeting.createdByUserId,
+    currentUserRole: currentMembership?.role,
+    settings: meeting.moderationSettings,
+    overrides: meetingPermissionOverrides,
+  };
+  const videoPermissions = getMeetingVideoPermissions(permissionContext);
+  const currentParticipantHandRaised = isHandRaised(currentParticipant);
+  const raisedHandParticipants = meeting.participants.filter(isHandRaised);
   const canModerateChat = currentMembership?.role === "OWNER" || currentMembership?.role === "ADMIN";
   const lifecycle = getMeetingLifecycle(meeting);
   const meetingEndsAt = getMeetingEndAt(meeting);
@@ -393,10 +454,10 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
 
   // Convert Prisma artifacts to the serialisable shape the client component expects
   const sharedNoteSlotArtifacts = sharedNoteArtifacts
-    .map(toNoteArtifactData)
+    .map((artifact) => toNoteArtifactData(artifact, permissionContext))
     .filter((a): a is NoteArtifactData => a !== null);
   const privateNoteSlotArtifacts = privateNoteArtifacts
-    .map(toNoteArtifactData)
+    .map((artifact) => toNoteArtifactData(artifact, permissionContext))
     .filter((a): a is NoteArtifactData => a !== null);
   const selectedSharedData = selectedSharedArtifact?.noteId
     ? (sharedNoteSlotArtifacts.find((a) => a.noteId === selectedSharedArtifact.noteId) ?? null)
@@ -408,6 +469,30 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
   return (
     <main data-meeting-hub-main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
       <MeetingRouteRefresher />
+      {(raisedHandParticipants.length > 0 || pendingRequests.length > 0) ? (
+        <div className="sticky top-0 z-40 flex flex-col gap-0 divide-y divide-[#e8e0b5] border-b border-[#e8e0b5] bg-[#fffceb]">
+          {raisedHandParticipants.length > 0 ? (
+            <div className="flex items-center justify-between gap-3 px-5 py-2 sm:px-8 lg:px-10">
+              <p className="text-sm font-semibold text-[#7a5a15]">
+                ✋ {formatRaisedHandNames(raisedHandParticipants)}
+              </p>
+              <a href="#meeting-participants" className="shrink-0 text-sm font-medium text-[#7a5a15] underline underline-offset-2">
+                View
+              </a>
+            </div>
+          ) : null}
+          {pendingRequests.length > 0 ? (
+            <div className="flex items-center justify-between gap-3 px-5 py-2 sm:px-8 lg:px-10">
+              <p className="text-sm font-semibold text-[#7a5a15]">
+                📝 {pendingRequests.length} access {pendingRequests.length === 1 ? "request" : "requests"} pending
+              </p>
+              <a href="#meeting-participants" className="shrink-0 text-sm font-medium text-[#7a5a15] underline underline-offset-2">
+                View
+              </a>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div
         data-meeting-hub-shell
         className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10"
@@ -580,6 +665,9 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               canManage: canManageMeeting,
               latestRecording,
             }}
+            permissions={{ ...videoPermissions, handRaised: currentParticipantHandRaised }}
+          raisedHandCount={raisedHandParticipants.length}
+          pendingRequestCount={pendingRequests.length}
           />
         ) : null}
 
@@ -602,6 +690,11 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           <div className="flex flex-wrap items-center gap-3 text-[#66685f]">
             <span>{meeting.participants.length} participant{meeting.participants.length === 1 ? "" : "s"}</span>
             <span>{countActiveParticipants(meeting.participants)} in session</span>
+            {pendingRequests.length > 0 ? (
+              <Link href="#meeting-participants" className="font-medium text-[#7a5a15]">
+                {pendingRequests.length} pending {pendingRequests.length === 1 ? "request" : "requests"}
+              </Link>
+            ) : null}
             <Link href="#meeting-chat" className="font-medium text-[#2f604b]">
               Chat
             </Link>
@@ -612,21 +705,92 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
         </section>
 
         <section data-split-stack className="grid gap-6 xl:grid-cols-3">
-            <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-semibold">Participants</h2>
-              <div className="mt-5 grid gap-3">
+            <section id="meeting-participants" className="flex min-h-0 flex-col rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm xl:col-span-2 xl:row-span-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="flex items-center gap-2 text-xl font-semibold">
+                    Participants
+                    {pendingRequests.length > 0 ? (
+                      <span className="inline-flex items-center rounded-full bg-[#fff7df] px-2 py-0.5 text-xs font-semibold text-[#7a5a15]">
+                        {pendingRequests.length}
+                      </span>
+                    ) : null}
+                  </h2>
+                  <p className="mt-1 text-sm text-[#66685f]">
+                    {meeting.participants.length} total / {countActiveParticipants(meeting.participants)} in session
+                  </p>
+                </div>
+              </div>
+              {pendingRequests.length > 0 ? (
+                <PendingPermissionRequestsPanel
+                  workspaceId={id}
+                  meetingId={meeting.id}
+                  pendingRequests={pendingRequests}
+                />
+              ) : null}
+              <div className="mt-4 min-h-0 max-h-[560px] overflow-y-auto rounded-md border border-[#e6e6dc]">
+                <div className="sticky top-0 z-10 hidden grid-cols-[minmax(0,1fr)_110px_220px] gap-3 border-b border-[#e6e6dc] bg-[#fbfbf8] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#777970] lg:grid">
+                  <span>Participant</span>
+                  <span>Status</span>
+                  <span>Moderation</span>
+                </div>
                 {meeting.participants.map((participant) => (
                   <div
                     key={participant.id}
-                    className="flex items-center justify-between gap-3 border-b border-[#e6e6dc] pb-3 last:border-0"
+                    className="grid gap-2 border-b border-[#e6e6dc] px-3 py-2.5 last:border-0 lg:grid-cols-[minmax(0,1fr)_110px_220px] lg:items-start"
                   >
-                    <div>
-                      <p className="font-medium">{participant.user.displayName}</p>
-                      <p className="text-sm text-[#777970]">{participant.user.email}</p>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{participant.user.displayName}</p>
+                      <p className="truncate text-sm text-[#777970]">{participant.user.email}</p>
                     </div>
-                    <span className="rounded-md bg-[#e7eee7] px-3 py-1 text-xs font-medium text-[#2f604b]">
-                      {formatParticipantStatus(participant.status, participant.joinedAt, participant.leftAt)}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="w-fit rounded-md bg-[#e7eee7] px-3 py-1 text-xs font-medium text-[#2f604b]">
+                        {formatParticipantStatus(participant.status, participant.joinedAt, participant.leftAt)}
+                      </span>
+                      {isHandRaised(participant) ? (
+                        <span className="w-fit rounded-md bg-[#fff7df] px-2 py-1 text-xs font-semibold text-[#7a5a15]">
+                          ✋ Hand raised
+                        </span>
+                      ) : null}
+                    </div>
+                    {canManageMeetingParticipantPermissions({
+                      ...permissionContext,
+                      targetUserId: participant.userId,
+                      targetUserRole: workspaceMembers.find((member) => member.userId === participant.userId)?.role,
+                    }) ? (
+                      <div className="flex flex-col gap-1.5">
+                        {isHandRaised(participant) ? (
+                          <form action={lowerParticipantHand}>
+                            <input type="hidden" name="workspaceId" value={id} />
+                            <input type="hidden" name="meetingId" value={meeting.id} />
+                            <input type="hidden" name="userId" value={participant.userId} />
+                            <PendingSubmitButton
+                              pendingLabel="Lowering..."
+                              className="min-h-8 rounded-md border border-[#c8c8bd] bg-white px-3 text-xs font-medium text-[#4d4f47] transition hover:bg-[#f7f7f2] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Lower Hand
+                            </PendingSubmitButton>
+                          </form>
+                        ) : null}
+                        <ParticipantPermissionControls
+                          workspaceId={id}
+                          meetingId={meeting.id}
+                          userId={participant.userId}
+                          overrides={meetingPermissionOverrides}
+                          settings={meeting.moderationSettings}
+                          selectedArtifact={
+                            selectedSharedArtifact?.id && selectedSharedArtifact.note
+                              ? {
+                                  id: selectedSharedArtifact.id,
+                                  targetType:
+                                    selectedSharedArtifact.type === "WHITEBOARD" ? "WHITEBOARD" : "SHARED_NOTES",
+                                  label: selectedSharedArtifact.type === "WHITEBOARD" ? "Board drawing" : "Shared note writing",
+                                }
+                              : null
+                          }
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -716,7 +880,6 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
         <MeetingNotesSection
           workspaceId={id}
           meetingId={meeting.id}
-          currentUserId={currentUser.id}
           canEditNotes={canEditNotes}
           shared={{
             selected: selectedSharedData,
@@ -861,6 +1024,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
 }
 
 type ArtifactWithNote = {
+  id: string;
   noteId: string | null;
   source: string;
   type: string;
@@ -897,6 +1061,298 @@ type RecordingCard = {
     sizeBytes: number | null;
   } | null;
 };
+
+function ParticipantPermissionControls({
+  meetingId,
+  overrides,
+  selectedArtifact,
+  settings,
+  userId,
+  workspaceId,
+}: {
+  meetingId: string;
+  overrides: MeetingPermissionOverrideInput[];
+  selectedArtifact: {
+    id: string;
+    label: string;
+    targetType: "SHARED_NOTES" | "WHITEBOARD";
+  } | null;
+  settings: Parameters<typeof getDefaultPermission>[1];
+  userId: string;
+  workspaceId: string;
+}) {
+  const controls = [
+    { label: "Mic", targetType: "MICROPHONE" as const },
+    { label: "Camera", targetType: "CAMERA" as const },
+    { label: "Screen share", targetType: "SCREEN_SHARE" as const },
+    ...(selectedArtifact
+      ? [
+          {
+            label: selectedArtifact.label,
+            targetType: selectedArtifact.targetType,
+            artifactId: selectedArtifact.id,
+          },
+        ]
+      : []),
+  ];
+
+  const permissionRows = controls.map((control) => {
+    const status = getPermissionStatus({
+          artifactId: control.artifactId,
+          overrides,
+          targetType: control.targetType,
+          userId,
+          settings,
+        });
+    return {
+      ...control,
+      key: `${control.targetType}:${control.artifactId ?? "meeting"}`,
+      nextState: status.allowed ? ("DENIED" as const) : ("ALLOWED" as const),
+      status,
+    };
+  });
+  const blockedCount = permissionRows.filter((row) => !row.status.allowed).length;
+  const requestedCount = permissionRows.filter((row) => row.status.source === "requested").length;
+
+  return (
+    <details className="group w-full min-w-0">
+      <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-2.5 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] [&::-webkit-details-marker]:hidden">
+        <span>Permissions</span>
+        <span className="truncate text-xs font-normal text-[#66685f]">
+          {requestedCount > 0 ? `${requestedCount} requested` : blockedCount > 0 ? `${blockedCount} blocked` : "All allowed"}
+        </span>
+      </summary>
+      <div className="mt-2 grid gap-1 rounded-md border border-[#e6e6dc] bg-[#fbfbf8] p-1.5">
+        {permissionRows.map((row) => (
+          <div
+            key={row.key}
+            className="grid gap-1.5 rounded-sm px-1.5 py-1.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+          >
+            <span className="truncate text-sm font-medium text-[#4d4f47]">{row.label}</span>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className={getPermissionBadgeClassName(row.status.allowed, row.status.source)}>
+                {row.status.label}
+              </span>
+              <PermissionOverrideButton
+                workspaceId={workspaceId}
+                meetingId={meetingId}
+                userId={userId}
+                targetType={row.targetType}
+                state={row.nextState}
+                artifactId={row.artifactId}
+                label={row.status.allowed ? "Block" : "Allow"}
+                variant={row.status.allowed ? "danger" : "primary"}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function PermissionOverrideButton({
+  artifactId,
+  label,
+  meetingId,
+  variant,
+  state,
+  targetType,
+  userId,
+  workspaceId,
+}: {
+  artifactId?: string;
+  label: string;
+  meetingId: string;
+  variant: "danger" | "primary";
+  state: "ALLOWED" | "DENIED";
+  targetType: "SHARED_NOTES" | "WHITEBOARD" | "MICROPHONE" | "CAMERA" | "SCREEN_SHARE";
+  userId: string;
+  workspaceId: string;
+}) {
+  return (
+    <form action={setMeetingPermissionOverride}>
+      <input type="hidden" name="workspaceId" value={workspaceId} />
+      <input type="hidden" name="meetingId" value={meetingId} />
+      <input type="hidden" name="userId" value={userId} />
+      <input type="hidden" name="targetType" value={targetType} />
+      <input type="hidden" name="state" value={state} />
+      {artifactId ? <input type="hidden" name="artifactId" value={artifactId} /> : null}
+      <PermissionSubmitButton
+        meetingId={meetingId}
+        targetType={targetType}
+        pendingLabel="Saving..."
+        className={getPermissionButtonClassName(variant)}
+      >
+        {label}
+      </PermissionSubmitButton>
+    </form>
+  );
+}
+
+function PendingPermissionRequestsPanel({
+  meetingId,
+  pendingRequests,
+  workspaceId,
+}: {
+  meetingId: string;
+  pendingRequests: Array<{
+    userId: string;
+    targetType: MeetingPermissionTargetType;
+    artifactId: string | null;
+    user: { displayName: string; email: string };
+    artifact: { note: { title: string } | null } | null;
+  }>;
+  workspaceId: string;
+}) {
+  return (
+    <div className="mt-4 rounded-md border border-[#e8e0b5] bg-[#fffceb] p-4">
+      <p className="text-sm font-semibold text-[#7a5a15]">
+        {pendingRequests.length} pending permission {pendingRequests.length === 1 ? "request" : "requests"}
+      </p>
+      <div className="mt-3 grid gap-2">
+        {pendingRequests.map((request) => (
+          <div
+            key={`${request.userId}:${request.targetType}:${request.artifactId ?? "meeting"}`}
+            className="grid gap-1.5 rounded-md border border-[#e8e0b5] bg-white px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-[#20201d]">{request.user.displayName}</p>
+              <p className="truncate text-xs text-[#777970]">
+                {getPermissionTargetLabel(request.targetType)}
+                {request.artifact?.note?.title ? ` — ${request.artifact.note.title}` : ""}
+              </p>
+            </div>
+            <div className="flex gap-1.5">
+              <PermissionOverrideButton
+                workspaceId={workspaceId}
+                meetingId={meetingId}
+                userId={request.userId}
+                targetType={request.targetType}
+                state="ALLOWED"
+                artifactId={request.artifactId ?? undefined}
+                label="Allow"
+                variant="primary"
+              />
+              <PermissionOverrideButton
+                workspaceId={workspaceId}
+                meetingId={meetingId}
+                userId={request.userId}
+                targetType={request.targetType}
+                state="DENIED"
+                artifactId={request.artifactId ?? undefined}
+                label="Deny"
+                variant="danger"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function getPermissionTargetLabel(targetType: MeetingPermissionTargetType) {
+  switch (targetType) {
+    case "SHARED_NOTES":
+      return "Shared note writing";
+    case "WHITEBOARD":
+      return "Board drawing";
+    case "MICROPHONE":
+      return "Microphone";
+    case "CAMERA":
+      return "Camera";
+    case "SCREEN_SHARE":
+      return "Screen share";
+  }
+}
+
+function getPermissionStatus({
+  artifactId,
+  overrides,
+  settings,
+  targetType,
+  userId,
+}: {
+  artifactId?: string;
+  overrides: MeetingPermissionOverrideInput[];
+  settings: Parameters<typeof getDefaultPermission>[1];
+  targetType: MeetingPermissionTargetType;
+  userId: string;
+}) {
+  const override =
+    overrides.find(
+      (item) =>
+        item.userId === userId &&
+        item.targetType === targetType &&
+        item.artifactId === (artifactId ?? null),
+    ) ??
+    overrides.find(
+      (item) =>
+        item.userId === userId &&
+        item.targetType === targetType &&
+        item.artifactId === null,
+    );
+
+  if (override?.state === "REQUESTED") {
+    return {
+      allowed: false,
+      label: "Requested",
+      source: "requested" as const,
+    };
+  }
+
+  if (override?.state === "ALLOWED") {
+    return {
+      allowed: true,
+      label: "Allowed",
+      source: "override" as const,
+    };
+  }
+
+  if (override?.state === "DENIED") {
+    return {
+      allowed: false,
+      label: "Blocked",
+      source: "override" as const,
+    };
+  }
+
+  const allowedByDefault = getDefaultPermission(targetType, settings);
+
+  return {
+    allowed: allowedByDefault,
+    label: allowedByDefault ? "Allowed by default" : "Blocked by default",
+    source: "default" as const,
+  };
+}
+
+function getPermissionBadgeClassName(
+  allowed: boolean,
+  source: "default" | "override" | "requested",
+) {
+  if (source === "requested") {
+    return "rounded-md bg-[#fff7df] px-2 py-1 text-[11px] font-semibold text-[#7a5a15]";
+  }
+
+  if (allowed) {
+    return source === "default"
+      ? "rounded-md bg-[#e7eee7] px-2 py-1 text-[11px] font-semibold text-[#2f604b]"
+      : "rounded-md bg-[#dff4e5] px-2 py-1 text-[11px] font-semibold text-[#1d6a3b]";
+  }
+
+  return source === "default"
+    ? "rounded-md bg-[#ecece4] px-2 py-1 text-[11px] font-semibold text-[#55584f]"
+    : "rounded-md bg-[#fff0ed] px-2 py-1 text-[11px] font-semibold text-[#7a3434]";
+}
+
+function getPermissionButtonClassName(variant: "danger" | "primary") {
+  if (variant === "danger") {
+    return "min-h-8 w-full rounded-md border border-[#b65b5b] bg-white px-3 text-xs font-medium text-[#7a3434] transition hover:bg-[#fff7f5] disabled:cursor-not-allowed disabled:opacity-60 sm:w-16";
+  }
+
+  return "min-h-8 w-full rounded-md border border-[#2f604b] bg-white px-3 text-xs font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60 sm:w-16";
+}
 
 function RecordingStatusPanel({
   activeRecording,
@@ -958,9 +1414,34 @@ function RecordingStatusPanel({
 
 
 
-function toNoteArtifactData(artifact: ArtifactWithNote) {
+function toNoteArtifactData(
+  artifact: ArtifactWithNote,
+  permissionContext: {
+    currentUserId: string;
+    meetingCreatedByUserId: string;
+    currentUserRole?: string | null;
+    settings: Parameters<typeof canEditMeetingSharedNote>[0]["settings"];
+    overrides: MeetingPermissionOverrideInput[];
+  },
+) {
   if (!artifact.noteId || !artifact.note) return null;
+  const permissionState =
+    permissionContext.overrides.find(
+      (override) =>
+        override.userId === permissionContext.currentUserId &&
+        override.artifactId === artifact.id &&
+        override.targetType === (artifact.note?.type === "WHITEBOARD" ? "WHITEBOARD" : "SHARED_NOTES"),
+    )?.state ?? null;
+  const canEdit =
+    artifact.note.visibility === "PRIVATE"
+      ? artifact.note.ownerUserId === permissionContext.currentUserId ||
+        artifact.note.collaboration === "COLLABORATIVE"
+      : artifact.note.type === "WHITEBOARD"
+        ? canEditMeetingWhiteboard({ ...permissionContext, artifactId: artifact.id })
+        : canEditMeetingSharedNote({ ...permissionContext, artifactId: artifact.id });
+
   return {
+    artifactId: artifact.id,
     noteId: artifact.noteId,
     noteType: artifact.note.type as "TEXT" | "WHITEBOARD",
     noteTitle: artifact.note.title,
@@ -968,6 +1449,8 @@ function toNoteArtifactData(artifact: ArtifactWithNote) {
     noteCollaboration: artifact.note.collaboration,
     noteUpdatedAt: artifact.note.updatedAt instanceof Date ? artifact.note.updatedAt.toISOString() : null,
     noteOwnerDisplayName: artifact.note.owner?.displayName ?? null,
+    canEdit,
+    permissionState,
   };
 }
 
@@ -1022,6 +1505,8 @@ function getMeetingStatusMessage(status?: string) {
       return "You do not have permission to change this meeting.";
     case "read-only":
       return "This meeting is read-only now.";
+    case "permission-denied":
+      return "You do not have permission for that meeting action yet.";
     default:
       return null;
   }
@@ -1127,6 +1612,22 @@ function getMeetingStatusBadgeClassName(state: MeetingLifecycleState) {
   }
 
   return "rounded-md bg-[#f1f1e9] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#6d7f70]";
+}
+
+function formatRaisedHandNames(participants: { user: { displayName: string } }[]) {
+  if (participants.length === 1) {
+    return `${participants[0].user.displayName} raised their hand`;
+  }
+  if (participants.length === 2) {
+    return `${participants[0].user.displayName} and ${participants[1].user.displayName} raised their hands`;
+  }
+  const others = participants.length - 2;
+  return `${participants[0].user.displayName}, ${participants[1].user.displayName} and ${others} other${others === 1 ? "" : "s"} raised their hands`;
+}
+
+function isHandRaised(participant: { handRaisedAt?: Date | null; handLoweredAt?: Date | null } | undefined) {
+  if (!participant?.handRaisedAt) return false;
+  return !participant.handLoweredAt || participant.handLoweredAt < participant.handRaisedAt;
 }
 
 function countActiveParticipants(participants: { joinedAt?: Date | null; leftAt?: Date | null }[]) {
