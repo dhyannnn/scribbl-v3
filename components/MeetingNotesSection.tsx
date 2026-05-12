@@ -6,7 +6,12 @@ import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { TextNoteEditor } from "@/components/TextNoteEditor";
 import { TldrawWhiteboardEditor } from "@/components/TldrawWhiteboardEditor";
 import { createNoteRoomId } from "@/lib/liveblocks-room";
-import { createMeetingNote, saveMeetingNote, saveMeetingWhiteboard } from "@/app/workspaces/[id]/meetings/[meetingId]/actions";
+import {
+  createMeetingNote,
+  requestMeetingPermission,
+  saveMeetingNote,
+  saveMeetingWhiteboard,
+} from "@/app/workspaces/[id]/meetings/[meetingId]/actions";
 
 // ── Serialisable types (safe across the server→client boundary) ───────────────
 
@@ -18,6 +23,9 @@ export type NoteArtifactData = {
   noteCollaboration: string;
   noteUpdatedAt: string | null; // ISO string — Date is not serialisable
   noteOwnerDisplayName: string | null;
+  artifactId: string;
+  canEdit: boolean;
+  permissionState: "ALLOWED" | "DENIED" | "REQUESTED" | null;
 };
 
 export type NoteSlotData = {
@@ -34,7 +42,6 @@ type Focused = "shared" | "private" | null;
 export function MeetingNotesSection({
   workspaceId,
   meetingId,
-  currentUserId,
   canEditNotes,
   shared,
   priv,
@@ -43,7 +50,6 @@ export function MeetingNotesSection({
 }: {
   workspaceId: string;
   meetingId: string;
-  currentUserId: string;
   canEditNotes: boolean;
   shared: NoteSlotData;
   priv: NoteSlotData;
@@ -93,7 +99,6 @@ export function MeetingNotesSection({
           <NoteEditorSlot
             workspaceId={workspaceId}
             meetingId={meetingId}
-            currentUserId={currentUserId}
             slot={slot}
             emptyText={emptyText}
             canvasHeight="calc(100vh - 320px)"
@@ -118,7 +123,6 @@ export function MeetingNotesSection({
         preserveName="privateNoteId"
         preserveValue={selectedPrivateNoteId}
         emptyText="Create a shared note or board for everyone in the meeting."
-        currentUserId={currentUserId}
         onExpand={() => setFocused("shared")}
       />
       <NoteCard
@@ -133,7 +137,6 @@ export function MeetingNotesSection({
         preserveName="sharedNoteId"
         preserveValue={selectedSharedNoteId}
         emptyText="Create private notes while the lesson is happening. They will not appear in shared artifacts."
-        currentUserId={currentUserId}
         onExpand={() => setFocused("private")}
       />
     </section>
@@ -154,7 +157,6 @@ function NoteCard({
   preserveName,
   preserveValue,
   emptyText,
-  currentUserId,
   onExpand,
 }: {
   title: string;
@@ -168,7 +170,6 @@ function NoteCard({
   preserveName: string;
   preserveValue: string | undefined;
   emptyText: string;
-  currentUserId: string;
   onExpand: () => void;
 }) {
   return (
@@ -198,7 +199,6 @@ function NoteCard({
       <NoteEditorSlot
         workspaceId={workspaceId}
         meetingId={meetingId}
-        currentUserId={currentUserId}
         slot={slot}
         emptyText={emptyText}
         canvasHeight={600}
@@ -343,14 +343,12 @@ function NotePickerForm({
 function NoteEditorSlot({
   workspaceId,
   meetingId,
-  currentUserId,
   slot,
   emptyText,
   canvasHeight,
 }: {
   workspaceId: string;
   meetingId: string;
-  currentUserId: string;
   slot: NoteSlotData;
   emptyText: string;
   canvasHeight: number | string;
@@ -365,14 +363,42 @@ function NoteEditorSlot({
     );
   }
 
-  const canEdit =
-    !disabled &&
-    (selected.noteOwnerUserId === currentUserId || selected.noteCollaboration === "COLLABORATIVE");
+  const canEdit = !disabled && selected.canEdit;
   const roomId = createNoteRoomId(workspaceId, selected.noteId);
+  // Only remount the room when the note changes or the meeting ends.
+  // Permission changes are handled by editor.setEditable() in TextNoteEditorInner,
+  // so including canEdit/permissionState here would tear down Karuna's yDoc
+  // instance just as Dhyan gains edit access, breaking cross-user Yjs sync.
+  const providerKey = `${roomId}:${disabled ? "locked" : "open"}`;
+  const requestAccessForm =
+    !canEdit && selected.permissionState !== "REQUESTED" ? (
+      <form action={requestMeetingPermission} className="mt-3">
+        <input type="hidden" name="workspaceId" value={workspaceId} />
+        <input type="hidden" name="meetingId" value={meetingId} />
+        <input type="hidden" name="artifactId" value={selected.artifactId} />
+        <input
+          type="hidden"
+          name="targetType"
+          value={selected.noteType === "WHITEBOARD" ? "WHITEBOARD" : "SHARED_NOTES"}
+        />
+        <PendingSubmitButton
+          pendingLabel="Requesting..."
+          className="rounded-md border border-[#2f604b] bg-white px-3 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]"
+        >
+          Request edit access
+        </PendingSubmitButton>
+      </form>
+    ) : null;
+  const requestedAccessText =
+    !canEdit && selected.permissionState === "REQUESTED" ? (
+      <p className="mt-3 rounded-md border border-[#d8d8ce] bg-[#fbfbf8] px-3 py-2 text-sm text-[#66685f]">
+        Edit access requested.
+      </p>
+    ) : null;
 
   if (selected.noteType === "WHITEBOARD") {
     return (
-      <LiveblocksRoom roomId={roomId}>
+      <LiveblocksRoom roomId={roomId} providerKey={providerKey}>
         <TldrawWhiteboardEditor
           workspaceId={workspaceId}
           meetingId={meetingId}
@@ -383,12 +409,14 @@ function NoteEditorSlot({
           canEdit={canEdit}
           canvasHeight={canvasHeight}
         />
+        {requestAccessForm}
+        {requestedAccessText}
       </LiveblocksRoom>
     );
   }
 
   return (
-    <LiveblocksRoom roomId={roomId}>
+    <LiveblocksRoom roomId={roomId} providerKey={providerKey}>
       <TextNoteEditor
         workspaceId={workspaceId}
         meetingId={meetingId}
@@ -398,6 +426,8 @@ function NoteEditorSlot({
         saveAction={saveMeetingNote}
         canEdit={canEdit}
       />
+      {requestAccessForm}
+      {requestedAccessText}
     </LiveblocksRoom>
   );
 }

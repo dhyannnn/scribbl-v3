@@ -342,10 +342,17 @@ export function TldrawWhiteboardEditor({
   const latestSaveIdRef = useRef(0);
   const hasPendingSaveRef = useRef(false);
   const titleValueRef = useRef(titleValue);
+  // Refs so that the one-time onMount closure always calls the latest versions.
+  const canEditRef = useRef(canEdit);
+  const queueAutosaveRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     titleValueRef.current = titleValue;
   }, [titleValue]);
+
+  useEffect(() => {
+    canEditRef.current = canEdit;
+  }, [canEdit]);
 
   const buildFormData = useCallback(() => {
     if (!editorRef.current) return null;
@@ -389,6 +396,10 @@ export function TldrawWhiteboardEditor({
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(saveNow, 900);
   }, [canEdit, saveNow]);
+
+  useEffect(() => {
+    queueAutosaveRef.current = queueAutosave;
+  }, [queueAutosave]);
 
   const flushPendingSave = useCallback(() => {
     if (!canEdit || !hasPendingSaveRef.current) return;
@@ -463,13 +474,13 @@ export function TldrawWhiteboardEditor({
         },
       );
 
-      if (!canEdit) {
+      if (!canEditRef.current) {
         editor.updateInstanceState({ isReadonly: true });
       }
 
       const unsubStore = editor.store.listen(
         () => {
-          queueAutosave();
+          queueAutosaveRef.current();
         },
         { source: "user", scope: "document" },
       );
@@ -481,8 +492,13 @@ export function TldrawWhiteboardEditor({
         unsubStore();
       };
     },
-    [canEdit, queueAutosave],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
+
+  useEffect(() => {
+    editorRef.current?.updateInstanceState({ isReadonly: !canEdit });
+  }, [canEdit]);
 
   return (
     <div className="mt-5 grid gap-3">

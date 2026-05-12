@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRoom, useSelf } from "@liveblocks/react/suspense";
 import { getYjsProviderForRoom } from "@liveblocks/yjs";
 import { YKeyValue } from "y-utility/y-keyvalue";
@@ -32,6 +32,13 @@ export function useTldrawYjsStore({
     return info?.name ?? info?.email ?? "Collaborator";
   });
 
+  // Keep refs so the presence effect always uses the latest values without
+  // re-running the sync effect when identity changes (e.g. on token refresh).
+  const selfIdRef = useRef(selfId);
+  const selfNameRef = useRef(selfName);
+  useEffect(() => { selfIdRef.current = selfId; }, [selfId]);
+  useEffect(() => { selfNameRef.current = selfName; }, [selfName]);
+
   const { yDoc, yStore, yProvider } = useMemo(() => {
     const yProvider = getYjsProviderForRoom(room);
     const yDoc = yProvider.getYDoc();
@@ -58,6 +65,11 @@ export function useTldrawYjsStore({
     status: "loading",
   });
 
+  // ── Sync effect (stable) ────────────────────────────────────────────────────
+  // Sets up store↔Yjs bidirectional sync and remote-presence → store updates.
+  // Does NOT depend on selfId/selfName so that a Liveblocks token refresh
+  // (which briefly cycles those values) can't tear down and re-establish the
+  // Yjs connection.
   useEffect(() => {
     const unsubs: (() => void)[] = [];
 
@@ -69,8 +81,12 @@ export function useTldrawYjsStore({
         // mergeRemoteChanges avoids needing an editor context (unlike transact)
         // and marks these as source:'remote' so our store.listen won't re-sync them.
         store.mergeRemoteChanges(() => {
-          store.clear();
           const records = yStore.yarray.toJSON().map(({ val }: { val: TLRecord }) => val);
+          const remoteIds = new Set(records.map((r) => r.id));
+          const toRemove = store.allRecords()
+            .map((r) => r.id)
+            .filter((id) => !remoteIds.has(id));
+          if (toRemove.length) store.remove(toRemove as TLRecord["id"][]);
           store.put(records);
         });
       } else {
@@ -127,65 +143,6 @@ export function useTldrawYjsStore({
       yStore.on("change", handleYjsChange);
       unsubs.push(() => yStore.off("change", handleYjsChange));
 
-      // Presence
-      const userPreferences = computed("userPreferences", () => ({
-        id: selfId ?? "unknown",
-        color: cursorColor(selfId ?? "unknown"),
-        name: selfName,
-      }));
-
-      const self = room.getSelf();
-      // Liveblocks injects __yjs_clientid into presence via the Yjs provider.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const yClientId = (self?.presence as any)?.__yjs_clientid;
-      const presenceId = InstancePresenceRecordType.createId(yClientId);
-      const presenceDerivation = createPresenceStateDerivation(userPreferences, presenceId)(store);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      yProvider.awareness.setLocalStateField("presence", presenceDerivation.get() as any ?? null);
-
-      unsubs.push(
-        react("sync presence", () => {
-          const presence = presenceDerivation.get() ?? null;
-          requestAnimationFrame(() => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            yProvider.awareness.setLocalStateField("presence", presence as any);
-          });
-        }),
-      );
-
-      const handleAwarenessUpdate = ({
-        added,
-        updated,
-        removed,
-      }: {
-        added: number[];
-        updated: number[];
-        removed: number[];
-      }) => {
-        const states = yProvider.awareness.getStates() as Map<
-          number,
-          { presence: TLInstancePresence }
-        >;
-        const toRemove: TLInstancePresence["id"][] = [];
-        const toPut: TLInstancePresence[] = [];
-        for (const clientId of [...added, ...updated]) {
-          const state = states.get(clientId);
-          if (state?.presence && state.presence.id !== presenceId) {
-            toPut.push(state.presence);
-          }
-        }
-        for (const clientId of removed) {
-          toRemove.push(InstancePresenceRecordType.createId(clientId.toString()));
-        }
-        store.mergeRemoteChanges(() => {
-          if (toRemove.length) store.remove(toRemove);
-          if (toPut.length) store.put(toPut);
-        });
-      };
-      yProvider.awareness.on("change", handleAwarenessUpdate);
-      unsubs.push(() => yProvider.awareness.off("change", handleAwarenessUpdate));
-
       setStoreWithStatus({ store, status: "synced-remote", connectionStatus: "online" });
     }
 
@@ -200,7 +157,73 @@ export function useTldrawYjsStore({
       unsubs.forEach((fn) => fn());
       unsubs.length = 0;
     };
-  }, [yProvider, yDoc, store, yStore, selfId, selfName, room]);
+  }, [yProvider, yDoc, store, yStore, room]);
+
+  // ── Presence effect (reactive to identity) ──────────────────────────────────
+  // Separate from sync so that identity changes (token refresh, profile update)
+  // only restart presence — not the entire Yjs sync.
+  useEffect(() => {
+    const self = room.getSelf();
+    // Liveblocks injects __yjs_clientid into presence via the Yjs provider.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const yClientId = (self?.presence as any)?.__yjs_clientid;
+    const presenceId = InstancePresenceRecordType.createId(yClientId);
+
+    const userPreferences = computed("userPreferences", () => ({
+      id: selfIdRef.current ?? "unknown",
+      color: cursorColor(selfIdRef.current ?? "unknown"),
+      name: selfNameRef.current,
+    }));
+
+    const presenceDerivation = createPresenceStateDerivation(userPreferences, presenceId)(store);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    yProvider.awareness.setLocalStateField("presence", presenceDerivation.get() as any ?? null);
+
+    const unsubPresence = react("sync presence", () => {
+      const presence = presenceDerivation.get() ?? null;
+      requestAnimationFrame(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        yProvider.awareness.setLocalStateField("presence", presence as any);
+      });
+    });
+
+    const handleAwarenessUpdate = ({
+      added,
+      updated,
+      removed,
+    }: {
+      added: number[];
+      updated: number[];
+      removed: number[];
+    }) => {
+      const states = yProvider.awareness.getStates() as Map<
+        number,
+        { presence: TLInstancePresence }
+      >;
+      const toRemove: TLInstancePresence["id"][] = [];
+      const toPut: TLInstancePresence[] = [];
+      for (const clientId of [...added, ...updated]) {
+        const state = states.get(clientId);
+        if (state?.presence && state.presence.id !== presenceId) {
+          toPut.push(state.presence);
+        }
+      }
+      for (const clientId of removed) {
+        toRemove.push(InstancePresenceRecordType.createId(clientId.toString()));
+      }
+      store.mergeRemoteChanges(() => {
+        if (toRemove.length) store.remove(toRemove);
+        if (toPut.length) store.put(toPut);
+      });
+    };
+    yProvider.awareness.on("change", handleAwarenessUpdate);
+
+    return () => {
+      unsubPresence();
+      yProvider.awareness.off("change", handleAwarenessUpdate);
+    };
+  }, [yProvider, store, selfId, selfName, room]);
 
   return storeWithStatus;
 }
