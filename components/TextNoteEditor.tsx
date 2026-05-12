@@ -28,6 +28,8 @@ import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import { InlineMathNode } from "@aarkue/tiptap-math-extension";
 import { FontSize } from "@/lib/tiptap/font-size";
+import { Indent } from "@/lib/tiptap/indent";
+import { KeyboardShortcuts } from "@/lib/tiptap/keyboard-shortcuts";
 import { LiveblocksCursors, type CursorUser } from "@/lib/tiptap/liveblocks-cursors";
 import { NoteToolbar } from "@/components/NoteToolbar";
 import { noteTitleMaxLength } from "@/lib/note-title";
@@ -180,6 +182,8 @@ function TextNoteEditorInner({
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       FontFamily,
       FontSize,
+      Indent,
+      KeyboardShortcuts,
       Link.configure({ openOnClick: false }),
       Image.configure({ inline: false }),
       Table.configure({ resizable: true }),
@@ -217,6 +221,10 @@ function TextNoteEditorInner({
   useEffect(() => {
     (editorRef as React.RefObject<typeof editor>).current = editor;
   }, [editor]);
+
+  useEffect(() => {
+    editor?.setEditable(canEdit);
+  }, [canEdit, editor]);
 
   // Push other users' cursor positions into the LiveblocksCursors extension
   useEffect(() => {

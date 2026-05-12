@@ -5,7 +5,8 @@ import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight,
   ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine,
   Bold, Code, Code2, Highlighter, Image as ImageIcon,
-  Italic, Link as LinkIcon, List, ListChecks, ListOrdered,
+  Italic, Link as LinkIcon, List, ListChecks, ListIndentDecrease,
+  ListIndentIncrease, ListOrdered,
   Minus, Quote, Redo2, Strikethrough, Subscript, Superscript,
   Table as TableIcon, TableCellsMerge, TableCellsSplit,
   Trash2, Underline as UnderlineIcon, Undo2,
@@ -137,10 +138,12 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
     reader.readAsDataURL(file);
   }, [editor]);
 
-  const closeAllPickers = () => {
-    setShowTextColors(false);
-    setShowHighlightColors(false);
-    setShowCellColors(false);
+  const insertInlineMath = () => {
+    editor.chain().focus().insertContent("$").run();
+  };
+
+  const insertDisplayMath = () => {
+    editor.chain().focus().insertContent("$$").run();
   };
 
   const btn = (
@@ -244,11 +247,11 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
 
         {/* Math */}
         {btn(false, "Inline math — type $…$ or click to insert",
-          () => editor.chain().focus().insertContent({ type: "inlineMath", attrs: { latex: "x", display: "no" } }).run(),
-          <span className="font-mono text-[11px] font-semibold leading-none tracking-tight">$x$</span>,
+          insertInlineMath,
+          <span className="font-mono text-[11px] font-semibold leading-none tracking-tight">$$</span>,
         )}
         {btn(false, "Display math — type $$…$$ or click to insert",
-          () => editor.chain().focus().insertContent({ type: "inlineMath", attrs: { latex: "\\sum_{i=1}^{n} i", display: "yes" } }).run(),
+          insertDisplayMath,
           <span className="font-mono text-[11px] font-semibold leading-none tracking-tight">$$</span>,
         )}
 
@@ -305,6 +308,8 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
         {btn(editor.isActive({ textAlign: "center" }),  "Align center",  () => editor.chain().focus().setTextAlign("center").run(),  <AlignCenter size={14} />)}
         {btn(editor.isActive({ textAlign: "right" }),   "Align right",   () => editor.chain().focus().setTextAlign("right").run(),   <AlignRight size={14} />)}
         {btn(editor.isActive({ textAlign: "justify" }), "Justify",       () => editor.chain().focus().setTextAlign("justify").run(), <AlignJustify size={14} />)}
+        {btn(false, "Outdent (⇧Tab)", () => editor.chain().focus().outdent().run(), <ListIndentDecrease size={14} />)}
+        {btn(false, "Indent (Tab)",   () => editor.chain().focus().indent().run(),  <ListIndentIncrease size={14} />)}
 
         {sep()}
 
