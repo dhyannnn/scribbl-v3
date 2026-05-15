@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useBroadcastEvent, useEventListener } from "@liveblocks/react/suspense";
-import { FormEvent, useMemo, useState, useTransition } from "react";
+import { useBroadcastEvent, useEventListener, useMyPresence, useOthers } from "@liveblocks/react/suspense";
+import { Check, Edit2, SendHorizontal, Trash2, X } from "lucide-react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { LiveblocksRoom } from "@/components/LiveblocksRoom";
 
 export type RealtimeChatMessage = {
@@ -15,6 +16,7 @@ export type RealtimeChatMessage = {
   deletedAt: string | null;
   sender: {
     displayName: string;
+    avatarUrl: string | null;
   };
   isPending?: boolean;
 };
@@ -22,6 +24,7 @@ export type RealtimeChatMessage = {
 export type RealtimeChatChannel = {
   id: string;
   name: string;
+  type?: "CHAT" | "ANNOUNCEMENT";
   messages: RealtimeChatMessage[];
 } | null;
 
@@ -31,13 +34,17 @@ type RealtimeChatPanelProps = {
   channel: RealtimeChatChannel;
   currentUserId: string;
   currentUserDisplayName: string;
+  currentUserAvatarUrl: string | null;
   canModerateChat: boolean;
   status?: string;
   title: string;
   emptyText: string;
   placeholder: string;
+  canPostMessages?: boolean;
+  readOnlyText?: string;
   openInChannelsHref?: string;
   maxMessagesHeightClassName?: string;
+  lazy?: boolean;
 };
 
 const maxMessageLength = 2000;
@@ -47,13 +54,19 @@ type ChatEvent =
   | { type: "message-updated"; message: RealtimeChatMessage }
   | { type: "message-deleted"; message: RealtimeChatMessage };
 
-export function RealtimeChatPanel({ roomId, ...props }: RealtimeChatPanelProps) {
+type MessageWithGroup = RealtimeChatMessage & {
+  isFirstInGroup: boolean;
+  isLastInGroup: boolean;
+  showAvatar: boolean;
+};
+
+export function RealtimeChatPanel({ roomId, lazy = false, ...props }: RealtimeChatPanelProps) {
   if (!props.channel) {
     return <EmptyChatPanel title={props.title} openInChannelsHref={props.openInChannelsHref} />;
   }
 
   return (
-    <LiveblocksRoom key={roomId} roomId={roomId}>
+    <LiveblocksRoom key={roomId} roomId={roomId} lazy={lazy} fallback={<ChatConnectingPanel title={props.title} openInChannelsHref={props.openInChannelsHref} />}>
       <RealtimeChatPanelContent {...props} />
     </LiveblocksRoom>
   );
@@ -67,12 +80,12 @@ function EmptyChatPanel({
   openInChannelsHref?: string;
 }) {
   return (
-    <section id="meeting-chat" className="scroll-mt-6 rounded-md border border-[#d8d8ce] bg-white shadow-sm">
-      <header className="border-b border-[#e6e6dc] px-5 py-4">
+    <section id="meeting-chat" className="min-w-0 scroll-mt-6 rounded-md border border-[#d8d8ce] bg-white shadow-sm">
+      <header className="border-b border-[#e6e6dc] px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
+          <div className="min-w-0">
             <p className="max-w-full truncate text-sm font-medium text-[#2f604b]">{title}</p>
-            <h2 className="mt-1 text-2xl font-semibold">{title}</h2>
+            <h2 className="mt-1 break-words text-xl font-semibold sm:text-2xl">{title}</h2>
           </div>
           {openInChannelsHref ? (
             <Link href={openInChannelsHref} className="text-sm font-medium text-[#2f604b]">
@@ -81,9 +94,40 @@ function EmptyChatPanel({
           ) : null}
         </div>
       </header>
-      <div className="p-5">
+      <div className="p-4 sm:p-5">
         <div className="rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] px-4 py-3 text-sm text-[#66685f]">
           Create a channel before sending messages.
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ChatConnectingPanel({
+  title,
+  openInChannelsHref,
+}: {
+  title: string;
+  openInChannelsHref?: string;
+}) {
+  return (
+    <section id="meeting-chat" className="min-w-0 scroll-mt-6 rounded-md border border-[#d8d8ce] bg-white shadow-sm">
+      <header className="border-b border-[#e6e6dc] px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="max-w-full truncate text-sm font-medium text-[#2f604b]">{title}</p>
+            <h2 className="mt-1 break-words text-xl font-semibold sm:text-2xl">{title}</h2>
+          </div>
+          {openInChannelsHref ? (
+            <Link href={openInChannelsHref} className="text-sm font-medium text-[#2f604b]">
+              Open in channels
+            </Link>
+          ) : null}
+        </div>
+      </header>
+      <div className="p-4 sm:p-5">
+        <div className="rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] px-4 py-3 text-sm text-[#66685f]">
+          Connecting chat...
         </div>
       </div>
     </section>
@@ -95,11 +139,14 @@ function RealtimeChatPanelContent({
   channel,
   currentUserId,
   currentUserDisplayName,
+  currentUserAvatarUrl,
   canModerateChat,
   status,
   title,
   emptyText,
   placeholder,
+  canPostMessages = true,
+  readOnlyText = "You can read this channel, but you cannot post here.",
   openInChannelsHref,
   maxMessagesHeightClassName = "max-h-[460px]",
 }: Omit<RealtimeChatPanelProps, "roomId">) {
@@ -108,7 +155,37 @@ function RealtimeChatPanelContent({
   const [editingMessageId, setEditingMessageId] = useState("");
   const [isPending, startTransition] = useTransition();
   const broadcast = useBroadcastEvent();
+  const [, updateMyPresence] = useMyPresence();
+  const others = useOthers();
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const pendingMessageCounterRef = useRef(0);
   const statusMessage = useMemo(() => getChatStatusMessage(sendStatus), [sendStatus]);
+  const groupedMessages = useMemo(() => groupMessages(messages), [messages]);
+  const typingUsers = useMemo(
+    () =>
+      others
+        .filter((other) => Boolean((other.presence as { typing?: boolean } | null)?.typing))
+        .map((other) => getUserInfoName(other.info as { name?: string; email?: string } | undefined)),
+    [others],
+  );
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      updateMyPresence({ typing: false });
+    };
+  }, [updateMyPresence]);
 
   useEventListener(({ event }) => {
     const chatEvent = event as ChatEvent;
@@ -141,7 +218,7 @@ function RealtimeChatPanelContent({
     }
 
     const optimisticMessage: RealtimeChatMessage = {
-      id: `pending-${Date.now()}`,
+      id: `pending-${currentUserId}-${pendingMessageCounterRef.current++}`,
       channelId: channel.id,
       senderUserId: currentUserId,
       body,
@@ -150,6 +227,7 @@ function RealtimeChatPanelContent({
       deletedAt: null,
       sender: {
         displayName: currentUserDisplayName,
+        avatarUrl: currentUserAvatarUrl,
       },
       isPending: true,
     };
@@ -157,6 +235,8 @@ function RealtimeChatPanelContent({
     setMessages((currentMessages) => [...currentMessages, optimisticMessage]);
     setSendStatus(null);
     form.reset();
+    resetTextarea(inputRef.current);
+    setTyping(false);
 
     startTransition(async () => {
       const savedMessage = await writeMessage("POST", { workspaceId, channelId: channel.id, body });
@@ -219,15 +299,43 @@ function RealtimeChatPanelContent({
     });
   }
 
+  function handleInputChange(event: FormEvent<HTMLTextAreaElement>) {
+    autoGrowTextarea(event.currentTarget);
+    setTyping(true);
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  }
+
+  function setTyping(isTyping: boolean) {
+    updateMyPresence({ typing: isTyping });
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    if (isTyping) {
+      typingTimeoutRef.current = setTimeout(() => {
+        updateMyPresence({ typing: false });
+      }, 2000);
+    }
+  }
+
   return (
-    <section id="meeting-chat" className="scroll-mt-6 rounded-md border border-[#d8d8ce] bg-white shadow-sm">
-      <header className="border-b border-[#e6e6dc] px-5 py-4">
+    <section id="meeting-chat" className="min-w-0 scroll-mt-6 rounded-md border border-[#d8d8ce] bg-white shadow-sm">
+      <header className="border-b border-[#e6e6dc] px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
+          <div className="min-w-0">
             <p className="max-w-full truncate text-sm font-medium text-[#2f604b]" title={channel?.name ?? title}>
               {channel?.name ?? title}
             </p>
-            <h2 className="mt-1 text-2xl font-semibold">{title}</h2>
+            <h2 className="mt-1 break-words text-xl font-semibold sm:text-2xl">{title}</h2>
           </div>
           {openInChannelsHref ? (
             <Link href={openInChannelsHref} className="text-sm font-medium text-[#2f604b]">
@@ -242,73 +350,110 @@ function RealtimeChatPanelContent({
         ) : null}
       </header>
 
-      <div className={`grid gap-4 overflow-y-auto p-5 ${maxMessagesHeightClassName}`}>
-        {messages.map((message) => {
+      <div ref={messagesContainerRef} className={`grid gap-2 overflow-y-auto bg-[#fbfbf8] p-3 sm:p-5 ${maxMessagesHeightClassName}`}>
+        {groupedMessages.map((message) => {
           const isOwnMessage = message.senderUserId === currentUserId;
           const canEditMessage = isOwnMessage && !message.deletedAt && !message.isPending;
           const canDeleteMessage = !message.deletedAt && !message.isPending && (isOwnMessage || canModerateChat);
 
           return (
-            <article key={message.id} className={`rounded-md bg-[#fbfbf8] p-4 ${message.isPending ? "opacity-70" : ""}`}>
-              <div className="flex items-center justify-between gap-4">
-                <p className="font-semibold">{message.sender.displayName}</p>
-                <p className="text-xs text-[#777970]">
-                  {formatMessageTime(message.createdAt)}
-                  {message.editedAt && !message.deletedAt ? " / edited" : ""}
-                  {message.isPending ? " / sending" : ""}
-                </p>
-              </div>
-              {message.deletedAt ? (
-                <p className="mt-2 text-sm italic leading-6 text-[#777970]">Message deleted.</p>
-              ) : editingMessageId === message.id ? (
-                <form onSubmit={(event) => editChatMessage(event, message.id)} className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-                  <input
-                    name="body"
-                    required
-                    maxLength={maxMessageLength}
-                    defaultValue={message.body}
-                    className="min-h-10 min-w-0 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
-                  />
-                  <button
-                    disabled={isPending}
-                    className="min-h-10 rounded-md border border-[#2f604b] bg-white px-3 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isPending ? "Saving..." : "Save"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingMessageId("")}
-                    className="min-h-10 rounded-md border border-[#c8c8bd] px-3 text-sm font-medium text-[#4d4f47] transition hover:bg-white"
-                  >
-                    Cancel
-                  </button>
-                </form>
-              ) : (
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#4d4f47]">{message.body}</p>
-              )}
-              {editingMessageId !== message.id && (canEditMessage || canDeleteMessage) ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {canEditMessage ? (
-                    <button
-                      type="button"
-                      onClick={() => setEditingMessageId(message.id)}
-                      className="rounded-md border border-[#c8c8bd] px-3 py-1.5 text-xs font-medium text-[#2f604b] transition hover:border-[#2f604b] hover:bg-[#eef5ef]"
-                    >
-                      Edit
-                    </button>
-                  ) : null}
-                  {canDeleteMessage ? (
-                    <button
-                      type="button"
-                      onClick={() => deleteChatMessage(message.id)}
-                      disabled={isPending}
-                      className="rounded-md border border-[#c8c8bd] px-3 py-1.5 text-xs font-medium text-[#7a3434] transition hover:border-[#b65b5b] hover:bg-[#fff7f5] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isPending ? "Working..." : "Delete"}
-                    </button>
-                  ) : null}
-                </div>
+            <article
+              key={message.id}
+              className={`flex min-w-0 items-end gap-2 ${isOwnMessage ? "flex-row-reverse" : "flex-row"}`}
+            >
+              {!isOwnMessage && message.showAvatar ? (
+                <Avatar name={message.sender.displayName} avatarUrl={message.sender.avatarUrl} size={28} />
+              ) : !isOwnMessage ? (
+                <div className="w-7 shrink-0" />
               ) : null}
+
+              <div className={`flex max-w-[82%] flex-col gap-0.5 sm:max-w-[72%] ${isOwnMessage ? "items-end" : "items-start"}`}>
+                {!isOwnMessage && message.isFirstInGroup ? (
+                  <span className="max-w-full truncate px-3 text-xs font-medium text-[#66685f]">{message.sender.displayName}</span>
+                ) : null}
+
+                {editingMessageId === message.id && !message.deletedAt ? (
+                  <form
+                    onSubmit={(event) => editChatMessage(event, message.id)}
+                    className="grid w-[min(100%,360px)] gap-2 rounded-2xl border border-[#c8c8bd] bg-white p-2"
+                  >
+                    <textarea
+                      name="body"
+                      required
+                      maxLength={maxMessageLength}
+                      defaultValue={message.body}
+                      rows={2}
+                      onInput={(event) => autoGrowTextarea(event.currentTarget)}
+                      className="max-h-40 min-h-16 resize-none rounded-xl border border-[#d8d8ce] bg-[#fbfbf8] px-3 py-2 text-sm text-[#20201d] outline-none transition focus:border-[#2f604b] focus:bg-white"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingMessageId("")}
+                        className="grid size-9 place-items-center rounded-full border border-[#c8c8bd] text-[#4d4f47] transition hover:bg-[#f0f0eb]"
+                        aria-label="Cancel edit"
+                        title="Cancel"
+                      >
+                        <X size={16} />
+                      </button>
+                      <button
+                        disabled={isPending}
+                        className="grid size-9 place-items-center rounded-full bg-[#2f604b] text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label="Save edit"
+                        title="Save"
+                      >
+                        <Check size={16} />
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div
+                    className={`max-w-full whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm leading-relaxed sm:px-4 ${
+                      isOwnMessage
+                        ? "rounded-br-sm bg-[#2f604b] text-white"
+                        : "rounded-bl-sm bg-[#f0f0eb] text-[#20201d]"
+                    } ${message.isPending ? "opacity-60" : ""}`}
+                  >
+                    {message.deletedAt ? <span className="italic opacity-60">Message deleted</span> : message.body}
+                  </div>
+                )}
+
+                {message.isLastInGroup ? (
+                  <span className={`px-3 text-[10px] text-[#8a8c82] ${isOwnMessage ? "text-right" : ""}`}>
+                    {formatMessageTime(message.createdAt)}
+                    {message.editedAt && !message.deletedAt ? " · edited" : ""}
+                    {message.isPending ? " · sending" : ""}
+                  </span>
+                ) : null}
+
+                {editingMessageId !== message.id && (canEditMessage || canDeleteMessage) ? (
+                  <div className={`flex gap-1 px-2 ${isOwnMessage ? "justify-end" : "justify-start"}`}>
+                    {canEditMessage ? (
+                      <button
+                        type="button"
+                        onClick={() => setEditingMessageId(message.id)}
+                        className="grid size-7 place-items-center rounded-full text-[#6d7f70] transition hover:bg-[#e7eee7] hover:text-[#2f604b]"
+                        aria-label="Edit message"
+                        title="Edit"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                    ) : null}
+                    {canDeleteMessage ? (
+                      <button
+                        type="button"
+                        onClick={() => deleteChatMessage(message.id)}
+                        disabled={isPending}
+                        className="grid size-7 place-items-center rounded-full text-[#9a5a52] transition hover:bg-[#fff0ed] hover:text-[#7a3434] disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label="Delete message"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </article>
           );
         })}
@@ -319,25 +464,40 @@ function RealtimeChatPanelContent({
         ) : null}
       </div>
 
-      <footer className="border-t border-[#e6e6dc] p-5">
-        {channel ? (
-          <form onSubmit={sendChatMessage} className="flex flex-col gap-3 sm:flex-row">
-            <input
+      <footer className="border-t border-[#e6e6dc] p-3 sm:p-5">
+        {typingUsers.length > 0 ? (
+          <div className="mb-3 flex items-center gap-2 px-1 text-xs text-[#777970]">
+            <ThreeDotsAnimation />
+            <span className="min-w-0 truncate">{formatTypingUsers(typingUsers)}</span>
+          </div>
+        ) : null}
+        {channel && canPostMessages ? (
+          <form onSubmit={sendChatMessage} className="flex min-w-0 items-end gap-2">
+            <textarea
+              ref={inputRef}
               name="body"
-              type="text"
               required
               maxLength={maxMessageLength}
               placeholder={placeholder}
-              className="min-h-11 flex-1 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-4 text-sm text-[#20201d] outline-none transition focus:border-[#2f604b] focus:bg-white"
+              rows={1}
+              onInput={handleInputChange}
+              onKeyDown={handleComposerKeyDown}
+              className="max-h-32 min-h-11 min-w-0 flex-1 resize-none rounded-2xl border border-[#c8c8bd] bg-[#fbfbf8] px-4 py-3 text-sm leading-5 text-[#20201d] outline-none transition focus:border-[#2f604b] focus:bg-white focus:ring-2 focus:ring-[#2f604b]/15"
             />
             <button
               type="submit"
               disabled={isPending}
-              className="min-h-11 rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:opacity-60"
+              className="grid size-11 shrink-0 place-items-center rounded-full bg-[#2f604b] text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Send message"
+              title="Send"
             >
-              {isPending ? "Sending..." : "Send"}
+              <SendHorizontal size={18} />
             </button>
           </form>
+        ) : channel ? (
+          <div className="rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] px-4 py-3 text-sm text-[#66685f]">
+            {readOnlyText}
+          </div>
         ) : (
           <div className="rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] px-4 py-3 text-sm text-[#66685f]">
             Create a channel before sending messages.
@@ -369,12 +529,101 @@ async function writeMessage(method: "POST" | "PATCH" | "DELETE", body: object) {
   }
 }
 
+function groupMessages(messages: RealtimeChatMessage[]): MessageWithGroup[] {
+  return messages.map((message, index) => {
+    const prev = messages[index - 1];
+    const next = messages[index + 1];
+    const prevTimeBreak = prev
+      ? new Date(message.createdAt).getTime() - new Date(prev.createdAt).getTime() > 5 * 60 * 1000
+      : true;
+    const nextTimeBreak = next
+      ? new Date(next.createdAt).getTime() - new Date(message.createdAt).getTime() > 5 * 60 * 1000
+      : true;
+    const sameSenderAsPrev = prev?.senderUserId === message.senderUserId && !prev.deletedAt && !message.deletedAt;
+    const sameSenderAsNext = next?.senderUserId === message.senderUserId && !next.deletedAt && !message.deletedAt;
+    const isFirstInGroup = !sameSenderAsPrev || prevTimeBreak;
+    const isLastInGroup = !sameSenderAsNext || nextTimeBreak;
+
+    return {
+      ...message,
+      isFirstInGroup,
+      isLastInGroup,
+      showAvatar: isLastInGroup,
+    };
+  });
+}
+
 function applyMessageEvent(messages: RealtimeChatMessage[], event: ChatEvent) {
   if (event.type === "message-created") {
     return messages.some((message) => message.id === event.message.id) ? messages : [...messages, event.message];
   }
 
   return messages.map((message) => (message.id === event.message.id ? event.message : message));
+}
+
+function Avatar({
+  name,
+  avatarUrl,
+  size = 32,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  size?: number;
+}) {
+  const initials = getInitials(name);
+
+  if (avatarUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- Avatar URLs are user-uploaded Supabase public URLs, not static app assets.
+      <img
+        src={avatarUrl}
+        alt={name}
+        width={size}
+        height={size}
+        className="shrink-0 rounded-full object-cover"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+
+  const colors = ["#2f604b", "#4a7c6a", "#1e4a38", "#3d6b5a"];
+  const color = colors[(name.charCodeAt(0) || 0) % colors.length];
+
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+      style={{ width: size, height: size, background: color }}
+    >
+      {initials}
+    </div>
+  );
+}
+
+function ThreeDotsAnimation() {
+  return (
+    <span className="flex gap-0.5" aria-hidden="true">
+      {[0, 1, 2].map((index) => (
+        <span
+          key={index}
+          className="inline-block size-1.5 rounded-full bg-[#8a8c82]"
+          style={{ animation: `chat-typing-dot 1.2s infinite ${index * 0.2}s` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function autoGrowTextarea(textarea: HTMLTextAreaElement) {
+  textarea.style.height = "auto";
+  textarea.style.height = `${textarea.scrollHeight}px`;
+}
+
+function resetTextarea(textarea: HTMLTextAreaElement | null) {
+  if (!textarea) {
+    return;
+  }
+
+  textarea.style.height = "auto";
 }
 
 function formatMessageTime(value: string) {
@@ -384,6 +633,34 @@ function formatMessageTime(value: string) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function formatTypingUsers(names: string[]) {
+  if (names.length === 1) {
+    return `${names[0]} is typing`;
+  }
+
+  if (names.length === 2) {
+    return `${names[0]} and ${names[1]} are typing`;
+  }
+
+  return "Several people are typing";
+}
+
+function getUserInfoName(info: { name?: string; email?: string } | undefined) {
+  return info?.name || info?.email || "Someone";
+}
+
+function getInitials(name: string) {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? "")
+    .join("");
+
+  return initials || "?";
 }
 
 function getChatStatusMessage(status?: string | null) {
