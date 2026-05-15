@@ -1,16 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AccessRouteRefresher } from "@/components/AccessRouteRefresher";
-import { LiveblocksRoom } from "@/components/LiveblocksRoom";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
-import { TextNoteEditor } from "@/components/TextNoteEditor";
-import { TldrawWhiteboardEditor } from "@/components/TldrawWhiteboardEditor";
 import { getCurrentUser } from "@/lib/current-user";
-import { createNoteRoomId } from "@/lib/liveblocks-room";
 import { canEditMeetingNotes, getMeetingLifecycle } from "@/lib/meeting-lifecycle";
 import { prisma } from "@/lib/prisma";
-import { saveTextNote, saveWhiteboardNote, updateNoteExportAccess } from "../actions";
+import { updateNoteExportAccess } from "../actions";
+import { NoteEditorShell } from "./NoteEditorShell";
 
 type PageProps = {
   params: Promise<{
@@ -112,7 +109,6 @@ export default async function NoteEditorPage({ params }: PageProps) {
     note.visibility === "PRIVATE"
       ? note.ownerUserId === currentUser.id
       : note.exportAccess === "WORKSPACE_MEMBERS" || canManageExport;
-  const liveblocksRoomId = createNoteRoomId(id, note.id);
   const tldrawSnapshot = isTextNote ? null : getTldrawSnapshot(note.contentJson);
 
   return (
@@ -187,29 +183,16 @@ export default async function NoteEditorPage({ params }: PageProps) {
           </section>
         ) : null}
 
-        <LiveblocksRoom roomId={liveblocksRoomId}>
-          {isTextNote ? (
-            <TextNoteEditor
-              workspaceId={id}
-              noteId={note.id}
-              title={note.title}
-              contentJson={note.contentJson}
-              saveAction={saveTextNote}
-              canEdit={canEdit}
-            />
-          ) : (
-            <section className="rounded-md border border-[#d8d8ce] bg-white p-6 shadow-sm">
-              <TldrawWhiteboardEditor
-                workspaceId={id}
-                noteId={note.id}
-                title={note.title}
-                initialSnapshot={tldrawSnapshot}
-                saveAction={saveWhiteboardNote}
-                canEdit={canEdit}
-              />
-            </section>
-          )}
-        </LiveblocksRoom>
+        <NoteEditorShell
+          workspaceId={id}
+          noteId={note.id}
+          noteType={note.type}
+          title={note.title}
+          contentJson={note.contentJson}
+          canEdit={canEdit}
+          canExport={canExport}
+          tldrawSnapshot={tldrawSnapshot}
+        />
       </div>
     </main>
   );
