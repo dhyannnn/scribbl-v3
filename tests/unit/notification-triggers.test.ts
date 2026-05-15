@@ -76,7 +76,7 @@ describe("createWorkspaceNotifications — actor exclusion", () => {
     });
 
     expect(count).toBe(1);
-    const callData = prismaMock.notification.createMany.mock.calls[0][0].data as { userId: string }[];
+    const callData = prismaMock.notification.createMany.mock.calls[0]![0]!.data as { userId: string }[];
     expect(callData).toHaveLength(1);
     expect(callData[0].userId).toBe(recipient.id);
     expect(callData.some((n) => n.userId === actor.id)).toBe(false);
@@ -111,7 +111,7 @@ describe("createWorkspaceNotifications — multiple recipients", () => {
     });
 
     expect(count).toBe(3);
-    const callData = prismaMock.notification.createMany.mock.calls[0][0].data as { userId: string }[];
+    const callData = prismaMock.notification.createMany.mock.calls[0]![0]!.data as { userId: string }[];
     expect(callData).toHaveLength(3);
     expect(callData.map((n) => n.userId).sort()).toEqual([r1.id, r2.id, r3.id].sort());
   });
@@ -139,7 +139,7 @@ describe("createWorkspaceNotifications — multiple recipients", () => {
     });
 
     expect(count).toBe(1);
-    const callData = prismaMock.notification.createMany.mock.calls[0][0].data as { userId: string }[];
+    const callData = prismaMock.notification.createMany.mock.calls[0]![0]!.data as { userId: string }[];
     expect(callData).toHaveLength(1);
     expect(callData[0].userId).toBe(optedIn.id);
   });
@@ -215,7 +215,7 @@ describe("createWorkspaceNotifications — chat messages", () => {
     });
 
     expect(count).toBe(1);
-    const callData = prismaMock.notification.createMany.mock.calls[0][0].data as { userId: string }[];
+    const callData = prismaMock.notification.createMany.mock.calls[0]![0]!.data as { userId: string }[];
     expect(callData).toHaveLength(1);
     expect(callData[0].userId).toBe(optedIn.id);
   });

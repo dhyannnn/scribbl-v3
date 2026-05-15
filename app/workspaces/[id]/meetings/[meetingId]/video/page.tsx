@@ -266,7 +266,7 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
         meetingCreatedByUserId: meeting.createdByUserId,
         currentUserRole: currentMembership.role,
         targetUserId: override.userId,
-        targetUserRole: meeting.workspace.members.find((member) => member.userId === override.userId)?.role,
+        targetUserRole: meeting.workspace?.members.find((member) => member.userId === override.userId)?.role,
       }),
   );
   const meetingChannel = meeting.channel

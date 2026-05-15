@@ -61,7 +61,7 @@ type VideoChannelMessage =
   | { type: "focus-hub"; hash: string }
   | { type: "permissions-updated" };
 
-const minPanelWidth = 360;
+const minPanelWidth = 280;
 const minPanelHeight = 280;
 const minimizedPanelWidth = 260;
 const snapDistance = 48;
@@ -355,7 +355,7 @@ export function FloatingMeetingVideo({
         style={{
           left: panel.left,
           top: panel.top,
-          width: 300,
+          width: "min(300px, calc(100vw - 24px))",
           touchAction: "none",
           ...portalPanelStyle,
         }}

@@ -148,7 +148,7 @@ function RealtimeChatPanelContent({
   canPostMessages = true,
   readOnlyText = "You can read this channel, but you cannot post here.",
   openInChannelsHref,
-  maxMessagesHeightClassName = "max-h-[460px]",
+  maxMessagesHeightClassName = "max-h-[50vh] sm:max-h-[460px]",
 }: Omit<RealtimeChatPanelProps, "roomId">) {
   const [messages, setMessages] = useState(channel?.messages ?? []);
   const [sendStatus, setSendStatus] = useState<string | null>(status ?? null);

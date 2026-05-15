@@ -172,7 +172,7 @@ export function MeetingNotesSection({
 
   // ── Normal two-column layout ─────────────────────────────────────────────────
   return (
-    <section id="meeting-notes" data-split-stack className="scroll-mt-6 grid gap-6 xl:grid-cols-2">
+    <section id="meeting-notes" data-split-stack className="scroll-mt-6 grid gap-6 lg:grid-cols-2">
       <NoteCard
         title="Shared Meeting Notes"
         badge="Everyone"
@@ -263,7 +263,7 @@ function NoteCard({
         meetingId={meetingId}
         slot={slot}
         emptyText={emptyText}
-        canvasHeight={600}
+        canvasHeight="min(600px, 50vh)"
         lazy
       />
     </section>
