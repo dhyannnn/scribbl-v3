@@ -71,6 +71,7 @@ import {
 type MeetingVideoRoomProps = {
   workspaceId: string;
   meetingId: string;
+  autoJoin?: boolean;
   disabled?: boolean;
   mode?: "full" | "floating";
   recording?: MeetingVideoRecordingProps;
@@ -88,6 +89,7 @@ type TokenResponse = {
 export function MeetingVideoRoom({
   workspaceId,
   meetingId,
+  autoJoin = false,
   disabled = false,
   mode = "full",
   permissions,
@@ -101,6 +103,7 @@ export function MeetingVideoRoom({
   const clientSessionIdRef = useRef("");
   const connectedRef = useRef(false);
   const leaveTimeoutRef = useRef<number | null>(null);
+  const activeSessionIntervalRef = useRef<number | null>(null);
 
   const markLeft = useCallback(() => {
     const clientSessionId = clientSessionIdRef.current;
@@ -111,6 +114,11 @@ export function MeetingVideoRoom({
 
     connectedRef.current = false;
     setHasMarkedJoined(false);
+
+    if (activeSessionIntervalRef.current !== null) {
+      window.clearInterval(activeSessionIntervalRef.current);
+      activeSessionIntervalRef.current = null;
+    }
 
     if (leaveTimeoutRef.current !== null) {
       window.clearTimeout(leaveTimeoutRef.current);
@@ -134,7 +142,7 @@ export function MeetingVideoRoom({
     };
   }, [markLeft]);
 
-  async function joinRoom() {
+  const joinRoom = useCallback(async () => {
     setError("");
     const clientSessionId = createClientSessionId();
     clientSessionIdRef.current = clientSessionId;
@@ -164,7 +172,18 @@ export function MeetingVideoRoom({
       clientSessionIdRef.current = "";
       setError("Unable to reach the video service.");
     }
-  }
+  }, [meetingId, workspaceId]);
+
+  useEffect(() => {
+    if (!autoJoin || disabled || connection || isPending) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void joinRoom();
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [autoJoin, connection, disabled, isPending, joinRoom]);
 
   if (!connection) {
     return (
@@ -207,6 +226,13 @@ export function MeetingVideoRoom({
         }
 
         connectedRef.current = true;
+        markActiveVideoSession(meetingId);
+        if (activeSessionIntervalRef.current !== null) {
+          window.clearInterval(activeSessionIntervalRef.current);
+        }
+        activeSessionIntervalRef.current = window.setInterval(() => {
+          markActiveVideoSession(meetingId);
+        }, 10_000);
         startTransition(() => {
           void markCurrentUserVideoJoined(workspaceId, meetingId, clientSessionIdRef.current).then(() => {
             setHasMarkedJoined(true);
@@ -215,7 +241,8 @@ export function MeetingVideoRoom({
       }}
       onDisconnected={leaveRoom}
       data-lk-theme="default"
-      className={getRoomClassName(mode)}
+      className={`${getRoomClassName(mode)} ${mode === "full" ? "scribbl-full-video-room" : ""}`}
+      style={mode === "full" ? { height: "fit-content", minHeight: 0 } : undefined}
     >
       <ConferenceSurface
         workspaceId={workspaceId}
@@ -237,6 +264,24 @@ function createClientSessionId() {
   }
 
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function markActiveVideoSession(meetingId: string) {
+  window.localStorage.setItem(getActiveVideoStorageKey(meetingId), String(Date.now()));
+}
+
+export function hasRecentActiveVideoSession(meetingId: string) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const value = window.localStorage.getItem(getActiveVideoStorageKey(meetingId));
+  const timestamp = value ? Number(value) : 0;
+  return Number.isFinite(timestamp) && Date.now() - timestamp < 30_000;
+}
+
+function getActiveVideoStorageKey(meetingId: string) {
+  return `scribbl-video-active:${meetingId}`;
 }
 
 function ConferenceSurface({
@@ -297,7 +342,7 @@ function ConferenceSurface({
   ]);
 
   return (
-    <div className={mode === "floating" ? "relative flex h-full min-h-0 flex-col bg-[#11110f]" : "relative flex min-h-[calc(100vh-220px)] flex-col bg-[#11110f]"}>
+    <div className={mode === "floating" ? "relative flex h-full min-h-0 flex-col bg-[#11110f]" : "relative flex flex-col bg-[#11110f]"}>
       <div className={gridClassName}>
         {displayTracks.length > 0 ? (
           displayTracks.map((trackRef) => (
@@ -308,11 +353,11 @@ function ConferenceSurface({
                 trackRef.publication?.trackSid ?? "pending",
               ].join(":")}
               trackRef={trackRef}
-              className={mode === "floating" ? "h-full min-h-[150px] overflow-hidden rounded-md bg-[#20201d]" : "h-full min-h-[360px] overflow-hidden rounded-md bg-[#20201d]"}
+              className={mode === "floating" ? "h-full min-h-[150px] overflow-hidden rounded-md bg-[#20201d]" : "aspect-video min-h-[220px] max-h-[70vh] overflow-hidden rounded-md bg-[#20201d]"}
             />
           ))
         ) : (
-          <div className={mode === "floating" ? "col-span-full flex min-h-[150px] items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-4 text-center" : "col-span-full flex min-h-[360px] items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-6 text-center"}>
+          <div className={mode === "floating" ? "col-span-full flex min-h-[150px] items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-4 text-center" : "col-span-full flex min-h-[260px] items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-6 text-center"}>
             <div>
               <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#b7c8ba]">
                 {mode === "floating" ? "Waiting For Speaker" : "Connected"}
@@ -823,7 +868,7 @@ function getJoinSurfaceClassName(mode: "full" | "floating") {
     return "flex h-full min-h-[260px] flex-col items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-4 text-center text-white";
   }
 
-  return "flex min-h-[420px] flex-col items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-6 text-center text-white";
+  return "flex min-h-[320px] flex-col items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-6 text-center text-white xl:min-h-[420px]";
 }
 
 function getRoomClassName(mode: "full" | "floating") {
@@ -831,14 +876,14 @@ function getRoomClassName(mode: "full" | "floating") {
     return "h-full min-h-0 overflow-hidden rounded-md border border-white/10 bg-[#11110f]";
   }
 
-  return "min-h-[calc(100vh-220px)] overflow-hidden rounded-md border border-white/10 bg-[#11110f]";
+  return "overflow-hidden rounded-md border border-white/10 bg-[#11110f]";
 }
 
 function getVideoGridClassName(trackCount: number, mode: "full" | "floating") {
   const baseClassName =
     mode === "floating"
       ? "grid min-h-0 flex-1 gap-2 overflow-auto p-2"
-      : "grid flex-1 gap-3 overflow-auto p-3";
+      : "grid gap-3 overflow-auto p-3";
 
   if (trackCount <= 1) {
     return `${baseClassName} grid-cols-1`;

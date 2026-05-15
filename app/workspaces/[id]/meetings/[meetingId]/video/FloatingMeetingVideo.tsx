@@ -80,6 +80,7 @@ type SplitResizeState = {
 export function FloatingMeetingVideo({
   workspaceId,
   meetingId,
+  videoHref,
   disabled = false,
   recording,
   permissions,
@@ -299,6 +300,15 @@ export function FloatingMeetingVideo({
     setIsMinimized(false);
   }
 
+  function openFullVideo() {
+    const fullVideo = window.open(videoHref, "_blank");
+    if (fullVideo) {
+      popoutRef.current = fullVideo;
+      setVideoSurface("popout");
+      channelRef.current?.postMessage({ type: "popout-opened" } satisfies VideoChannelMessage);
+    }
+  }
+
   function focusPopout() {
     if (popoutRef.current && !popoutRef.current.closed) {
       popoutRef.current.focus();
@@ -336,85 +346,6 @@ export function FloatingMeetingVideo({
 
   function renderPortal(content: ReactNode) {
     return createPortal(content, document.body);
-  }
-
-  if (videoSurface === "split") {
-    return renderPortal(
-      <aside
-        className="scribbl-video-split-panel flex flex-col border border-[#d8d8ce] bg-[#171713] text-white shadow-2xl min-[1101px]:border-y-0 min-[1101px]:border-r-0"
-        style={{ "--scribbl-split-panel-width": `${splitVideoWidth}px`, ...portalPanelStyle } as CSSProperties}
-      >
-        {/* Drag handle — visible only on wide viewports where the split is active */}
-        <div
-          className="absolute left-0 top-0 hidden h-full w-2 cursor-col-resize touch-none min-[1101px]:flex min-[1101px]:items-center min-[1101px]:justify-center"
-          style={{ zIndex: 501 }}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.currentTarget.setPointerCapture(e.pointerId);
-            splitResizeRef.current = {
-              pointerId: e.pointerId,
-              startX: e.clientX,
-              startWidth: splitVideoWidth,
-              maxWidth: Math.floor(window.innerWidth * maxSplitWidthRatio),
-            };
-          }}
-        >
-          <div className="h-10 w-0.5 rounded-full bg-white/20 transition-colors group-hover:bg-white/50" />
-        </div>
-        <header className="border-b border-white/10 px-6 py-5">
-          <button
-            type="button"
-            onClick={bringBackVideo}
-            className="text-sm font-medium text-[#b7c8ba] transition hover:text-white"
-          >
-            Bring video back
-          </button>
-          <p className="mt-5 text-sm font-medium uppercase tracking-[0.18em] text-[#b7c8ba]">
-            Split video
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <h2 className="text-3xl font-semibold tracking-normal">Meeting video</h2>
-            {raisedHandCount > 0 ? (
-              <span className="shrink-0 rounded-full bg-[#fff7df] px-2.5 py-1 text-sm font-semibold text-[#7a5a15]">
-                ✋ {raisedHandCount}
-              </span>
-            ) : null}
-            {pendingRequestCount > 0 ? (
-              <span className="shrink-0 rounded-full bg-[#fff7df] px-2.5 py-1 text-sm font-semibold text-[#7a5a15]">
-                📝 {pendingRequestCount}
-              </span>
-            ) : null}
-          </div>
-          <div className="mt-5 flex flex-wrap gap-2 text-sm">
-            <button
-              type="button"
-              onClick={() => focusHubSection("#meeting-notes")}
-              className="rounded-md border border-white/15 bg-white/10 px-4 py-2 font-medium text-white transition hover:bg-white/20"
-            >
-              Open Notes
-            </button>
-            <button
-              type="button"
-              onClick={() => focusHubSection("#meeting-chat")}
-              className="rounded-md border border-white/15 bg-white/10 px-4 py-2 font-medium text-white transition hover:bg-white/20"
-            >
-              Open Chat
-            </button>
-          </div>
-        </header>
-        <div className="min-h-0 flex-1 overflow-hidden p-5">
-          <MeetingVideoRoom
-            workspaceId={workspaceId}
-            meetingId={meetingId}
-            disabled={disabled}
-            mode="floating"
-            recording={recording}
-            recordingReturnTo="current"
-            permissions={permissions}
-          />
-        </div>
-      </aside>
-    );
   }
 
   if (videoSurface === "popout" || videoSurface === "popout-closed") {
@@ -466,6 +397,7 @@ export function FloatingMeetingVideo({
     );
   }
 
+  const isSplit = videoSurface === "split";
   const renderedPanel = isMinimized
     ? clampPanel(panel, { width: getMinimizedPanelWidth(), height: 92 })
     : panel;
@@ -473,22 +405,56 @@ export function FloatingMeetingVideo({
   return renderPortal(
     <aside
       ref={panelRef}
-      className="fixed overflow-hidden rounded-md border border-[#2f604b]/40 bg-[#171713] text-white shadow-2xl"
-      style={{
-        left: renderedPanel.left,
-        top: renderedPanel.top,
-        width: isMinimized ? `min(${minimizedPanelWidth}px, calc(100vw - 24px))` : renderedPanel.width,
-        height: isMinimized ? "auto" : panel.height,
-        touchAction: "none",
-        ...portalPanelStyle,
-      }}
+      className={
+        isSplit
+          ? "scribbl-video-split-panel flex flex-col overflow-hidden border border-[#d8d8ce] bg-[#171713] text-white shadow-2xl min-[1101px]:border-y-0 min-[1101px]:border-r-0"
+          : "fixed overflow-hidden rounded-md border border-[#2f604b]/40 bg-[#171713] text-white shadow-2xl"
+      }
+      style={
+        isSplit
+          ? ({ "--scribbl-split-panel-width": `${splitVideoWidth}px`, touchAction: "none", ...portalPanelStyle } as CSSProperties)
+          : {
+              left: renderedPanel.left,
+              top: renderedPanel.top,
+              width: isMinimized ? `min(${minimizedPanelWidth}px, calc(100vw - 24px))` : renderedPanel.width,
+              height: isMinimized ? "auto" : panel.height,
+              touchAction: "none",
+              ...portalPanelStyle,
+            }
+      }
     >
+      {isSplit ? (
+        <div
+          className="absolute left-0 top-0 hidden h-full w-2 cursor-col-resize touch-none min-[1101px]:flex min-[1101px]:items-center min-[1101px]:justify-center"
+          style={{ zIndex: 501 }}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.currentTarget.setPointerCapture(e.pointerId);
+            splitResizeRef.current = {
+              pointerId: e.pointerId,
+              startX: e.clientX,
+              startWidth: splitVideoWidth,
+              maxWidth: Math.floor(window.innerWidth * maxSplitWidthRatio),
+            };
+          }}
+        >
+          <div className="h-10 w-0.5 rounded-full bg-white/20 transition-colors group-hover:bg-white/50" />
+        </div>
+      ) : null}
       <div
-        className="flex cursor-move items-center justify-between gap-3 border-b border-white/10 bg-[#20201d] px-3 py-2"
-        onPointerDown={(event) => startInteraction(event, "drag")}
+        className={
+          isSplit
+            ? "flex items-center justify-between gap-3 border-b border-white/10 bg-[#20201d] px-4 py-3"
+            : "flex cursor-move items-center justify-between gap-3 border-b border-white/10 bg-[#20201d] px-3 py-2"
+        }
+        onPointerDown={(event) => {
+          if (!isSplit) {
+            startInteraction(event, "drag");
+          }
+        }}
       >
         <div className="flex min-w-0 items-center gap-1.5">
-          <p className="truncate text-sm font-medium">Video</p>
+          <p className="truncate text-sm font-medium">{isSplit ? "Split video" : "Video"}</p>
           {raisedHandCount > 0 ? (
             <span className="shrink-0 rounded-full bg-[#fff7df] px-2 py-0.5 text-xs font-semibold text-[#7a5a15]">
               ✋ {raisedHandCount}
@@ -500,8 +466,51 @@ export function FloatingMeetingVideo({
             </span>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          {!isMinimized ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {isSplit ? (
+            <>
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => focusHubSection("#meeting-overview")}
+                className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+              >
+                Hub
+              </button>
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => focusHubSection("#meeting-notes")}
+                className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+              >
+                Open notes
+              </button>
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => focusHubSection("#meeting-chat")}
+                className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+              >
+                Open chat
+              </button>
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={openFullVideo}
+                className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+              >
+                Full
+              </button>
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={bringBackVideo}
+                className="rounded-md bg-white px-2 py-1 text-xs font-medium text-[#20201d] transition hover:bg-[#eef5ef]"
+              >
+                Float
+              </button>
+            </>
+          ) : !isMinimized ? (
             <button
               type="button"
               onPointerDown={(event) => event.stopPropagation()}
@@ -511,19 +520,34 @@ export function FloatingMeetingVideo({
               Split View
             </button>
           ) : null}
-          <button
-            type="button"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={toggleMinimized}
-            className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
-          >
-            {isMinimized ? "Show" : "Hide"}
-          </button>
+          {!isSplit && !isMinimized ? (
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={openFullVideo}
+              className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+            >
+              Full
+            </button>
+          ) : null}
+          {!isSplit ? (
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={toggleMinimized}
+              className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+            >
+              {isMinimized ? "Show" : "Hide"}
+            </button>
+          ) : null}
         </div>
       </div>
 
       {!isMinimized ? (
-        <div className="overflow-hidden" style={{ width: "100%", height: `calc(100% - 41px)` }}>
+        <div
+          className={isSplit ? "min-h-0 flex-1 overflow-hidden p-3" : "overflow-hidden"}
+          style={isSplit ? undefined : { width: "100%", height: `calc(100% - 41px)` }}
+        >
           <MeetingVideoRoom
             workspaceId={workspaceId}
             meetingId={meetingId}
@@ -543,7 +567,7 @@ export function FloatingMeetingVideo({
           Video hidden
         </button>
       )}
-      {!isMinimized ? (
+      {!isMinimized && !isSplit ? (
         <button
           type="button"
           aria-label="Resize video"
@@ -578,12 +602,21 @@ function getChannelName(meetingId: string) {
 
 function scrollToHubSection(hash: string) {
   const targetId = hash.startsWith("#") ? hash.slice(1) : hash;
-  const target = document.getElementById(targetId);
 
-  if (target) {
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
-    window.history.replaceState(null, "", `#${targetId}`);
-  }
+  window.dispatchEvent(
+    new CustomEvent("scribbl:meeting-hub-navigate", {
+      detail: { hash: `#${targetId}` },
+    }),
+  );
+
+  window.setTimeout(() => {
+    const target = document.getElementById(targetId);
+
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.history.replaceState(null, "", `#${targetId}`);
+    }
+  }, 75);
 }
 
 function getServerSafeDefaultPanel(): PanelState {

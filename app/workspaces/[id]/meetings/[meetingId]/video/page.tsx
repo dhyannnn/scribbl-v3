@@ -7,7 +7,12 @@ import {
   formatMeetingLifecycleLabel,
   getMeetingLifecycle,
 } from "@/lib/meeting-lifecycle";
-import { getMeetingVideoPermissions, type MeetingPermissionOverrideInput } from "@/lib/meeting-permissions";
+import { createChatRoomId } from "@/lib/liveblocks-room";
+import {
+  canManageMeetingParticipantPermissions,
+  getMeetingVideoPermissions,
+  type MeetingPermissionOverrideInput,
+} from "@/lib/meeting-permissions";
 import { prisma } from "@/lib/prisma";
 import { VideoPopoutShell } from "./VideoPopoutShell";
 
@@ -75,19 +80,139 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
           createdAt: "desc",
         },
       },
+      artifacts: {
+        where: {
+          OR: [
+            {
+              note: {
+                deletedAt: null,
+                visibility: "WORKSPACE_SHARED",
+              },
+            },
+            {
+              file: {
+                visibility: "WORKSPACE_SHARED",
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          type: true,
+          source: true,
+          createdAt: true,
+          note: {
+            select: {
+              title: true,
+              type: true,
+              updatedAt: true,
+              owner: {
+                select: {
+                  displayName: true,
+                },
+              },
+            },
+          },
+          file: {
+            select: {
+              id: true,
+              name: true,
+              sizeBytes: true,
+              uploadedBy: {
+                select: {
+                  displayName: true,
+                },
+              },
+            },
+          },
+          createdBy: {
+            select: {
+              displayName: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 8,
+      },
       moderationSettings: true,
+      channel: {
+        select: {
+          id: true,
+          name: true,
+          messages: {
+            select: {
+              id: true,
+              channelId: true,
+              senderUserId: true,
+              body: true,
+              createdAt: true,
+              editedAt: true,
+              deletedAt: true,
+              sender: {
+                select: {
+                  displayName: true,
+                  avatarUrl: true,
+                },
+              },
+            },
+            orderBy: {
+              createdAt: "desc",
+            },
+            take: 100,
+          },
+        },
+      },
       permissionOverrides: {
         select: {
+          id: true,
           userId: true,
           targetType: true,
           artifactId: true,
           state: true,
+          user: {
+            select: {
+              displayName: true,
+              email: true,
+            },
+          },
+          artifact: {
+            select: {
+              note: {
+                select: {
+                  title: true,
+                },
+              },
+            },
+          },
         },
       },
       participants: {
-        where: { userId: currentUser.id },
-        select: { handRaisedAt: true, handLoweredAt: true },
-        take: 1,
+        where: {
+          user: {
+            deletedAt: null,
+          },
+        },
+        select: {
+          id: true,
+          userId: true,
+          status: true,
+          joinedAt: true,
+          leftAt: true,
+          handRaisedAt: true,
+          handLoweredAt: true,
+          user: {
+            select: {
+              displayName: true,
+              email: true,
+              avatarUrl: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
       },
     },
   });
@@ -117,7 +242,7 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
     meeting.createdByUserId === currentUser.id ||
     currentMembership.role === "OWNER" ||
     currentMembership.role === "ADMIN";
-  const currentParticipant = meeting.participants[0];
+  const currentParticipant = meeting.participants.find((participant) => participant.userId === currentUser.id);
   const handRaised =
     !!currentParticipant?.handRaisedAt &&
     (!currentParticipant.handLoweredAt ||
@@ -132,6 +257,75 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
     }),
     handRaised,
   };
+  const canModerateChat = currentMembership.role === "OWNER" || currentMembership.role === "ADMIN";
+  const pendingRequests = meeting.permissionOverrides.filter(
+    (override) =>
+      override.state === "REQUESTED" &&
+      canManageMeetingParticipantPermissions({
+        currentUserId: currentUser.id,
+        meetingCreatedByUserId: meeting.createdByUserId,
+        currentUserRole: currentMembership.role,
+        targetUserId: override.userId,
+        targetUserRole: meeting.workspace.members.find((member) => member.userId === override.userId)?.role,
+      }),
+  );
+  const meetingChannel = meeting.channel
+    ? {
+        id: meeting.channel.id,
+        name: meeting.channel.name,
+        messages: [...meeting.channel.messages].reverse().map((message) => ({
+          id: message.id,
+          channelId: message.channelId,
+          senderUserId: message.senderUserId,
+          body: message.body,
+          createdAt: message.createdAt.toISOString(),
+          editedAt: message.editedAt?.toISOString() ?? null,
+          deletedAt: message.deletedAt?.toISOString() ?? null,
+          sender: {
+            displayName: message.sender.displayName,
+            avatarUrl: message.sender.avatarUrl,
+          },
+        })),
+      }
+    : null;
+  const participants = meeting.participants.map((participant) => ({
+    id: participant.id,
+    userId: participant.userId,
+    status: participant.status,
+    joinedAt: participant.joinedAt?.toISOString() ?? null,
+    leftAt: participant.leftAt?.toISOString() ?? null,
+    handRaised: Boolean(
+      participant.handRaisedAt &&
+        (!participant.handLoweredAt || participant.handLoweredAt < participant.handRaisedAt),
+    ),
+    user: {
+      displayName: participant.user.displayName,
+      email: participant.user.email,
+      avatarUrl: participant.user.avatarUrl,
+    },
+  }));
+  const accessRequests = pendingRequests.map((request) => ({
+    id: request.id,
+    userId: request.userId,
+    targetType: request.targetType,
+    artifactId: request.artifactId,
+    user: request.user,
+    artifactTitle: request.artifact?.note?.title ?? null,
+  }));
+  const artifacts = meeting.artifacts.map((artifact) => ({
+    id: artifact.id,
+    type: artifact.type,
+    source: artifact.source,
+    createdAt: artifact.createdAt.toISOString(),
+    title: artifact.note?.title ?? artifact.file?.name ?? "Untitled artifact",
+    detail:
+      artifact.note?.owner?.displayName ??
+      artifact.file?.uploadedBy.displayName ??
+      artifact.createdBy.displayName,
+    fileId: artifact.file?.id ?? null,
+    fileSizeBytes: artifact.file?.sizeBytes ?? null,
+    noteType: artifact.note?.type ?? null,
+  }));
 
   return (
     <>
@@ -151,6 +345,23 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
           latestRecording,
         }}
         permissions={permissions}
+        participants={participants}
+        accessRequests={accessRequests}
+        context={{
+          description: meeting.description,
+          startsAt: meeting.startsAt.toISOString(),
+          endsAt: meeting.endsAt?.toISOString() ?? null,
+          artifacts,
+        }}
+        chat={{
+          roomId: meetingChannel ? createChatRoomId(id, meetingChannel.id) : createChatRoomId(id, meeting.id),
+          channel: meetingChannel,
+          currentUserId: currentUser.id,
+          currentUserDisplayName: currentUser.displayName,
+          currentUserAvatarUrl: currentUser.avatarUrl,
+          canModerateChat,
+          openInChannelsHref: meetingChannel ? `/workspaces/${id}/chat?channel=${meetingChannel.id}` : undefined,
+        }}
       />
     </>
   );
