@@ -3,6 +3,7 @@
 import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { writeAuditLog } from "@/lib/audit-log";
 import { getCurrentUser } from "@/lib/current-user";
 import { canEditMeetingNotes, getMeetingLifecycle } from "@/lib/meeting-lifecycle";
 import { createDefaultNoteTitle, sanitizeNoteTitle } from "@/lib/note-title";
@@ -449,6 +450,14 @@ export async function deleteWorkspaceNote(formData: FormData) {
         deletedAt: new Date(),
       },
     });
+  });
+
+  void writeAuditLog({
+    action: "NOTE_DELETED",
+    actorUserId: currentUser.id,
+    workspaceId,
+    targetId: note.id,
+    metadata: { visibility: note.visibility },
   });
 
   revalidatePath(`/workspaces/${workspaceId}`);

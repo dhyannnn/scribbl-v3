@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import type { EgressInfo } from "livekit-server-sdk";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { writeAuditLog } from "@/lib/audit-log";
 import { getCurrentUser } from "@/lib/current-user";
 import {
   canChangeMeetingRsvp,
@@ -359,6 +360,10 @@ export async function startMeetingRecording(formData: FormData) {
     return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
   }
 
+  if (!RateLimits.recordingStart(currentUser.id)) {
+    return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
+  }
+
   if (!canJoinMeeting(getMeetingLifecycle(meeting))) {
     return finishRecordingAction(formData, workspaceId, meetingId, "not-open");
   }
@@ -400,6 +405,13 @@ export async function startMeetingRecording(formData: FormData) {
     await stopRoomRecording(recording.info.egressId);
     return finishRecordingAction(formData, workspaceId, meetingId, "start-failed");
   }
+
+  void writeAuditLog({
+    action: "RECORDING_STARTED",
+    actorUserId: currentUser.id,
+    workspaceId,
+    targetId: meetingId,
+  });
 
   return finishRecordingAction(formData, workspaceId, meetingId, "started");
 }
@@ -467,6 +479,10 @@ export async function stopMeetingRecording(formData: FormData) {
     return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
   }
 
+  if (!RateLimits.recordingStop(currentUser.id)) {
+    return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
+  }
+
   if (recording.status === "COMPLETED") {
     return finishRecordingAction(formData, workspaceId, meetingId, "already-complete");
   }
@@ -485,6 +501,13 @@ export async function stopMeetingRecording(formData: FormData) {
         errorMessage: stoppedRecording.error,
       },
     });
+    void writeAuditLog({
+      action: "RECORDING_FAILED",
+      actorUserId: currentUser.id,
+      workspaceId,
+      targetId: meetingId,
+      metadata: { error: stoppedRecording.error, phase: "stop" },
+    });
     return finishRecordingAction(formData, workspaceId, meetingId, "stop-failed");
   }
 
@@ -493,6 +516,13 @@ export async function stopMeetingRecording(formData: FormData) {
     workspaceId,
     info: stoppedRecording.info,
     stoppedByUserId: currentUser.id,
+  });
+
+  void writeAuditLog({
+    action: "RECORDING_STOPPED",
+    actorUserId: currentUser.id,
+    workspaceId,
+    targetId: meetingId,
   });
 
   return finishRecordingAction(formData, workspaceId, meetingId, "stopped");
@@ -1669,6 +1699,23 @@ async function persistRecordingEgressResult({
       },
     });
   });
+
+  if (status === "COMPLETED") {
+    void writeAuditLog({
+      action: "RECORDING_COMPLETED",
+      actorUserId: recording.startedByUserId,
+      workspaceId,
+      targetId: recording.meeting.id,
+    });
+  } else if (status === "FAILED") {
+    void writeAuditLog({
+      action: "RECORDING_FAILED",
+      actorUserId: recording.startedByUserId,
+      workspaceId,
+      targetId: recording.meeting.id,
+      metadata: { error: info.error, phase: "egress" },
+    });
+  }
 }
 
 function canManageMeetingRecording(createdByUserId: string, currentUserId: string, role: string) {

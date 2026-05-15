@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/current-user";
 import { logger } from "@/lib/logger";
 import { createWorkspaceNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
+import { RateLimits } from "@/lib/rate-limit";
 
 const maxMessageLength = 2000;
 
@@ -14,6 +15,10 @@ export async function POST(request: Request) {
 
   if (!currentUser) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+
+  if (!RateLimits.chatSend(currentUser.id)) {
+    return NextResponse.json({ error: "Too many messages. Slow down." }, { status: 429 });
   }
 
   const { workspaceId, channelId, body } = parseBody(await readJson(request));

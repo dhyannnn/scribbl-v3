@@ -1,5 +1,7 @@
 import "server-only";
 
+import { logger } from "@/lib/logger";
+
 export type SendEmailResult =
   | {
       ok: true;
@@ -54,12 +56,14 @@ export async function sendResendEmail({
     });
 
     if (!response.ok) {
+      logger.resendError({ to: recipients, subject, status: response.status });
       return {
         ok: false,
         reason: "send-failed",
       };
     }
-  } catch {
+  } catch (err) {
+    logger.resendError({ to: recipients, subject }, err);
     return {
       ok: false,
       reason: "send-failed",

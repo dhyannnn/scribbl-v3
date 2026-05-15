@@ -3,6 +3,7 @@ import path from "node:path";
 import { notFound } from "next/navigation";
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/current-user";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { createAdminClient, getStorageBucketName } from "@/lib/supabase/admin";
 
@@ -70,6 +71,7 @@ export async function GET(_request: NextRequest, { params }: RouteProps) {
     .createSignedUrl(file.storageKey, 60);
 
   if (error || !data?.signedUrl) {
+    logger.supabaseStorageError({ fileId: file.storageKey }, error ?? new Error("No signed URL returned"));
     return NextResponse.json({ error: "Could not open this file." }, { status: 404 });
   }
 

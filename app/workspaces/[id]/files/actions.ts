@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { writeAuditLog } from "@/lib/audit-log";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
+import { RateLimits } from "@/lib/rate-limit";
 import { createAdminClient, getStorageBucketName } from "@/lib/supabase/admin";
 
 const fileVisibilities = ["PRIVATE", "WORKSPACE_SHARED"] as const;
@@ -63,6 +65,10 @@ export async function uploadWorkspaceFile(formData: FormData) {
 
   if (membership?.status !== "ACTIVE") {
     redirect(`/workspaces/${workspace.id}/files?file=unauthorized`);
+  }
+
+  if (!RateLimits.fileUpload(currentUser.id)) {
+    redirect(`/workspaces/${workspace.id}/files?file=upload-rate-limited`);
   }
 
   const uploadId = crypto.randomUUID();
@@ -136,6 +142,7 @@ export async function deleteWorkspaceFile(formData: FormData) {
       },
       select: {
         id: true,
+        name: true,
         uploadedByUserId: true,
         visibility: true,
         storageBucket: true,
@@ -196,6 +203,14 @@ export async function deleteWorkspaceFile(formData: FormData) {
         id: file.id,
       },
     });
+  });
+
+  void writeAuditLog({
+    action: "FILE_DELETED",
+    actorUserId: currentUser.id,
+    workspaceId,
+    targetId: file.id,
+    metadata: { name: file.name, visibility: file.visibility },
   });
 
   revalidatePath(`/workspaces/${workspaceId}`);
