@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MeetingNotesSection, type NoteArtifactData } from "@/components/MeetingNotesSection";
+import {
+  MeetingNotesSection,
+  type NoteArtifactData,
+  type PendingMeetingPermissionRequest,
+} from "@/components/MeetingNotesSection";
 import { MeetingRouteRefresher } from "@/components/MeetingRouteRefresher";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { PermissionSubmitButton } from "@/components/PermissionSubmitButton";
@@ -48,6 +52,7 @@ type PageProps = {
   searchParams: Promise<{
     sharedNoteId?: string;
     privateNoteId?: string;
+    noteFocus?: string;
     meeting?: string;
     chat?: string;
     recording?: string;
@@ -60,6 +65,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
   const {
     sharedNoteId,
     privateNoteId,
+    noteFocus,
     meeting: meetingStatus,
     chat: chatStatus,
     recording: recordingStatus,
@@ -240,6 +246,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               sender: {
                 select: {
                   displayName: true,
+                  avatarUrl: true,
                 },
               },
             },
@@ -339,6 +346,13 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
         targetUserRole: workspaceMembers.find((m) => m.userId === override.userId)?.role,
       }),
   );
+  const pendingNotePermissionRequests: PendingMeetingPermissionRequest[] = pendingRequests.map((request) => ({
+    userId: request.userId,
+    targetType: request.targetType,
+    artifactId: request.artifactId,
+    user: request.user,
+    artifact: request.artifact,
+  }));
   const permissionContext = {
     currentUserId: currentUser.id,
     meetingCreatedByUserId: meeting.createdByUserId,
@@ -447,6 +461,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           deletedAt: message.deletedAt?.toISOString() ?? null,
           sender: {
             displayName: message.sender.displayName,
+            avatarUrl: message.sender.avatarUrl,
           },
         })),
       }
@@ -497,7 +512,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
         data-meeting-hub-shell
         className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10"
       >
-        <header className="border-b border-[#d8d8ce] pb-6">
+        <header id="meeting-overview" className="scroll-mt-6 border-b border-[#d8d8ce] pb-6">
           <Link href={`/workspaces/${id}/meetings`} className="text-sm font-medium text-[#2f604b]">
             Back to meetings
           </Link>
@@ -867,6 +882,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           channel={meetingChannel}
           currentUserId={currentUser.id}
           currentUserDisplayName={currentUser.displayName}
+          currentUserAvatarUrl={currentUser.avatarUrl}
           canModerateChat={canModerateChat}
           status={chatStatus}
           title="Meeting Chat"
@@ -875,6 +891,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           openInChannelsHref={
             meetingChannel && !isCanceled ? `/workspaces/${id}/chat?channel=${meetingChannel.id}` : undefined
           }
+          lazy
         />
 
         <MeetingNotesSection
@@ -895,6 +912,8 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           }}
           selectedSharedNoteId={selectedSharedArtifact?.noteId ?? undefined}
           selectedPrivateNoteId={selectedPrivateArtifact?.noteId ?? undefined}
+          initialFocused={noteFocus === "shared" || noteFocus === "private" ? noteFocus : undefined}
+          pendingPermissionRequests={pendingNotePermissionRequests}
         />
 
         <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">

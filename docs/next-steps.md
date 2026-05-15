@@ -58,3 +58,13 @@ The first useful screen should be the dashboard:
 - show upcoming meetings
 
 That screen will prove the main database relationships are shaped correctly.
+
+## Current MVP Polish Priority
+
+1. Responsive/mobile pass for the dashboard and workspace shell.
+2. Responsive/mobile pass for chat.
+3. Responsive/mobile pass for meeting detail pages.
+4. Responsive/mobile pass for notes and whiteboards.
+5. Front-end visual redesign/design-system pass once the core layouts behave across screen sizes.
+6. Hardening tests for notifications, announcements, chat notifications, meetings, and cleanup behavior.
+7. Production prep: scheduled notification cleanup, rate limits, logger wiring, audit coverage, and deployment environment review.

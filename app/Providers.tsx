@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { LiveblocksProvider } from "@liveblocks/react/suspense";
 import { useRouter } from "next/navigation";
+import { liveblocksNow, logLiveblocksClientTiming } from "@/lib/liveblocks-timing";
 
 type ScribblClientEvent =
   | {
@@ -65,6 +66,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <LiveblocksProvider
       authEndpoint={async (room) => {
+        const startedAt = liveblocksNow();
         const response = await fetch("/api/liveblocks-auth", {
           method: "POST",
           headers: {
@@ -74,8 +76,19 @@ export function Providers({ children }: { children: ReactNode }) {
             room,
           }),
         });
+        const fetchedAt = liveblocksNow();
+        const body = await response.json();
+        const parsedAt = liveblocksNow();
 
-        return response.json();
+        logLiveblocksClientTiming("Liveblocks auth endpoint", {
+          room,
+          status: response.status,
+          ok: response.ok,
+          fetchMs: Math.round(fetchedAt - startedAt),
+          parseMs: Math.round(parsedAt - fetchedAt),
+        }, parsedAt - startedAt);
+
+        return body;
       }}
       preventUnsavedChanges
     >

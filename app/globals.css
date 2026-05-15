@@ -29,6 +29,19 @@ body {
   display: none !important;
 }
 
+@keyframes chat-typing-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+
 /* ── TipTap / ProseMirror editor styles ─────────────────────────────── */
 
 .ProseMirror {
@@ -152,6 +165,30 @@ body {
   height: 0;
 }
 
+.scribbl-document-editor .ProseMirror {
+  background: #ffffff;
+  border: 1px solid #d8d8ce;
+  box-shadow: 0 1px 2px rgba(32, 32, 29, 0.08);
+  margin: 2rem auto;
+  max-width: calc(100vw - 2rem);
+  min-height: 1056px;
+  padding: 72px;
+  width: 816px;
+}
+
+.scribbl-document-editor .ProseMirror-focused {
+  outline: none;
+}
+
+@media (max-width: 720px) {
+  .scribbl-document-editor .ProseMirror {
+    margin: 0.75rem auto;
+    min-height: calc((100vw - 1.5rem) * 1.294);
+    padding: 2rem 1.5rem;
+    width: calc(100vw - 1.5rem);
+  }
+}
+
 /* Collaboration cursors */
 .collaboration-cursor__caret {
   border-left: 2px solid;
@@ -180,6 +217,23 @@ body {
 
 body.scribbl-video-split-active {
   overflow-x: hidden;
+}
+
+.scribbl-full-video-room,
+.scribbl-full-video-room.lk-room-container,
+.scribbl-full-video-room .lk-room-container,
+.scribbl-full-video-room .lk-video-conference,
+.scribbl-full-video-room .lk-grid-layout-wrapper {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+.scribbl-full-video-room.lk-room-container {
+  display: block !important;
+}
+
+.scribbl-full-video-room .lk-video-conference-inner {
+  min-height: 0 !important;
 }
 
 body.scribbl-video-split-active [data-split-stack] {

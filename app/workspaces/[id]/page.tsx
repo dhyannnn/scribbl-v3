@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InviteAcceptedBroadcast } from "@/components/InviteAcceptedBroadcast";
+import { NotificationBell } from "@/components/NotificationBell";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
@@ -66,6 +67,10 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
         },
       },
       channels: {
+        where: {
+          type: "CHAT",
+          meetingId: null,
+        },
         select: {
           name: true,
           messages: {
@@ -208,26 +213,29 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
           <Link href={"/"} className="text-sm font-medium text-[#2f604b]">
             Back to dashboard
           </Link>
-          <div className="mt-5 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-            <div>
+          <div className="mt-5 flex min-w-0 flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0">
               <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d7f70]">
                 {workspace.type.replace("_", " ").toLowerCase()}
               </p>
-              <h1 className="mt-2 text-4xl font-semibold tracking-normal text-[#171713]">
+              <h1 className="mt-2 break-words text-3xl font-semibold tracking-normal text-[#171713] sm:text-4xl">
                 {workspace.name}
               </h1>
               <p className="mt-3 max-w-3xl text-base leading-7 text-[#62645c]">
                 {workspace.description}
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-3 sm:min-w-[360px]">
-              <MiniMetric
-                label="Members"
-                value={workspace._count.members}
-                href={`/workspaces/${workspace.id}/members`}
-              />
-              <MiniMetric label="Notes" value={workspace._count.notes} />
-              <MiniMetric label="Meetings" value={workspace._count.meetings} />
+            <div className="flex w-full min-w-0 items-start gap-3 md:w-auto">
+              <NotificationBell />
+              <div className="grid min-w-0 flex-1 grid-cols-3 gap-2 sm:gap-3 md:w-[360px] md:flex-none">
+                <MiniMetric
+                  label="Members"
+                  value={workspace._count.members}
+                  href={`/workspaces/${workspace.id}/members`}
+                />
+                <MiniMetric label="Notes" value={workspace._count.notes} />
+                <MiniMetric label="Meetings" value={workspace._count.meetings} />
+              </div>
             </div>
           </div>
         </header>
@@ -241,9 +249,9 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
         {canManageWorkspace ? (
           <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
             <h2 className="text-xl font-semibold">Workspace Settings</h2>
-            <form action={updateWorkspaceDetails} className="mt-5 grid gap-4 lg:grid-cols-[1fr_220px_auto]">
+            <form action={updateWorkspaceDetails} className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
               <input type="hidden" name="workspaceId" value={workspace.id} />
-              <label className="grid gap-2">
+              <label className="grid min-w-0 gap-2">
                 <span className="text-sm font-medium text-[#4d4f47]">Name</span>
                 <input
                   name="name"
@@ -252,7 +260,7 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
                   className="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#2f604b] focus:bg-white"
                 />
               </label>
-              <label className="grid gap-2">
+              <label className="grid min-w-0 gap-2">
                 <span className="text-sm font-medium text-[#4d4f47]">Type</span>
                 <select
                   name="type"
@@ -285,7 +293,7 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
           </section>
         ) : null}
 
-        <nav className="grid gap-3 sm:grid-cols-4">
+        <nav className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
             ["Chat", `/workspaces/${workspace.id}/chat`],
             ["Notes", `/workspaces/${workspace.id}/notes`],
@@ -311,9 +319,9 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
             <div className="mt-5 grid gap-4">
               {primaryChannelMessages.map((message) => (
                 <article key={message.id} className="rounded-md bg-[#fbfbf8] p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <p className="font-semibold">{message.sender.displayName}</p>
-                    <p className="text-xs text-[#777970]">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                    <p className="min-w-0 break-words font-semibold">{message.sender.displayName}</p>
+                    <p className="shrink-0 text-xs text-[#777970]">
                       {message.createdAt.toLocaleString("en-US", {
                         month: "short",
                         day: "numeric",
@@ -322,7 +330,7 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
                       })}
                     </p>
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-[#4d4f47]">{message.body}</p>
+                  <p className="mt-2 break-words text-sm leading-6 text-[#4d4f47]">{message.body}</p>
                 </article>
               ))}
             </div>
@@ -339,7 +347,7 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
             {workspace.notes.map((note) => (
               <article key={note.id} className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
                 <p className="text-sm font-medium text-[#2f604b]">{note.type.toLowerCase()}</p>
-                <h3 className="mt-2 text-lg font-semibold">{note.title}</h3>
+                <h3 className="mt-2 break-words text-lg font-semibold">{note.title}</h3>
                 <p className="mt-3 text-sm text-[#66685f]">
                   Updated {note.updatedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                 </p>
@@ -362,7 +370,7 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
                 className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm"
               >
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-[#2f604b]">
                       {meeting.startsAt.toLocaleString("en-US", {
                         weekday: "short",
@@ -373,14 +381,14 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
                       })}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-semibold">{meeting.title}</h3>
+                      <h3 className="min-w-0 break-words text-lg font-semibold">{meeting.title}</h3>
                       <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${getMeetingBadgeClassName(getMeetingLifecycle(meeting))}`}>
                         {formatMeetingLifecycleLabel(getMeetingLifecycle(meeting))}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-[#66685f]">{meeting.description}</p>
+                    <p className="mt-2 break-words text-sm leading-6 text-[#66685f]">{meeting.description}</p>
                   </div>
-                  <div className="grid gap-2 rounded-md bg-[#fbfbf8] px-4 py-3 text-sm text-[#4d4f47]">
+                  <div className="grid w-full shrink-0 gap-2 rounded-md bg-[#fbfbf8] px-4 py-3 text-sm text-[#4d4f47] md:w-auto">
                     <span>
                       {meeting.participants.length} participant
                       {meeting.artifacts.length > 0 ? ` / ${meeting.artifacts.length} saved artifact` : ""}
@@ -406,9 +414,9 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
               {workspace.files.map((file) => (
                 <article key={file.id} className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-medium text-[#2f604b]">{formatFileType(file.mimeType)}</p>
-                      <h3 className="mt-2 text-lg font-semibold">{file.name}</h3>
+                      <h3 className="mt-2 break-words text-lg font-semibold">{file.name}</h3>
                       <p className="mt-3 text-sm text-[#66685f]">
                         Uploaded by {file.uploadedBy.displayName} on{" "}
                         {file.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
@@ -418,7 +426,7 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
                     <Link
                       href={`/api/files/${file.id}`}
                       target="_blank"
-                      className="rounded-md bg-[#2f604b] px-4 py-2 text-center text-sm font-medium text-white transition hover:bg-[#244b3a]"
+                      className="w-full rounded-md bg-[#2f604b] px-4 py-2 text-center text-sm font-medium text-white transition hover:bg-[#244b3a] sm:w-auto"
                     >
                       Open
                     </Link>
@@ -440,8 +448,8 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
 function MiniMetric({ label, value, href }: { label: string; value: number; href?: string }) {
   const content = (
     <>
-      <p className="text-xs font-medium text-[#686a62]">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
+      <p className="truncate text-xs font-medium text-[#686a62]">{label}</p>
+      <p className="mt-1 text-xl font-semibold sm:text-2xl">{value}</p>
     </>
   );
 
@@ -449,7 +457,7 @@ function MiniMetric({ label, value, href }: { label: string; value: number; href
     return (
       <Link
         href={href}
-        className="rounded-md border border-[#d8d8ce] bg-white p-3 text-center shadow-sm transition hover:border-[#9ab09e] hover:bg-[#fbfbf8]"
+        className="min-w-0 rounded-md border border-[#d8d8ce] bg-white p-2 text-center shadow-sm transition hover:border-[#9ab09e] hover:bg-[#fbfbf8] sm:p-3"
       >
         {content}
       </Link>
@@ -457,7 +465,7 @@ function MiniMetric({ label, value, href }: { label: string; value: number; href
   }
 
   return (
-    <div className="rounded-md border border-[#d8d8ce] bg-white p-3 text-center shadow-sm">
+    <div className="min-w-0 rounded-md border border-[#d8d8ce] bg-white p-2 text-center shadow-sm sm:p-3">
       {content}
     </div>
   );
@@ -465,9 +473,9 @@ function MiniMetric({ label, value, href }: { label: string; value: number; href
 
 function SectionHeader({ title, action, href }: { title: string; action: string; href: string }) {
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <h2 className="text-xl font-semibold">{title}</h2>
-      <Link href={href} className="rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white">
+      <Link href={href} className="rounded-md bg-[#2f604b] px-4 py-2 text-center text-sm font-medium text-white">
         {action}
       </Link>
     </div>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { NotificationBell } from "@/components/NotificationBell";
 import { getCurrentUser, getSupabaseAuthUser } from "@/lib/current-user";
 import {
   formatMeetingLifecycleLabel,
@@ -223,51 +224,54 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-6 sm:px-8 lg:px-10">
-        <header className="flex flex-col gap-5 border-b border-[#d8d8ce] pb-6 md:flex-row md:items-end md:justify-between">
-          <div>
+        <header className="flex min-w-0 flex-col gap-5 border-b border-[#d8d8ce] pb-6 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0">
             <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d7f70]">
               Scribbl
             </p>
-            <h1 className="mt-2 text-4xl font-semibold tracking-normal text-[#171713]">
+            <h1 className="mt-2 text-3xl font-semibold tracking-normal text-[#171713] sm:text-4xl">
               Study Dashboard
             </h1>
             <p className="mt-3 max-w-2xl text-base leading-7 text-[#62645c]">
               Your course workspaces, saved notes, chats, and study sessions in one place.
             </p>
           </div>
-          <div className="rounded-md border border-[#d8d8ce] bg-white px-4 py-3 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#777970]">
-              {authUser ? "Signed in" : "Signed out"}
-            </p>
-            <p className="mt-1 text-lg font-semibold">{user?.displayName ?? "No user yet"}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {authUser ? (
-                <>
+          <div className="flex w-full min-w-0 items-start gap-3 md:w-auto md:max-w-md">
+            <NotificationBell />
+            <div className="min-w-0 flex-1 rounded-md border border-[#d8d8ce] bg-white px-4 py-3 shadow-sm md:flex-none">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#777970]">
+                {authUser ? "Signed in" : "Signed out"}
+              </p>
+              <p className="mt-1 truncate text-lg font-semibold">{user?.displayName ?? "No user yet"}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {authUser ? (
+                  <>
+                    <Link
+                      href="/account"
+                      className="rounded-md border border-[#c8c8bd] bg-white px-3 py-1.5 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]"
+                    >
+                      Account
+                    </Link>
+                    <form action={signOut}>
+                      <button className="rounded-md border border-[#c8c8bd] bg-white px-3 py-1.5 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]">
+                        Sign out
+                      </button>
+                    </form>
+                  </>
+                ) : (
                   <Link
-                    href="/account"
+                    href="/login"
                     className="rounded-md border border-[#c8c8bd] bg-white px-3 py-1.5 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]"
                   >
-                    Account
+                    Sign in
                   </Link>
-                  <form action={signOut}>
-                    <button className="rounded-md border border-[#c8c8bd] bg-white px-3 py-1.5 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]">
-                      Sign out
-                    </button>
-                  </form>
-                </>
-              ) : (
-                <Link
-                  href="/login"
-                  className="rounded-md border border-[#c8c8bd] bg-white px-3 py-1.5 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]"
-                >
-                  Sign in
-                </Link>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </header>
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <SummaryTile label="Workspaces" value={workspaces.length} />
           <SummaryTile label="Recent Notes Shown" value={recentNotes.length} />
           <SummaryTile label="Upcoming Shown" value={upcomingMeetings.length} />
@@ -316,7 +320,7 @@ export default async function Home() {
 
         <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center justify-between gap-4">
               <h2 className="text-xl font-semibold">Workspaces</h2>
             </div>
             {currentUser ? (
@@ -324,8 +328,8 @@ export default async function Home() {
                 action={createWorkspace}
                 className="mt-5 grid gap-3 rounded-md border border-[#e2e2d8] bg-[#fbfbf8] p-4"
               >
-                <div className="grid gap-3 md:grid-cols-[1fr_180px]">
-                  <label className="grid gap-2">
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
+                  <label className="grid min-w-0 gap-2">
                     <span className="text-sm font-medium text-[#4d4f47]">Workspace name</span>
                     <input
                       name="name"
@@ -334,7 +338,7 @@ export default async function Home() {
                       className="min-h-11 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
                     />
                   </label>
-                  <label className="grid gap-2">
+                  <label className="grid min-w-0 gap-2">
                     <span className="text-sm font-medium text-[#4d4f47]">Type</span>
                     <select
                       name="type"
@@ -356,8 +360,8 @@ export default async function Home() {
                     className="resize-y rounded-md border border-[#c8c8bd] bg-white p-3 text-sm leading-6 outline-none transition focus:border-[#2f604b]"
                   />
                 </label>
-                <div className="flex justify-end">
-                  <button className="rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a]">
+                <div className="flex justify-stretch sm:justify-end">
+                  <button className="w-full rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a] sm:w-auto">
                     New Workspace
                   </button>
                 </div>
@@ -376,16 +380,16 @@ export default async function Home() {
                     className="rounded-md border border-[#e2e2d8] bg-[#fbfbf8] p-4 transition hover:border-[#9ab09e] hover:bg-white"
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#6d7f70]">
                           {workspace.type.replace("_", " ").toLowerCase()}
                         </p>
-                        <h3 className="mt-1 text-lg font-semibold">{workspace.name}</h3>
+                        <h3 className="mt-1 break-words text-lg font-semibold">{workspace.name}</h3>
                         <p className="mt-2 text-sm leading-6 text-[#66685f]">
                           {workspace.description || "No description yet."}
                         </p>
                       </div>
-                      <span className="rounded-md bg-[#e7eee7] px-3 py-1 text-sm font-medium text-[#2f604b]">
+                      <span className="w-fit shrink-0 rounded-md bg-[#e7eee7] px-3 py-1 text-sm font-medium text-[#2f604b]">
                         {workspace._count.channels} channel{workspace._count.channels === 1 ? "" : "s"}
                       </span>
                     </div>
@@ -408,8 +412,8 @@ export default async function Home() {
                     className="block border-b border-[#e6e6dc] pb-4 transition hover:text-[#2f604b] last:border-0"
                   >
                     <p className="text-sm font-medium text-[#2f604b]">{meeting.workspaceName}</p>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold">{meeting.title}</h3>
+                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+                      <h3 className="min-w-0 break-words font-semibold">{meeting.title}</h3>
                       <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${getMeetingBadgeClassName(getMeetingLifecycle(meeting, now))}`}>
                         {formatMeetingLifecycleLabel(getMeetingLifecycle(meeting, now))}
                       </span>
@@ -440,7 +444,7 @@ export default async function Home() {
                   href={`/workspaces/${message.workspaceId}/chat?channel=${message.channelId}`}
                   className="block rounded-md bg-white p-4 shadow-sm transition hover:bg-[#fbfbf8]"
                 >
-                  <p className="text-sm font-medium text-[#2f604b]">
+                  <p className="truncate text-sm font-medium text-[#2f604b]">
                     {message.workspaceName} / #{message.channelName}
                   </p>
                   <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#4d4f47]">{message.body}</p>
@@ -460,7 +464,7 @@ export default async function Home() {
                   href={`/workspaces/${note.workspaceId}/notes/${note.id}`}
                   className="block rounded-md bg-white p-4 shadow-sm transition hover:bg-[#fbfbf8]"
                 >
-                  <p className="text-sm font-medium text-[#2f604b]">{note.workspaceName}</p>
+                  <p className="truncate text-sm font-medium text-[#2f604b]">{note.workspaceName}</p>
                   <h3 className="mt-2 line-clamp-1 font-semibold">{note.title}</h3>
                   <p className="mt-3 text-xs text-[#777970]">
                     {note.type.toLowerCase()} note updated {note.updatedAt.toLocaleDateString()}
@@ -479,9 +483,9 @@ export default async function Home() {
 
 function SummaryTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
+    <div className="rounded-md border border-[#d8d8ce] bg-white p-4 shadow-sm sm:p-5">
       <p className="text-sm font-medium text-[#686a62]">{label}</p>
-      <p className="mt-3 text-3xl font-semibold">{value}</p>
+      <p className="mt-2 text-2xl font-semibold sm:mt-3 sm:text-3xl">{value}</p>
     </div>
   );
 }

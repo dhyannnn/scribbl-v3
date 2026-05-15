@@ -54,7 +54,7 @@ export default async function ChatPage({ params, searchParams }: PageProps) {
             },
           },
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ type: "desc" }, { createdAt: "asc" }],
       },
     },
   });
@@ -82,8 +82,20 @@ export default async function ChatPage({ params, searchParams }: PageProps) {
           where: {
             channelId: activeChannel.id,
           },
-          include: {
-            sender: true,
+          select: {
+            id: true,
+            channelId: true,
+            senderUserId: true,
+            body: true,
+            createdAt: true,
+            editedAt: true,
+            deletedAt: true,
+            sender: {
+              select: {
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
           },
           orderBy: {
             createdAt: "desc",
@@ -94,10 +106,12 @@ export default async function ChatPage({ params, searchParams }: PageProps) {
     : [];
   const currentMembership = workspace.members.find((member) => member.userId === currentUser.id);
   const canModerateChat = currentMembership?.role === "OWNER" || currentMembership?.role === "ADMIN";
+  const canPostMessages = activeChannel?.type !== "ANNOUNCEMENT" || canModerateChat;
   const activeChannelPayload = activeChannel
     ? {
         id: activeChannel.id,
         name: getChannelDisplayName(activeChannel),
+        type: activeChannel.type,
         messages: activeChannelMessages.map((message) => ({
           id: message.id,
           channelId: message.channelId,
@@ -108,6 +122,7 @@ export default async function ChatPage({ params, searchParams }: PageProps) {
           deletedAt: message.deletedAt?.toISOString() ?? null,
           sender: {
             displayName: message.sender.displayName,
+            avatarUrl: message.sender.avatarUrl,
           },
         })),
       }
@@ -115,18 +130,23 @@ export default async function ChatPage({ params, searchParams }: PageProps) {
 
   return (
     <main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
-      <div className="mx-auto grid w-full max-w-7xl gap-6 px-5 py-6 sm:px-8 lg:grid-cols-[260px_1fr] lg:px-10">
-        <aside className="rounded-md border border-[#d8d8ce] bg-white p-4 shadow-sm">
-          <Link href={`/workspaces/${workspace.id}`} className="text-sm font-medium text-[#2f604b]">
+      <div className="mx-auto grid w-full max-w-7xl gap-6 px-5 py-6 sm:px-8 lg:grid-cols-[260px_minmax(0,1fr)] lg:px-10">
+        <aside className="min-w-0 rounded-md border border-[#d8d8ce] bg-white p-4 shadow-sm">
+          <Link href={`/workspaces/${workspace.id}`} className="block truncate text-sm font-medium text-[#2f604b]">
             Back to {workspace.name}
           </Link>
-          <h1 className="mt-5 text-2xl font-semibold">Channels</h1>
-          <div className="mt-4 grid gap-2">
+          <div className="mt-5 flex items-end justify-between gap-3 lg:block">
+            <h1 className="text-2xl font-semibold">Channels</h1>
+            <span className="shrink-0 text-xs font-medium text-[#777970] lg:hidden">
+              {workspace.channels.length}
+            </span>
+          </div>
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1 lg:grid lg:overflow-visible lg:pb-0">
             {workspace.channels.map((channel) => (
               <Link
                 key={channel.id}
                 href={`/workspaces/${workspace.id}/chat?channel=${channel.id}`}
-                className={`min-w-0 rounded-md px-3 py-2 text-sm font-medium transition ${
+                className={`min-w-[160px] max-w-[240px] shrink-0 rounded-md px-3 py-2 text-sm font-medium transition lg:min-w-0 lg:max-w-none lg:shrink ${
                   channel.id === activeChannel?.id
                     ? "bg-[#2f604b] text-white"
                     : "bg-[#e7eee7] text-[#2f604b] hover:bg-[#dce8dd]"
@@ -148,11 +168,14 @@ export default async function ChatPage({ params, searchParams }: PageProps) {
           channel={activeChannelPayload}
           currentUserId={currentUser.id}
           currentUserDisplayName={currentUser.displayName}
+          currentUserAvatarUrl={currentUser.avatarUrl}
           canModerateChat={canModerateChat}
           status={chatStatus}
-          title={activeChannel?.meetingId ? "Meeting Chat" : "Course Chat"}
-          emptyText="No messages in this channel yet."
+          title={activeChannel?.type === "ANNOUNCEMENT" ? "Announcements" : activeChannel?.meetingId ? "Meeting Chat" : "Course Chat"}
+          emptyText={activeChannel?.type === "ANNOUNCEMENT" ? "No announcements yet." : "No messages in this channel yet."}
           placeholder={`Message ${activeChannel ? getChannelDisplayName(activeChannel) : "#general"}`}
+          canPostMessages={canPostMessages}
+          readOnlyText="Only workspace owners and admins can post announcements."
           maxMessagesHeightClassName="max-h-[620px]"
         />
       </div>
@@ -162,6 +185,7 @@ export default async function ChatPage({ params, searchParams }: PageProps) {
 
 type ChannelDisplay = {
   name: string;
+  type?: string;
   meetingId: string | null;
   meeting?: {
     startsAt: Date;
@@ -170,6 +194,10 @@ type ChannelDisplay = {
 };
 
 function getChannelDisplayName(channel: ChannelDisplay) {
+  if (channel.type === "ANNOUNCEMENT") {
+    return "Announcements";
+  }
+
   if (!channel.meetingId) {
     return `#${channel.name}`;
   }
