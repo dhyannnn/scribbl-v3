@@ -17,6 +17,7 @@ import {
   type TLStoreWithStatus,
 } from "tldraw";
 import { cursorColor } from "@/lib/tiptap/liveblocks-cursors";
+import { liveblocksNow, logLiveblocksClientTiming } from "@/lib/liveblocks-timing";
 
 export function useTldrawYjsStore({
   shapeUtils = [],
@@ -72,27 +73,115 @@ export function useTldrawYjsStore({
   // Yjs connection.
   useEffect(() => {
     const unsubs: (() => void)[] = [];
+    const startedAt = liveblocksNow();
+    const localTldrawOrigin = {};
+    let applyingRemoteChanges = false;
+
+    function getRemoteRecords() {
+      const latestById = new Map<string, TLRecord>();
+      for (const { key, val } of yStore.yarray.toJSON() as Array<{ key: string; val: TLRecord }>) {
+        if (!isSyncedDocumentRecord(val)) {
+          continue;
+        }
+        latestById.set(key, val);
+      }
+      return [...latestById.values()];
+    }
+
+    function removeLocalOnlyRecordsFromYjs() {
+      const keysToDelete = (yStore.yarray.toJSON() as Array<{ key: string; val: TLRecord }>)
+        .filter(({ val }) => !isSyncedDocumentRecord(val))
+        .map(({ key }) => key);
+
+      if (keysToDelete.length === 0) {
+        return;
+      }
+
+      yDoc.transact(() => {
+        for (const key of keysToDelete) {
+          yStore.delete(key);
+        }
+      });
+    }
+
+    function applyRemoteRecords(records: TLRecord[]) {
+      applyingRemoteChanges = true;
+      try {
+        store.mergeRemoteChanges(() => {
+          const remoteIds = new Set(records.map((r) => r.id));
+          const toRemove = store.allRecords()
+            .filter(isSyncedDocumentRecord)
+            .map((r) => r.id)
+            .filter((id) => !remoteIds.has(id));
+          if (toRemove.length) store.remove(toRemove as TLRecord["id"][]);
+          if (records.length) store.put(records);
+        });
+      } finally {
+        applyingRemoteChanges = false;
+      }
+    }
+
+    function applyRemoteChanges(
+      changes: Map<
+        string,
+        | { action: "delete"; oldValue: TLRecord }
+        | { action: "update"; oldValue: TLRecord; newValue: TLRecord }
+        | { action: "add"; newValue: TLRecord }
+      >,
+    ) {
+      const toRemove: TLRecord["id"][] = [];
+      const toPut: TLRecord[] = [];
+
+      changes.forEach((change, id) => {
+        if (change.action === "delete") {
+          if (isSyncedDocumentRecord(change.oldValue)) {
+            toRemove.push(id as TLRecord["id"]);
+          }
+          return;
+        }
+
+        const record = yStore.get(id);
+        if (isSyncedDocumentRecord(record)) {
+          toPut.push(record);
+        }
+      });
+
+      if (toRemove.length === 0 && toPut.length === 0) {
+        return;
+      }
+
+      applyingRemoteChanges = true;
+      try {
+        store.mergeRemoteChanges(() => {
+          if (toRemove.length) store.remove(toRemove);
+          if (toPut.length) store.put(toPut);
+        });
+      } finally {
+        applyingRemoteChanges = false;
+      }
+    }
 
     function handleSync() {
+      logLiveblocksClientTiming("Whiteboard Yjs sync", {
+        room: room.id,
+        alreadySynced: yProvider.synced,
+        recordCount: yStore.yarray.length,
+      }, liveblocksNow() - startedAt);
+      removeLocalOnlyRecordsFromYjs();
+
       // If Yjs already has records, load them into the tldraw store (they take
       // precedence over the DB snapshot). Otherwise push the local store state
       // (which may contain the DB snapshot) into Yjs.
       if (yStore.yarray.length) {
         // mergeRemoteChanges avoids needing an editor context (unlike transact)
-        // and marks these as source:'remote' so our store.listen won't re-sync them.
-        store.mergeRemoteChanges(() => {
-          const records = yStore.yarray.toJSON().map(({ val }: { val: TLRecord }) => val);
-          const remoteIds = new Set(records.map((r) => r.id));
-          const toRemove = store.allRecords()
-            .map((r) => r.id)
-            .filter((id) => !remoteIds.has(id));
-          if (toRemove.length) store.remove(toRemove as TLRecord["id"][]);
-          store.put(records);
-        });
+        // and marks these as source:'remote' so our store listener won't re-sync them.
+        applyRemoteRecords(getRemoteRecords());
       } else {
         yDoc.transact(() => {
           for (const record of store.allRecords()) {
-            yStore.set(record.id, record);
+            if (isSyncedDocumentRecord(record)) {
+              yStore.set(record.id, record);
+            }
           }
         });
       }
@@ -101,13 +190,23 @@ export function useTldrawYjsStore({
       unsubs.push(
         store.listen(
           ({ changes }) => {
+            if (applyingRemoteChanges) {
+              return;
+            }
+
             yDoc.transact(() => {
-              Object.values(changes.added).forEach((r) => yStore.set(r.id, r));
-              Object.values(changes.updated).forEach(([, r]) => yStore.set(r.id, r));
-              Object.values(changes.removed).forEach((r) => yStore.delete(r.id));
-            });
+              Object.values(changes.added).forEach((r) => {
+                if (isSyncedDocumentRecord(r)) yStore.set(r.id, r);
+              });
+              Object.values(changes.updated).forEach(([, r]) => {
+                if (isSyncedDocumentRecord(r)) yStore.set(r.id, r);
+              });
+              Object.values(changes.removed).forEach((r) => {
+                if (isSyncedDocumentRecord(r)) yStore.delete(r.id);
+              });
+            }, localTldrawOrigin);
           },
-          { source: "user", scope: "document" },
+          { scope: "document" },
         ),
       );
 
@@ -124,21 +223,13 @@ export function useTldrawYjsStore({
           | { action: "update"; oldValue: TLRecord; newValue: TLRecord }
           | { action: "add"; newValue: TLRecord }
         >,
+        transaction?: { origin?: unknown },
       ) => {
-        const toRemove: TLRecord["id"][] = [];
-        const toPut: TLRecord[] = [];
-        changes.forEach((change, id) => {
-          if (change.action === "delete") {
-            toRemove.push(id as TLRecord["id"]);
-          } else {
-            const record = yStore.get(id);
-            if (record) toPut.push(record);
-          }
-        });
-        store.mergeRemoteChanges(() => {
-          if (toRemove.length) store.remove(toRemove);
-          if (toPut.length) store.put(toPut);
-        });
+        if (transaction?.origin === localTldrawOrigin) {
+          return;
+        }
+
+        applyRemoteChanges(changes);
       };
       yStore.on("change", handleYjsChange);
       unsubs.push(() => yStore.off("change", handleYjsChange));
@@ -226,4 +317,13 @@ export function useTldrawYjsStore({
   }, [yProvider, store, selfId, selfName, room]);
 
   return storeWithStatus;
+}
+
+function isSyncedDocumentRecord(record: TLRecord | undefined): record is TLRecord {
+  return (
+    record?.typeName === "document" ||
+    record?.typeName === "page" ||
+    record?.typeName === "shape" ||
+    record?.typeName === "asset"
+  );
 }

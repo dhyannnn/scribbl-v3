@@ -33,6 +33,7 @@ import { KeyboardShortcuts } from "@/lib/tiptap/keyboard-shortcuts";
 import { LiveblocksCursors, type CursorUser } from "@/lib/tiptap/liveblocks-cursors";
 import { NoteToolbar } from "@/components/NoteToolbar";
 import { noteTitleMaxLength } from "@/lib/note-title";
+import { liveblocksNow, logLiveblocksClientTiming } from "@/lib/liveblocks-timing";
 
 // renderText returns " " (1 char) to match the atom's 1 doc-position footprint.
 // The default renderText returns the full LaTeX string, which inflates TipTap's
@@ -89,6 +90,7 @@ type EditorProps = {
   saveAction: (formData: FormData) => void | Promise<void>;
   canEdit: boolean;
   onExit?: () => void;
+  variant?: "card" | "document";
 };
 
 // Outer shell — waits for Yjs provider to be synced before mounting the editor.
@@ -98,12 +100,20 @@ export function TextNoteEditor(props: EditorProps) {
 
   useEffect(() => {
     let cancelled = false;
+    const startedAt = liveblocksNow();
     try {
       const provider = getYjsProviderForRoom(room);
       function onSync() {
         if (cancelled) return;
         const yDoc = provider.getYDoc();
-        if (yDoc) setYSetup({ provider, yDoc });
+        if (yDoc) {
+          logLiveblocksClientTiming("Text note Yjs sync", {
+            room: room.id,
+            noteId: props.noteId,
+            alreadySynced: provider.synced,
+          }, liveblocksNow() - startedAt);
+          setYSetup({ provider, yDoc });
+        }
       }
       if (provider.synced) onSync();
       else provider.once("sync", onSync);
@@ -111,13 +121,20 @@ export function TextNoteEditor(props: EditorProps) {
       // room not ready yet
     }
     return () => { cancelled = true; };
-  }, [room]);
+  }, [props.noteId, room]);
 
   if (!ySetup) {
     return (
-      <div className="grid gap-4">
-        <TitleInput title={props.title} canEdit={false} onChange={() => {}} />
-        <div className="rounded-md border border-[#c8c8bd] bg-white" style={{ minHeight: "360px" }}>
+      <div className={props.variant === "document" ? "scribbl-document-editor flex h-full min-h-0 flex-col" : "grid gap-4"}>
+        <TitleInput title={props.title} canEdit={false} onChange={() => {}} variant={props.variant} />
+        <div
+          className={
+            props.variant === "document"
+              ? "min-h-0 flex-1 bg-[#eef1f5]"
+              : "rounded-md border border-[#c8c8bd] bg-white"
+          }
+          style={props.variant === "document" ? undefined : { minHeight: "360px" }}
+        >
           <p className="p-4 text-sm text-[#9a9c92]">Connecting to live session…</p>
         </div>
       </div>
@@ -129,7 +146,7 @@ export function TextNoteEditor(props: EditorProps) {
 
 // Inner editor — only mounts once Yjs is confirmed ready.
 function TextNoteEditorInner({
-  workspaceId, meetingId, noteId, title, contentJson, saveAction, canEdit, onExit, ySetup,
+  workspaceId, meetingId, noteId, title, contentJson, saveAction, canEdit, onExit, variant = "card", ySetup,
 }: EditorProps & { ySetup: YSetup }) {
   const [titleValue, setTitleValue] = useState(title);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -295,24 +312,35 @@ function TextNoteEditorInner({
   }
 
   return (
-    <div className="grid gap-4">
+    <div className={variant === "document" ? "scribbl-document-editor flex h-full min-h-0 flex-col" : "grid gap-4"}>
       <TitleInput
         title={titleValue}
         canEdit={canEdit}
+        variant={variant}
         onChange={(v) => { setTitleValue(v); yMeta.set("title", v); queueAutosave(); }}
       />
 
-      <div className="grid gap-0">
+      <div className={variant === "document" ? "flex min-h-0 flex-1 flex-col" : "grid gap-0"}>
         {canEdit && editor && <NoteToolbar editor={editor} />}
         <div
-          className={`overflow-auto rounded-md border border-[#c8c8bd] bg-white transition focus-within:border-[#2f604b] ${canEdit ? "rounded-t-none border-t-0" : ""}`}
-          style={{ minHeight: "360px" }}
+          className={
+            variant === "document"
+              ? "min-h-0 flex-1 overflow-auto bg-[#eef1f5] transition focus-within:bg-[#e8ecf1]"
+              : `overflow-auto rounded-md border border-[#c8c8bd] bg-white transition focus-within:border-[#2f604b] ${canEdit ? "rounded-t-none border-t-0" : ""}`
+          }
+          style={variant === "document" ? undefined : { minHeight: "360px" }}
         >
           <EditorContent editor={editor} />
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className={
+          variant === "document"
+            ? "flex flex-col gap-2 border-t border-[#d8d8ce] bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+            : "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+        }
+      >
         <p className="text-xs text-[#777970]">{getStatusText(isPending ? "saving" : saveState)}</p>
         <div className="flex gap-2">
           {onExit && (
@@ -347,17 +375,21 @@ function TextNoteEditorInner({
 }
 
 function TitleInput({
-  title, canEdit, onChange,
-}: { title: string; canEdit: boolean; onChange: (v: string) => void }) {
+  title, canEdit, onChange, variant = "card",
+}: { title: string; canEdit: boolean; onChange: (v: string) => void; variant?: "card" | "document" }) {
   return (
-    <label className="grid gap-2">
-      <span className="text-sm font-medium text-[#4d4f47]">Title</span>
+    <label className={variant === "document" ? "grid border-b border-[#d8d8ce] bg-white px-4 py-2 sm:px-6" : "grid gap-2"}>
+      <span className={variant === "document" ? "sr-only" : "text-sm font-medium text-[#4d4f47]"}>Title</span>
       <input
         value={title}
         maxLength={noteTitleMaxLength}
         readOnly={!canEdit}
         onChange={(e) => onChange(e.target.value)}
-        className="min-h-12 rounded-md border border-[#c8c8bd] bg-white px-4 text-lg font-semibold outline-none transition focus:border-[#2f604b]"
+        className={
+          variant === "document"
+            ? "min-h-10 min-w-0 border-0 bg-transparent text-lg font-semibold outline-none"
+            : "min-h-12 rounded-md border border-[#c8c8bd] bg-white px-4 text-lg font-semibold outline-none transition focus:border-[#2f604b]"
+        }
       />
     </label>
   );

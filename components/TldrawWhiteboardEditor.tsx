@@ -5,15 +5,22 @@ import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   DefaultMainMenu,
+  DefaultToolbarContent,
   EditSubmenu,
   ExtrasGroup,
+  MobileStylePanel,
+  OverflowingToolbar,
+  PORTRAIT_BREAKPOINT,
   PreferencesGroup,
   TldrawUiMenuGroup,
   TldrawUiMenuItem,
   TldrawUiMenuSubmenu,
   ViewSubmenu,
+  useBreakpoint,
   useEditor,
   useExportAs,
+  useReadonly,
+  useTldrawUiComponents,
   useValue,
   type Editor,
   type TLComponents,
@@ -128,6 +135,8 @@ function CustomExportMenu() {
 const TLDRAW_COMPONENTS = {
   InFrontOfTheCanvas: TemplatePicker,
   MainMenu: CustomMainMenu,
+  MenuPanel: ScribblMenuPanel,
+  Toolbar: ScribblToolbar,
 } satisfies TLComponents;
 
 const TldrawCanvas = dynamic(async () => (await import("tldraw")).Tldraw, {
@@ -138,6 +147,50 @@ const TldrawCanvas = dynamic(async () => (await import("tldraw")).Tldraw, {
     </div>
   ),
 });
+
+function ScribblMenuPanel() {
+  const breakpoint = useBreakpoint();
+  const { MainMenu, QuickActions, ActionsMenu, PageMenu } = useTldrawUiComponents();
+  const editor = useEditor();
+  const isSinglePageMode = useValue("scribbl-is-single-page-mode", () => editor.options.maxPages <= 1, [editor]);
+
+  if (!MainMenu && !PageMenu && !QuickActions && !ActionsMenu && breakpoint < 6) {
+    return null;
+  }
+
+  return (
+    <div className="tlui-menu-zone">
+      <div className="tlui-buttons__horizontal">
+        {MainMenu ? <MainMenu /> : null}
+        {PageMenu && !isSinglePageMode ? <PageMenu /> : null}
+        {QuickActions ? <QuickActions /> : null}
+        {ActionsMenu ? <ActionsMenu /> : null}
+      </div>
+    </div>
+  );
+}
+
+function ScribblToolbar() {
+  const breakpoint = useBreakpoint();
+  const isReadonlyMode = useReadonly();
+
+  return (
+    <div className="tlui-toolbar">
+      <div className="tlui-toolbar__inner">
+        <div className="tlui-toolbar__left">
+          <OverflowingToolbar>
+            <DefaultToolbarContent />
+          </OverflowingToolbar>
+        </div>
+        {breakpoint < PORTRAIT_BREAKPOINT.TABLET_SM && !isReadonlyMode ? (
+          <div className="tlui-toolbar__tools">
+            <MobileStylePanel />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 // ── Template picker (rendered inside the tldraw canvas via InFrontOfTheCanvas)
 
@@ -292,6 +345,7 @@ export function TldrawWhiteboardEditor({
   saveAction,
   canEdit = true,
   canvasHeight = 600,
+  variant = "card",
 }: {
   workspaceId: string;
   meetingId?: string;
@@ -301,6 +355,7 @@ export function TldrawWhiteboardEditor({
   saveAction: (formData: FormData) => void | Promise<void>;
   canEdit?: boolean;
   canvasHeight?: number | string;
+  variant?: "card" | "goodnotes";
 }) {
   const room = useRoom();
   const storeWithStatus = useTldrawYjsStore({
@@ -492,7 +547,6 @@ export function TldrawWhiteboardEditor({
         unsubStore();
       };
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -501,11 +555,17 @@ export function TldrawWhiteboardEditor({
   }, [canEdit]);
 
   return (
-    <div className="mt-5 grid gap-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className={variant === "goodnotes" ? "flex h-full min-h-0 flex-col" : "mt-5 grid gap-3"}>
+      <div
+        className={
+          variant === "goodnotes"
+            ? "flex flex-col gap-2 border-b border-[#d8d8ce] bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+            : "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+        }
+      >
         {canEdit ? (
-          <label className="grid flex-1 gap-2">
-            <span className="text-sm font-medium text-[#4d4f47]">Title</span>
+          <label className={variant === "goodnotes" ? "grid min-w-0 flex-1" : "grid flex-1 gap-2"}>
+            <span className={variant === "goodnotes" ? "sr-only" : "text-sm font-medium text-[#4d4f47]"}>Title</span>
             <input
               value={titleValue}
               maxLength={noteTitleMaxLength}
@@ -514,7 +574,11 @@ export function TldrawWhiteboardEditor({
                 yMeta.set("title", e.target.value);
                 queueAutosave();
               }}
-              className="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm font-semibold outline-none transition focus:border-[#2f604b] focus:bg-white"
+              className={
+                variant === "goodnotes"
+                  ? "min-h-10 min-w-0 border-0 bg-transparent text-base font-semibold outline-none"
+                  : "min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm font-semibold outline-none transition focus:border-[#2f604b] focus:bg-white"
+              }
             />
           </label>
         ) : (
@@ -525,11 +589,16 @@ export function TldrawWhiteboardEditor({
         </p>
       </div>
       <div
-        className="overflow-hidden rounded-md border border-[#c8c8bd] shadow-sm"
-        style={{ height: canvasHeight }}
+        className={
+          variant === "goodnotes"
+            ? "min-h-0 flex-1 overflow-hidden bg-[#dfe5eb]"
+            : "overflow-hidden rounded-md border border-[#c8c8bd] shadow-sm"
+        }
+        style={variant === "goodnotes" ? { minHeight: 0 } : { height: canvasHeight }}
       >
         <ExportCtx.Provider value={{ title: titleValue }}>
           <TldrawCanvas
+            key={`${noteId}:${variant}`}
             store={storeWithStatus}
             shapeUtils={SHAPE_UTILS}
             onMount={handleMount}
