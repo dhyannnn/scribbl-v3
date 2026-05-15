@@ -2,13 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { writeAuditLog } from "@/lib/audit-log";
 import { createAppUrl } from "@/lib/app-url";
 import { RateLimits } from "@/lib/rate-limit";
 import { getCurrentUser } from "@/lib/current-user";
 import { sendMeetingCanceledEmail, sendMeetingScheduledEmail } from "@/lib/email/meeting-notifications";
+import { logger } from "@/lib/logger";
 import { createLiveKitMeetingRoomName } from "@/lib/livekit-room";
 import { canManageMeetingSchedule, getMeetingLifecycle } from "@/lib/meeting-lifecycle";
+import { createWorkspaceNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
 export async function scheduleMeeting(formData: FormData) {
@@ -155,25 +158,52 @@ export async function scheduleMeeting(formData: FormData) {
     metadata: { title, startsAt: startsAt.toISOString() },
   });
 
+  runAfterResponse(() =>
+    createWorkspaceNotifications({
+      actorUserId: currentUser.id,
+      body: startsAt.toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+      href: `/workspaces/${workspaceId}/meetings/${meetingId}`,
+      preference: "meetings",
+      title: `${title} was scheduled`,
+      type: "MEETING_SCHEDULED",
+      workspaceId,
+    }).then(() => undefined).catch((error) => {
+      logger.error("Meeting scheduled notifications could not be created", { meetingId, workspaceId }, error);
+    }),
+  );
+
   revalidatePath(`/workspaces/${workspaceId}`);
   revalidatePath(`/workspaces/${workspaceId}/meetings`);
   revalidatePath(`/workspaces/${workspaceId}/chat`);
   revalidatePath("/");
 
-  const emailStatus = await sendScheduledMeetingEmail({
-    creatorEmail: currentUser.email,
-    durationMinutes: safeDuration,
-    meetingId,
-    recipients: workspace.members.map((member) => member.user.email),
-    scheduledByName: currentUser.displayName,
-    startsAt,
-    title,
-    workspaceId,
-    workspaceName: workspace.name,
-    description,
-  });
+  runAfterResponse(() =>
+    sendScheduledMeetingEmail({
+      creatorEmail: currentUser.email,
+      durationMinutes: safeDuration,
+      meetingId,
+      recipients: workspace.members.map((member) => member.user.email),
+      scheduledByName: currentUser.displayName,
+      startsAt,
+      title,
+      workspaceId,
+      workspaceName: workspace.name,
+      description,
+    }).then((emailStatus) => {
+      if (emailStatus !== "scheduled") {
+        logger.warn("Meeting scheduled email did not send", { emailStatus, meetingId, workspaceId });
+      }
+    }).catch((error) => {
+      logger.resendError({ meetingId, workspaceId, action: "meeting.scheduled" }, error);
+    }),
+  );
 
-  redirect(`/workspaces/${workspaceId}/meetings?meeting=${emailStatus}`);
+  redirect(`/workspaces/${workspaceId}/meetings?meeting=scheduled`);
 }
 
 export async function updateMeetingDetails(formData: FormData) {
@@ -282,6 +312,25 @@ export async function updateMeetingDetails(formData: FormData) {
     }),
   ]);
 
+  runAfterResponse(() =>
+    createWorkspaceNotifications({
+      actorUserId: currentUser.id,
+      body: startsAt.toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+      href: `/workspaces/${workspaceId}/meetings/${meeting.id}`,
+      preference: "meetings",
+      title: `${title} was updated`,
+      type: "MEETING_UPDATED",
+      workspaceId,
+    }).then(() => undefined).catch((error) => {
+      logger.error("Meeting updated notifications could not be created", { meetingId: meeting.id, workspaceId }, error);
+    }),
+  );
+
   revalidatePath(`/workspaces/${workspaceId}/chat`);
   revalidateMeetingPaths(workspaceId, meeting.id);
   redirect(`/workspaces/${workspaceId}/meetings/${meeting.id}?meeting=updated`);
@@ -378,22 +427,44 @@ export async function cancelMeeting(formData: FormData) {
     metadata: { title: meeting.title, cancellationReason: cancellationReason || null },
   });
 
+  runAfterResponse(() =>
+    createWorkspaceNotifications({
+      actorUserId: currentUser.id,
+      body: cancellationReason || null,
+      href: `/workspaces/${workspaceId}/meetings/${meeting.id}`,
+      preference: "meetings",
+      title: `${meeting.title} was canceled`,
+      type: "MEETING_CANCELED",
+      workspaceId,
+    }).then(() => undefined).catch((error) => {
+      logger.error("Meeting canceled notifications could not be created", { meetingId: meeting.id, workspaceId }, error);
+    }),
+  );
+
   revalidateMeetingPaths(workspaceId, meeting.id);
 
-  const emailStatus = await sendCanceledMeetingEmail({
-    canceledByEmail: currentUser.email,
-    canceledByName: currentUser.displayName,
-    cancellationReason,
-    durationMinutes: getDurationMinutes(meeting.startsAt, meeting.endsAt),
-    meetingId: meeting.id,
-    recipients: meeting.participants.map((participant) => participant.user.email),
-    startsAt: meeting.startsAt,
-    title: meeting.title,
-    workspaceId,
-    workspaceName: meeting.workspace?.name ?? "Workspace",
-  });
+  runAfterResponse(() =>
+    sendCanceledMeetingEmail({
+      canceledByEmail: currentUser.email,
+      canceledByName: currentUser.displayName,
+      cancellationReason,
+      durationMinutes: getDurationMinutes(meeting.startsAt, meeting.endsAt),
+      meetingId: meeting.id,
+      recipients: meeting.participants.map((participant) => participant.user.email),
+      startsAt: meeting.startsAt,
+      title: meeting.title,
+      workspaceId,
+      workspaceName: meeting.workspace?.name ?? "Workspace",
+    }).then((emailStatus) => {
+      if (emailStatus !== "canceled") {
+        logger.warn("Meeting canceled email did not send", { emailStatus, meetingId: meeting.id, workspaceId });
+      }
+    }).catch((error) => {
+      logger.resendError({ meetingId: meeting.id, workspaceId, action: "meeting.canceled" }, error);
+    }),
+  );
 
-  redirect(`/workspaces/${workspaceId}/meetings?meeting=${emailStatus}`);
+  redirect(`/workspaces/${workspaceId}/meetings?meeting=canceled`);
 }
 
 function canManageMeeting(createdByUserId: string, currentUserId: string, role: string) {
@@ -507,4 +578,14 @@ function getDurationMinutes(startsAt: Date, endsAt?: Date | null) {
   }
 
   return Math.max(1, Math.round((endsAt.getTime() - startsAt.getTime()) / 60000));
+}
+
+function runAfterResponse(task: () => Promise<void>) {
+  try {
+    after(() => {
+      void task();
+    });
+  } catch {
+    void task();
+  }
 }

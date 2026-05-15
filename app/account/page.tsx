@@ -2,7 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { getCurrentUser } from "@/lib/current-user";
+import { notificationPreferenceDefaults } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
+import { updateNotificationPreferences } from "@/app/notifications/actions";
+import { AccountAvatarUploader } from "./AccountAvatarUploader";
 import { deleteAccount, updateAccountPassword, updateAccountProfile } from "./actions";
 
 type AccountPageProps = {
@@ -36,6 +39,11 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
       createdAt: "asc",
     },
   });
+  const notificationPreference = await prisma.notificationPreference.findUnique({
+    where: {
+      userId: currentUser.id,
+    },
+  });
   const canDeleteAccount = ownedWorkspaces.length === 0;
 
   return (
@@ -53,6 +61,8 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             {message}
           </p>
         ) : null}
+
+        <AccountAvatarUploader currentAvatarUrl={currentUser.avatarUrl} displayName={currentUser.displayName} />
 
         <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
           <div>
@@ -149,6 +159,54 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           </form>
         </section>
 
+        <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
+          <div>
+            <h2 className="text-xl font-semibold">Notifications</h2>
+            <p className="mt-1 text-sm text-[#66685f]">Choose what shows up in your in-app notification inbox.</p>
+          </div>
+
+          <form action={updateNotificationPreferences} className="mt-5 grid gap-3">
+            <NotificationToggle
+              name="announcements"
+              label="Announcements"
+              description="Workspace-wide posts from owners and admins."
+              defaultChecked={notificationPreference?.announcements ?? notificationPreferenceDefaults.announcements}
+            />
+            <NotificationToggle
+              name="meetings"
+              label="Meeting updates"
+              description="Scheduled, changed, or canceled meetings."
+              defaultChecked={notificationPreference?.meetings ?? notificationPreferenceDefaults.meetings}
+            />
+            <NotificationToggle
+              name="files"
+              label="Shared files"
+              description="Files added to a workspace or meeting."
+              defaultChecked={notificationPreference?.files ?? notificationPreferenceDefaults.files}
+            />
+            <NotificationToggle
+              name="notes"
+              label="Shared notes"
+              description="Notes and whiteboards shared with the workspace."
+              defaultChecked={notificationPreference?.notes ?? notificationPreferenceDefaults.notes}
+            />
+            <NotificationToggle
+              name="chatMessages"
+              label="Chat messages"
+              description="Regular channel messages. Off by default to keep noise down."
+              defaultChecked={notificationPreference?.chatMessages ?? notificationPreferenceDefaults.chatMessages}
+            />
+            <div className="flex justify-end pt-2">
+              <PendingSubmitButton
+                pendingLabel="Saving..."
+                className="rounded-md border border-[#c8c8bd] bg-white px-4 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Save Preferences
+              </PendingSubmitButton>
+            </div>
+          </form>
+        </section>
+
         <section className="rounded-md border border-[#d8b8b2] bg-white p-5 shadow-sm">
           <div className="grid gap-4">
             <div>
@@ -201,4 +259,31 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
 function formatRole(role: string) {
   return role.toLowerCase().replaceAll("_", " ");
+}
+
+function NotificationToggle({
+  defaultChecked,
+  description,
+  label,
+  name,
+}: {
+  defaultChecked: boolean;
+  description: string;
+  label: string;
+  name: string;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-4 rounded-md border border-[#e6e6dc] bg-[#fbfbf8] px-3 py-2">
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-[#4d4f47]">{label}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-[#777970]">{description}</span>
+      </span>
+      <input
+        name={name}
+        type="checkbox"
+        defaultChecked={defaultChecked}
+        className="size-4 accent-[#2f604b]"
+      />
+    </label>
+  );
 }

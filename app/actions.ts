@@ -35,11 +35,18 @@ export async function createWorkspace(formData: FormData) {
         },
       },
       channels: {
-        create: {
-          name: "general",
-          type: "CHAT",
-          createdByUserId: currentUser.id,
-        },
+        create: [
+          {
+            name: "announcements",
+            type: "ANNOUNCEMENT",
+            createdByUserId: currentUser.id,
+          },
+          {
+            name: "general",
+            type: "CHAT",
+            createdByUserId: currentUser.id,
+          },
+        ],
       },
     },
   });

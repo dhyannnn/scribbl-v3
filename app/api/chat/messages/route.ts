@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
+import { after } from "next/server";
 import { getCurrentUser } from "@/lib/current-user";
+import { logger } from "@/lib/logger";
+import { createWorkspaceNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
 const maxMessageLength = 2000;
 
 export async function POST(request: Request) {
+  const startedAt = performance.now();
   const currentUser = await getCurrentUser();
+  const userResolvedAt = performance.now();
 
   if (!currentUser) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
@@ -22,9 +27,14 @@ export async function POST(request: Request) {
   }
 
   const channel = await getAccessibleChannel(workspaceId, channelId, currentUser.id);
+  const accessCheckedAt = performance.now();
 
   if (!channel) {
     return NextResponse.json({ error: "You do not have permission to send messages here." }, { status: 403 });
+  }
+
+  if (channel.type === "ANNOUNCEMENT" && !canPostAnnouncement(channel.workspace.members[0]?.role)) {
+    return NextResponse.json({ error: "Only workspace admins can post announcements." }, { status: 403 });
   }
 
   const message = await prisma.message.create({
@@ -33,10 +43,69 @@ export async function POST(request: Request) {
       senderUserId: currentUser.id,
       body,
     },
-    include: messageInclude,
+    select: messageSelect,
   });
+  const messageCreatedAt = performance.now();
+  logChatTiming("create", startedAt, userResolvedAt, accessCheckedAt, messageCreatedAt);
 
-  return NextResponse.json({ message: serializeMessage(message) });
+  if (channel.type === "ANNOUNCEMENT") {
+    after(() => {
+      void createWorkspaceNotifications({
+        actorUserId: currentUser.id,
+        body,
+        href: `/workspaces/${workspaceId}/chat?channel=${channel.id}`,
+        preference: "announcements",
+        title: `${currentUser.displayName} posted an announcement`,
+        type: "ANNOUNCEMENT_POSTED",
+        workspaceId,
+      }).catch((error) => {
+        logger.error("Announcement notifications could not be created", { workspaceId, channelId }, error);
+      });
+    });
+  } else {
+    after(() => {
+      void createWorkspaceNotifications({
+        actorUserId: currentUser.id,
+        body,
+        href: `/workspaces/${workspaceId}/chat?channel=${channel.id}`,
+        preference: "chatMessages",
+        title: `${currentUser.displayName} posted in #${channel.name}`,
+        type: "CHAT_MESSAGE",
+        workspaceId,
+      }).catch((error) => {
+        logger.error("Chat notifications could not be created", { workspaceId, channelId }, error);
+      });
+    });
+  }
+
+  return NextResponse.json({
+    message: serializeMessage(message, {
+      displayName: currentUser.displayName,
+      avatarUrl: currentUser.avatarUrl,
+    }),
+  });
+}
+
+function logChatTiming(
+  action: string,
+  startedAt: number,
+  userResolvedAt: number,
+  accessCheckedAt: number,
+  completedAt: number,
+) {
+  const totalMs = Math.round(completedAt - startedAt);
+
+  if (totalMs < 750) {
+    return;
+  }
+
+  logger.warn("Slow chat action", {
+    action,
+    totalMs,
+    userMs: Math.round(userResolvedAt - startedAt),
+    accessMs: Math.round(accessCheckedAt - userResolvedAt),
+    writeMs: Math.round(completedAt - accessCheckedAt),
+  });
 }
 
 export async function PATCH(request: Request) {
@@ -93,7 +162,7 @@ export async function PATCH(request: Request) {
     include: messageInclude,
   });
 
-  return NextResponse.json({ message: serializeMessage(updatedMessage) });
+  return NextResponse.json({ message: serializeMessage(updatedMessage, updatedMessage.sender) });
 }
 
 export async function DELETE(request: Request) {
@@ -153,7 +222,7 @@ export async function DELETE(request: Request) {
     include: messageInclude,
   });
 
-  return NextResponse.json({ message: serializeMessage(deletedMessage) });
+  return NextResponse.json({ message: serializeMessage(deletedMessage, deletedMessage.sender) });
 }
 
 async function getAccessibleChannel(workspaceId: string, channelId: string, userId: string) {
@@ -172,16 +241,47 @@ async function getAccessibleChannel(workspaceId: string, channelId: string, user
     },
     select: {
       id: true,
+      name: true,
+      type: true,
+      workspace: {
+        select: {
+          members: {
+            where: {
+              userId,
+              status: "ACTIVE",
+            },
+            select: {
+              role: true,
+            },
+            take: 1,
+          },
+        },
+      },
     },
   });
+}
+
+function canPostAnnouncement(role?: string) {
+  return role === "OWNER" || role === "ADMIN";
 }
 
 const messageInclude = {
   sender: {
     select: {
       displayName: true,
+      avatarUrl: true,
     },
   },
+} as const;
+
+const messageSelect = {
+  id: true,
+  channelId: true,
+  senderUserId: true,
+  body: true,
+  createdAt: true,
+  editedAt: true,
+  deletedAt: true,
 } as const;
 
 function serializeMessage(message: {
@@ -192,9 +292,9 @@ function serializeMessage(message: {
   createdAt: Date;
   editedAt: Date | null;
   deletedAt: Date | null;
-  sender: {
-    displayName: string;
-  };
+}, sender: {
+  displayName: string;
+  avatarUrl: string | null;
 }) {
   return {
     id: message.id,
@@ -204,7 +304,7 @@ function serializeMessage(message: {
     createdAt: message.createdAt.toISOString(),
     editedAt: message.editedAt?.toISOString() ?? null,
     deletedAt: message.deletedAt?.toISOString() ?? null,
-    sender: message.sender,
+    sender,
   };
 }
 

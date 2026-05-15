@@ -33,16 +33,27 @@ export async function getCurrentUser() {
     };
 
     if (existingUser) {
+      const updateData = getChangedProfileData(existingUser, data);
+
+      if (Object.keys(updateData).length === 0) {
+        return existingUser;
+      }
+
       return prisma.user.update({
         where: {
           id: existingUser.id,
         },
-        data,
+        data: updateData,
       });
     }
 
     return prisma.user.create({
-      data,
+      data: {
+        ...data,
+        notificationPreference: {
+          create: {},
+        },
+      },
     });
   }
 
@@ -55,11 +66,17 @@ export async function getSupabaseAuthUser() {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getClaims();
 
-  return user;
+  if (error || !data?.claims.sub || !data.claims.email) {
+    return null;
+  }
+
+  return {
+    id: data.claims.sub,
+    email: data.claims.email,
+    user_metadata: data.claims.user_metadata ?? {},
+  };
 }
 
 function getAuthProfile(metadata: Record<string, unknown>, email: string) {
@@ -98,4 +115,46 @@ function parseName(name: string) {
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function getChangedProfileData(
+  current: {
+    authUserId: string | null;
+    email: string;
+    firstName: string;
+    lastName: string;
+    displayName: string;
+    avatarUrl: string | null;
+  },
+  next: {
+    authUserId: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    displayName: string;
+    avatarUrl?: string;
+  },
+) {
+  const data: Partial<typeof next> = {};
+
+  if (current.authUserId !== next.authUserId) {
+    data.authUserId = next.authUserId;
+  }
+  if (current.email !== next.email) {
+    data.email = next.email;
+  }
+  if (current.firstName !== next.firstName) {
+    data.firstName = next.firstName;
+  }
+  if (current.lastName !== next.lastName) {
+    data.lastName = next.lastName;
+  }
+  if (current.displayName !== next.displayName) {
+    data.displayName = next.displayName;
+  }
+  if (next.avatarUrl !== undefined && current.avatarUrl !== next.avatarUrl) {
+    data.avatarUrl = next.avatarUrl;
+  }
+
+  return data;
 }

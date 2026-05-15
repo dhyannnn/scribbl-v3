@@ -1052,6 +1052,7 @@ export async function createMeetingNote(formData: FormData) {
   const meetingId = String(formData.get("meetingId") ?? "");
   const scopeValue = String(formData.get("scope") ?? "SHARED");
   const typeValue = String(formData.get("type") ?? "TEXT");
+  const noteFocusValue = String(formData.get("noteFocus") ?? "");
 
   if (
     !workspaceId ||
@@ -1167,10 +1168,12 @@ export async function createMeetingNote(formData: FormData) {
   });
 
   revalidateMeetingPaths(workspaceId, meetingId);
+  const focusQuery =
+    noteFocusValue === "shared" || noteFocusValue === "private" ? `&noteFocus=${noteFocusValue}` : "";
   redirect(
     `/workspaces/${workspaceId}/meetings/${meetingId}?${
       scope === "SHARED" ? "sharedNoteId" : "privateNoteId"
-    }=${note.id}#meeting-notes`,
+    }=${note.id}${focusQuery}#meeting-notes`,
   );
 }
 

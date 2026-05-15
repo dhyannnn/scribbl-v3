@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { writeAuditLog } from "@/lib/audit-log";
 import { getCurrentUser, getSupabaseAuthUser } from "@/lib/current-user";
@@ -8,6 +9,13 @@ import { RateLimits } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+
+export type AvatarUploadResult = {
+  avatarUrl?: string;
+  error?: "unauthenticated" | "invalid" | "too-large" | "upload-failed";
+};
+
+const maxAvatarSizeBytes = 5 * 1024 * 1024;
 
 export async function updateAccountProfile(formData: FormData) {
   const currentUser = await getCurrentUser();
@@ -73,6 +81,63 @@ export async function updateAccountProfile(formData: FormData) {
       : "Profile updated. Check your email to confirm the new address.";
 
   redirect(`/account?message=${encodeURIComponent(message)}`);
+}
+
+export async function uploadAvatar(formData: FormData): Promise<AvatarUploadResult> {
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    return { error: "unauthenticated" };
+  }
+
+  const file = formData.get("avatar");
+
+  if (!(file instanceof File) || !file.type.startsWith("image/")) {
+    return { error: "invalid" };
+  }
+
+  if (file.size > maxAvatarSizeBytes) {
+    return { error: "too-large" };
+  }
+
+  const ext = getAvatarExtension(file.type);
+
+  if (!ext) {
+    return { error: "invalid" };
+  }
+
+  try {
+    const supabase = createAdminClient();
+    const path = `${currentUser.id}.${ext}`;
+    const bytes = await file.arrayBuffer();
+    const { error } = await supabase.storage.from("avatars").upload(path, bytes, {
+      contentType: file.type,
+      upsert: true,
+    });
+
+    if (error) {
+      logger.supabaseStorageError({ userId: currentUser.id, bucket: "avatars", path }, new Error(error.message));
+      return { error: "upload-failed" };
+    }
+
+    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    const avatarUrl = `${data.publicUrl}?v=${Date.now()}`;
+
+    await prisma.user.update({
+      where: {
+        id: currentUser.id,
+      },
+      data: {
+        avatarUrl,
+      },
+    });
+
+    revalidatePath("/account");
+    return { avatarUrl };
+  } catch (error) {
+    logger.supabaseStorageError({ userId: currentUser.id, bucket: "avatars" }, error);
+    return { error: "upload-failed" };
+  }
 }
 
 export async function updateAccountPassword(formData: FormData) {
@@ -218,4 +283,20 @@ export async function deleteAccount(formData: FormData) {
   await supabase.auth.signOut();
 
   redirect("/login?message=Account deleted");
+}
+
+function getAvatarExtension(contentType: string) {
+  switch (contentType) {
+    case "image/png":
+      return "png";
+    case "image/jpeg":
+    case "image/jpg":
+      return "jpg";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    default:
+      return null;
+  }
 }

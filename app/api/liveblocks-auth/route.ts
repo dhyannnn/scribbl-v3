@@ -2,12 +2,14 @@ import { Liveblocks } from "@liveblocks/node";
 import { getCurrentUser } from "@/lib/current-user";
 import { parseChatRoomId, parseMeetingChatRoomId, parseNoteRoomId } from "@/lib/liveblocks-room";
 import { canEditMeetingNotes, getMeetingLifecycle } from "@/lib/meeting-lifecycle";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
 const liveblocksSecret = process.env.LIVEBLOCKS_SECRET_KEY;
 const liveblocks = liveblocksSecret ? new Liveblocks({ secret: liveblocksSecret }) : null;
 
 export async function POST(request: Request) {
+  const startedAt = performance.now();
   if (!liveblocks) {
     return Response.json(
       {
@@ -36,6 +38,7 @@ export async function POST(request: Request) {
   }
 
   const currentUser = await getCurrentUser();
+  const userResolvedAt = performance.now();
 
   if (!currentUser) {
     return Response.json({ error: "forbidden", reason: "Unknown user." }, { status: 403 });
@@ -45,41 +48,41 @@ export async function POST(request: Request) {
     userInfo: {
       name: currentUser.displayName,
       email: currentUser.email,
+      avatarUrl: currentUser.avatarUrl ?? null,
     },
   });
 
   if (parsedMeetingChatRoom) {
-    const [meeting, membership] = await Promise.all([
-      prisma.meeting.findFirst({
-        where: {
-          id: parsedMeetingChatRoom.meetingId,
-          workspaceId: parsedMeetingChatRoom.workspaceId,
-        },
-        select: {
-          id: true,
-        },
-      }),
-      prisma.workspaceMember.findUnique({
-        where: {
-          workspaceId_userId: {
-            workspaceId: parsedMeetingChatRoom.workspaceId,
-            userId: currentUser.id,
+    const meeting = await prisma.meeting.findFirst({
+      where: {
+        id: parsedMeetingChatRoom.meetingId,
+        workspaceId: parsedMeetingChatRoom.workspaceId,
+        workspace: {
+          members: {
+            some: {
+              userId: currentUser.id,
+              status: "ACTIVE",
+            },
           },
         },
-        select: {
-          status: true,
-        },
-      }),
-    ]);
+      },
+      select: {
+        id: true,
+      },
+    });
+    const accessCheckedAt = performance.now();
 
-    if (!meeting || membership?.status !== "ACTIVE") {
+    if (!meeting) {
       return Response.json({ error: "forbidden", reason: "No room access." }, { status: 403 });
     }
 
     session.allow(room, session.FULL_ACCESS);
 
+    const authorizeStartedAt = performance.now();
     const { status, body } = await session.authorize();
+    const authorizeFinishedAt = performance.now();
 
+    logLiveblocksAuthTiming("meeting-chat", room, startedAt, userResolvedAt, accessCheckedAt, authorizeStartedAt, authorizeFinishedAt);
     return new Response(body, {
       status,
       headers: {
@@ -89,37 +92,36 @@ export async function POST(request: Request) {
   }
 
   if (parsedChatRoom) {
-    const [channel, membership] = await Promise.all([
-      prisma.channel.findFirst({
-        where: {
-          id: parsedChatRoom.channelId,
-          workspaceId: parsedChatRoom.workspaceId,
-        },
-        select: {
-          id: true,
-        },
-      }),
-      prisma.workspaceMember.findUnique({
-        where: {
-          workspaceId_userId: {
-            workspaceId: parsedChatRoom.workspaceId,
-            userId: currentUser.id,
+    const channel = await prisma.channel.findFirst({
+      where: {
+        id: parsedChatRoom.channelId,
+        workspaceId: parsedChatRoom.workspaceId,
+        workspace: {
+          members: {
+            some: {
+              userId: currentUser.id,
+              status: "ACTIVE",
+            },
           },
         },
-        select: {
-          status: true,
-        },
-      }),
-    ]);
+      },
+      select: {
+        id: true,
+      },
+    });
+    const accessCheckedAt = performance.now();
 
-    if (!channel || membership?.status !== "ACTIVE") {
+    if (!channel) {
       return Response.json({ error: "forbidden", reason: "No room access." }, { status: 403 });
     }
 
     session.allow(room, session.FULL_ACCESS);
 
+    const authorizeStartedAt = performance.now();
     const { status, body } = await session.authorize();
+    const authorizeFinishedAt = performance.now();
 
+    logLiveblocksAuthTiming("chat", room, startedAt, userResolvedAt, accessCheckedAt, authorizeStartedAt, authorizeFinishedAt);
     return new Response(body, {
       status,
       headers: {
@@ -132,44 +134,42 @@ export async function POST(request: Request) {
     return Response.json({ error: "forbidden", reason: "Unknown room." }, { status: 403 });
   }
 
-  const [note, membership] = await Promise.all([
-    prisma.note.findFirst({
-      where: {
-        id: parsedRoom.noteId,
-        workspaceId: parsedRoom.workspaceId,
-        deletedAt: null,
-        OR: [
-          { visibility: "WORKSPACE_SHARED" },
-          { visibility: "PRIVATE", ownerUserId: currentUser.id },
-        ],
+  const note = await prisma.note.findFirst({
+    where: {
+      id: parsedRoom.noteId,
+      workspaceId: parsedRoom.workspaceId,
+      deletedAt: null,
+      workspace: {
+        members: {
+          some: {
+            userId: currentUser.id,
+            status: "ACTIVE",
+          },
+        },
       },
-      select: {
-        artifacts: {
-          select: {
-            source: true,
-            meeting: {
-              select: {
-                startsAt: true,
-                endsAt: true,
-                canceledAt: true,
-              },
+      OR: [
+        { visibility: "WORKSPACE_SHARED" },
+        { visibility: "PRIVATE", ownerUserId: currentUser.id },
+      ],
+    },
+    select: {
+      artifacts: {
+        select: {
+          source: true,
+          meeting: {
+            select: {
+              startsAt: true,
+              endsAt: true,
+              canceledAt: true,
             },
           },
         },
       },
-    }),
-    prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: {
-          workspaceId: parsedRoom.workspaceId,
-          userId: currentUser.id,
-        },
-      },
-      select: { status: true },
-    }),
-  ]);
+    },
+  });
+  const accessCheckedAt = performance.now();
 
-  if (!note || membership?.status !== "ACTIVE") {
+  if (!note) {
     return Response.json({ error: "forbidden", reason: "No room access." }, { status: 403 });
   }
 
@@ -186,12 +186,41 @@ export async function POST(request: Request) {
 
   session.allow(room, lockedByMeeting ? session.READ_ACCESS : session.FULL_ACCESS);
 
+  const authorizeStartedAt = performance.now();
   const { status, body } = await session.authorize();
+  const authorizeFinishedAt = performance.now();
 
+  logLiveblocksAuthTiming("note", room, startedAt, userResolvedAt, accessCheckedAt, authorizeStartedAt, authorizeFinishedAt);
   return new Response(body, {
     status,
     headers: {
       "Content-Type": "application/json",
     },
+  });
+}
+
+function logLiveblocksAuthTiming(
+  kind: string,
+  room: string,
+  startedAt: number,
+  userResolvedAt: number,
+  accessCheckedAt: number,
+  authorizeStartedAt: number,
+  authorizeFinishedAt: number,
+) {
+  const totalMs = Math.round(performance.now() - startedAt);
+
+  if (totalMs < 750) {
+    return;
+  }
+
+  logger.warn("Slow Liveblocks auth", {
+    kind,
+    room,
+    totalMs,
+    userMs: Math.round(userResolvedAt - startedAt),
+    accessMs: Math.round(accessCheckedAt - userResolvedAt),
+    authorizeMs: Math.round(authorizeFinishedAt - authorizeStartedAt),
+    responseMs: Math.round(performance.now() - authorizeFinishedAt),
   });
 }
