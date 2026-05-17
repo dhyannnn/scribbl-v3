@@ -141,7 +141,495 @@ LiveKit Egress → MP4 → Supabase S3 → MeetingRecording + MeetingArtifact + 
 
 ---
 
-## MVP Todo List (34 items — start here next session)
+## ⚡ PRIORITY 1: Billing Overhaul — Do This Before Any Frontend Work
+
+Frontend changes are paused. The entire billing system — pricing model, feature gates, storage logic, Stripe products, and webhook handling — must be rebuilt first. This section is the complete implementation plan. Work through it in order.
+
+---
+
+### Final Pricing Model (DECIDED — do not re-litigate)
+
+| Tier | Price | Members | Shared storage | Private/user | Recordings | Other |
+|---|---|---|---|---|---|---|
+| **Free** | $0 | 3 max | 500 MB | 200 MB | None | No whiteboard, no groups |
+| **Pro** | $25 CAD/workspace/mo | 20 incl. · +$1 CAD/member/mo | 10 GB | 2 GB | 5 hrs/mo · +$1.50 CAD/hr | Groups, whiteboard |
+| **Institution** | $65 CAD/workspace/mo | 50 incl. · +$0.50 CAD/member/mo | 50 GB | 5 GB | 20 hrs/mo · +$1.50 CAD/hr | Groups, whiteboard, audit log, priority support |
+| **Enterprise** | $250+ CAD/workspace/mo · annual contract | Custom | Custom | Custom | Custom | All Institution features + SLA + dedicated support |
+
+**Key rule:** Whiteboard (tldraw) is Pro+ only. Free tier gets text notes only.
+**Overage billing:** Member and recording overages are calculated on `invoice.created` webhook and added as line items before the invoice finalizes.
+**Enterprise:** Custom-invoiced via Stripe. Does not use the checkout flow. OWNER contacts sales → Dhyan creates a manual subscription in Stripe dashboard.
+
+**Fixed cost reminder (affects margin):**
+- tldraw: $500/mo · Supabase Pro: $25/mo · Liveblocks Pro: $99/mo · Resend: $20/mo · Hosting: $41/mo = **$685/mo total**
+- **Email tldraw at sales@tldraw.com for startup pricing on deployment day** — 80% discount drops fixed costs to ~$185/mo
+
+---
+
+### Step 1 — Schema migration
+
+Create file: `prisma/migrations/20260518000000_billing_overhaul/migration.sql`
+
+```sql
+-- Add ENTERPRISE to SubscriptionPlan enum
+ALTER TYPE "SubscriptionPlan" ADD VALUE 'ENTERPRISE';
+
+-- Add recording duration tracking to MeetingRecording
+-- Used for calculating monthly recording hours per workspace
+ALTER TABLE "MeetingRecording" ADD COLUMN "durationSeconds" INTEGER;
+```
+
+Update `prisma/schema.prisma`:
+```prisma
+enum SubscriptionPlan {
+  FREE
+  PRO
+  INSTITUTION
+  ENTERPRISE    -- add this
+}
+```
+
+Add to `MeetingRecording` model:
+```prisma
+durationSeconds  Int?
+```
+
+When a recording completes (in the recording completion webhook or `lib/meeting-recording.ts`), calculate and store `durationSeconds = completedAt - startedAt` in seconds. This is what the overage billing uses.
+
+**Run after schema changes:**
+```bash
+npx prisma migrate deploy
+npx prisma generate
+lsof -ti:3000 | xargs kill -9 && npm run dev
+```
+
+---
+
+### Step 2 — Rewrite `lib/billing.ts`
+
+Replace the entire file. All constants, all helpers. Here is the complete spec:
+
+**Constants:**
+```ts
+// ── Workspace limits ──────────────────────────────────────────────────────────
+export const FREE_WORKSPACE_LIMIT = 1            // was 3
+export const FREE_MEMBER_LIMIT    = 3            // was 5
+
+// ── Pro limits ────────────────────────────────────────────────────────────────
+export const PRO_MEMBER_LIMIT              = 20           // included members
+export const PRO_MEMBER_OVERAGE_CAD        = 1.00         // per member/month beyond 20
+export const PRO_RECORDING_HOURS           = 5            // included hrs/month
+export const PRO_RECORDING_OVERAGE_CAD     = 1.50         // per hr beyond 5
+
+// ── Institution limits ────────────────────────────────────────────────────────
+export const INSTITUTION_MEMBER_LIMIT             = 50
+export const INSTITUTION_MEMBER_OVERAGE_CAD       = 0.50
+export const INSTITUTION_RECORDING_HOURS          = 20
+export const INSTITUTION_RECORDING_OVERAGE_CAD    = 1.50
+
+// ── Shared storage limits (WORKSPACE_SHARED files only) ───────────────────────
+export const FREE_SHARED_STORAGE_BYTES        = 500  * 1024 * 1024          //  500 MB
+export const PRO_SHARED_STORAGE_BYTES         = 10   * 1024 * 1024 * 1024   //   10 GB
+export const INSTITUTION_SHARED_STORAGE_BYTES = 50   * 1024 * 1024 * 1024   //   50 GB
+export const ENTERPRISE_SHARED_STORAGE_BYTES  = 200  * 1024 * 1024 * 1024   //  200 GB (default, negotiable)
+
+// ── Private storage limits (per user, PRIVATE files) ─────────────────────────
+export const FREE_PRIVATE_STORAGE_BYTES_PER_USER        = 200 * 1024 * 1024         //  200 MB
+export const PRO_PRIVATE_STORAGE_BYTES_PER_USER         = 2   * 1024 * 1024 * 1024  //    2 GB
+export const INSTITUTION_PRIVATE_STORAGE_BYTES_PER_USER = 5   * 1024 * 1024 * 1024  //    5 GB
+export const ENTERPRISE_PRIVATE_STORAGE_BYTES_PER_USER  = 10  * 1024 * 1024 * 1024  //   10 GB
+```
+
+**New helper functions to add:**
+```ts
+// Returns shared storage limit for the workspace plan
+export function getSharedStorageLimitBytes(plan: SubscriptionPlan): number
+
+// Returns private storage limit per user for the plan
+export function getPrivateStorageLimitPerUserBytes(plan: SubscriptionPlan): number
+
+// Sums ONLY WORKSPACE_SHARED files — used for workspace storage gating
+export async function getWorkspaceSharedStorageBytes(workspaceId: string): Promise<number>
+
+// Sums ONLY PRIVATE files for a specific user in a workspace
+export async function getUserPrivateStorageBytes(userId: string, workspaceId: string): Promise<number>
+
+// Total recording seconds used in the current billing period
+// billingPeriodStart: start of current Stripe billing period (pass from subscription)
+export async function getWorkspaceRecordingSecondsThisPeriod(
+  workspaceId: string,
+  billingPeriodStart: Date
+): Promise<number>
+
+// Included member count for the plan
+export function getIncludedMemberLimit(plan: SubscriptionPlan): number
+
+// Included recording hours for the plan
+export function getIncludedRecordingHours(plan: SubscriptionPlan): number
+
+// Per-member overage rate in CAD for the plan (0 if not applicable)
+export function getMemberOverageRateCad(plan: SubscriptionPlan): number
+
+// Per-recording-hour overage rate in CAD (0 if not applicable)
+export function getRecordingOverageRateCad(plan: SubscriptionPlan): number
+```
+
+**Remove:** `getWorkspaceStorageBytes` (replace all callers with `getWorkspaceSharedStorageBytes`)
+**Keep:** `getWorkspacePlan`, `getWorkspaceActiveMemberCount`, `getOwnedWorkspaceCount`, `userHasPaidWorkspace`, `syncWorkspacePlanFromStripe`, `getStorageLimitBytes` (keep as alias calling `getSharedStorageLimitBytes` for backward compat)
+
+---
+
+### Step 3 — Fix storage split in `app/workspaces/[id]/files/actions.ts`
+
+Currently `uploadWorkspaceFile` (line ~75) calls `getWorkspaceStorageBytes` which counts ALL files. Fix:
+
+```ts
+// In uploadWorkspaceFile, replace the storage check block:
+const visibility = String(formData.get("visibility") ?? "WORKSPACE_SHARED");
+
+if (visibility === "WORKSPACE_SHARED") {
+  // Check workspace shared storage quota
+  const [currentSharedStorage, sharedLimit] = await Promise.all([
+    getWorkspaceSharedStorageBytes(workspace.id),
+    Promise.resolve(getSharedStorageLimitBytes(workspace.plan)),
+  ]);
+  if (currentSharedStorage + uploadedFile.size > sharedLimit) {
+    redirect(`/workspaces/${workspaceId}/files?file=storage-limit`);
+  }
+} else {
+  // Check per-user private storage quota
+  const [currentPrivateStorage, privateLimit] = await Promise.all([
+    getUserPrivateStorageBytes(currentUser.id, workspace.id),
+    Promise.resolve(getPrivateStorageLimitPerUserBytes(workspace.plan)),
+  ]);
+  if (currentPrivateStorage + uploadedFile.size > privateLimit) {
+    redirect(`/workspaces/${workspaceId}/files?file=private-storage-limit`);
+  }
+}
+```
+
+Also update the storage limit display in `app/workspaces/[id]/files/page.tsx` and `app/workspaces/[id]/billing/page.tsx` to call `getWorkspaceSharedStorageBytes` instead of `getWorkspaceStorageBytes`.
+
+---
+
+### Step 4 — Feature gating changes
+
+**4a. Whiteboard gating — gate to Pro+, Free gets text notes only**
+
+Files to update:
+
+`app/workspaces/[id]/notes/page.tsx`:
+- The "New Whiteboard" button and the "More" dropdown whiteboard options should be hidden/disabled when `workspace.plan === "FREE"`
+- Show an upgrade prompt instead: "Upgrade to Pro to create whiteboards"
+- Pass `canUseWhiteboard = workspace.plan !== "FREE"` and conditionally render
+
+`app/workspaces/[id]/notes/actions.ts` — `createWhiteboardNote`:
+- Add plan check at start of action:
+  ```ts
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { plan: true } })
+  if (workspace?.plan === "FREE") {
+    redirect(`/workspaces/${workspaceId}/notes?note=plan-upgrade-required`)
+  }
+  ```
+
+`components/MeetingNotesSection.tsx`:
+- The "New Board" button in `NoteHeader` should check workspace plan
+- Pass `canUseWhiteboard` prop down from the server-side meeting hub page
+
+`app/workspaces/[id]/notes/[noteId]/page.tsx`:
+- If a whiteboard note is opened on a Free workspace (edge case — grandfathered), show an upgrade banner at the top
+
+**4b. Member limit changes**
+
+`lib/billing.ts`:
+- `FREE_MEMBER_LIMIT = 3` (was 5) — already in Step 2
+
+`app/workspaces/[id]/members/page.tsx` and `app/workspaces/[id]/actions.ts` — `addWorkspaceMember`:
+- Currently checks `memberCount >= FREE_MEMBER_LIMIT`
+- Update to check the correct limit per plan:
+  ```ts
+  const limit = workspace.plan === "FREE"
+    ? FREE_MEMBER_LIMIT  // 3
+    : null               // Pro/Institution: no hard cap, overages billed
+  if (limit && memberCount >= limit) {
+    redirect(`/workspaces/${workspaceId}/members?invite=plan-limit`)
+  }
+  ```
+- For Pro and Institution: no hard member cap — overages are billed via Stripe. Members can always be invited; billing catches up at next invoice.
+
+**4c. Workspace creation limit**
+
+`FREE_WORKSPACE_LIMIT = 1` (was 3). Update wherever workspace creation is gated.
+
+`app/(app)/actions.ts` or wherever `createWorkspace` is — find the `getOwnedWorkspaceCount` check and update to use the new constant.
+
+Update all UI copy: "Free plan allows 1 workspace" (was 3).
+
+---
+
+### Step 5 — Recording hour tracking and enforcement
+
+**5a. Store duration on recording completion**
+
+In `lib/meeting-recording.ts` — find the function that handles recording completion (called from the LiveKit Egress webhook or the recording complete route). When status transitions to COMPLETED:
+
+```ts
+// Calculate and store duration
+const recording = await prisma.meetingRecording.findUnique({ where: { id }, select: { startedAt: true, stoppedAt: true } })
+if (recording?.startedAt && recording?.stoppedAt) {
+  const durationSeconds = Math.round(
+    (recording.stoppedAt.getTime() - recording.startedAt.getTime()) / 1000
+  )
+  await prisma.meetingRecording.update({ where: { id }, data: { durationSeconds } })
+}
+```
+
+**5b. Enforce recording hour limit before starting**
+
+In the recording start action (wherever `startRoomRecording` is called, in `app/workspaces/[id]/meetings/[meetingId]/actions.ts` or similar):
+
+```ts
+// Get current billing period start from Stripe subscription
+const subscription = await prisma.subscription.findUnique({
+  where: { workspaceId },
+  select: { currentPeriodStart: true, plan: true }
+})
+
+if (subscription) {
+  const usedSeconds = await getWorkspaceRecordingSecondsThisPeriod(workspaceId, subscription.currentPeriodStart)
+  const includedHours = getIncludedRecordingHours(subscription.plan)
+  const usedHours = usedSeconds / 3600
+
+  // Allow up to 2x the included hours before hard-blocking (overages are billed)
+  // Hard block at 3x to prevent runaway costs on a single workspace
+  if (usedHours >= includedHours * 3) {
+    redirect(`/workspaces/${workspaceId}/meetings/${meetingId}/video?recording=hard-limit`)
+  }
+}
+```
+
+The Stripe overage billing (Step 7) handles charging for overages up to the 3x soft limit.
+
+---
+
+### Step 6 — Stripe dashboard setup (do this manually)
+
+**⚠️ Do in TEST mode first, verify everything works, then repeat in LIVE mode before deployment.**
+
+**Products to create:**
+
+**Product 1: Scribbl Pro**
+- Name: `Scribbl Pro`
+- Create price: `$25.00 CAD`, recurring monthly
+- Save price ID as `STRIPE_PRICE_PRO_BASE_CAD` in `.env`
+
+**Product 2: Scribbl Institution**
+- Name: `Scribbl Institution`
+- Create price: `$65.00 CAD`, recurring monthly
+- Save price ID as `STRIPE_PRICE_INSTITUTION_BASE_CAD` in `.env`
+
+**Product 3: Member Overage — Pro**
+- Name: `Pro Member Overage`
+- Create price: `$1.00 CAD`, one-time (used for invoice items, not subscriptions)
+- Save price ID as `STRIPE_PRICE_PRO_MEMBER_OVERAGE_CAD` in `.env`
+
+**Product 4: Member Overage — Institution**
+- Name: `Institution Member Overage`
+- Create price: `$0.50 CAD`, one-time
+- Save as `STRIPE_PRICE_INSTITUTION_MEMBER_OVERAGE_CAD` in `.env`
+
+**Product 5: Recording Overage**
+- Name: `Recording Hour Overage`
+- Create price: `$1.50 CAD`, one-time
+- Save as `STRIPE_PRICE_RECORDING_OVERAGE_CAD` in `.env`
+
+**Webhook events to enable** (on the Stripe webhook endpoint `/api/stripe/webhook`):
+- `checkout.session.completed` — already handled
+- `customer.subscription.updated` — already handled
+- `customer.subscription.deleted` — already handled
+- `invoice.payment_failed` — already handled
+- `invoice.created` ← **ADD THIS** — needed for overage billing
+- `invoice.finalized` — optional, useful for logging
+
+**Add new env vars to `.env` and `.env.example`:**
+```
+STRIPE_PRICE_PRO_BASE_CAD=price_...
+STRIPE_PRICE_INSTITUTION_BASE_CAD=price_...
+STRIPE_PRICE_PRO_MEMBER_OVERAGE_CAD=price_...
+STRIPE_PRICE_INSTITUTION_MEMBER_OVERAGE_CAD=price_...
+STRIPE_PRICE_RECORDING_OVERAGE_CAD=price_...
+```
+
+---
+
+### Step 7 — Update `app/workspaces/[id]/billing/billing-actions.ts` and webhook
+
+**7a. Update `upgradeWorkspaceToPro` → rename to `upgradeWorkspaceToPlan`**
+
+Current function hardcodes the Pro price ID. Replace with a plan-aware version:
+
+```ts
+export async function upgradeWorkspaceToPlan(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "")
+  const targetPlan = String(formData.get("plan") ?? "PRO") // "PRO" or "INSTITUTION"
+
+  // ... existing auth checks ...
+
+  const priceId = targetPlan === "INSTITUTION"
+    ? process.env.STRIPE_PRICE_INSTITUTION_BASE_CAD!
+    : process.env.STRIPE_PRICE_PRO_BASE_CAD!
+
+  // Create Stripe checkout session with the correct price ID
+  // Re-enable automatic_tax: { enabled: true } when Stripe business verification is complete
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    line_items: [{ price: priceId, quantity: 1 }],
+    // ... rest of existing checkout session config ...
+  })
+
+  redirect(session.url!)
+}
+```
+
+Update `app/workspaces/[id]/billing/page.tsx` to render both "Upgrade to Pro" and "Upgrade to Institution" buttons, each passing the correct `plan` hidden input.
+
+**7b. Add `invoice.created` handler to webhook**
+
+In `app/api/stripe/webhook/route.ts`, add a new case in the switch statement:
+
+```ts
+case "invoice.created": {
+  const invoice = event.data.object as Stripe.Invoice
+  await handleInvoiceCreated(invoice)
+  break
+}
+```
+
+Create `lib/stripe-overage.ts`:
+
+```ts
+export async function handleInvoiceCreated(invoice: Stripe.Invoice) {
+  // Only process subscription invoices (not one-off)
+  if (!invoice.subscription) return
+
+  // Get the subscription to find which workspace this is for
+  const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string)
+  const workspaceId = subscription.metadata?.workspaceId
+  if (!workspaceId) return
+
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { id: true, plan: true },
+  })
+  if (!workspace || workspace.plan === "FREE") return
+
+  // ── Member overage ────────────────────────────────────────────────────────
+  const memberCount = await getWorkspaceActiveMemberCount(workspaceId)
+  const includedMembers = getIncludedMemberLimit(workspace.plan)
+  const extraMembers = Math.max(0, memberCount - includedMembers)
+
+  if (extraMembers > 0) {
+    const memberOveragePriceId = workspace.plan === "INSTITUTION"
+      ? process.env.STRIPE_PRICE_INSTITUTION_MEMBER_OVERAGE_CAD!
+      : process.env.STRIPE_PRICE_PRO_MEMBER_OVERAGE_CAD!
+
+    await stripe.invoiceItems.create({
+      customer: invoice.customer as string,
+      invoice: invoice.id,
+      price: memberOveragePriceId,
+      quantity: extraMembers,
+      description: `${extraMembers} extra member${extraMembers > 1 ? "s" : ""} beyond ${includedMembers} included`,
+    })
+  }
+
+  // ── Recording overage ─────────────────────────────────────────────────────
+  const billingPeriodStart = new Date(subscription.current_period_start * 1000)
+  const recordingSeconds = await getWorkspaceRecordingSecondsThisPeriod(workspaceId, billingPeriodStart)
+  const usedHours = recordingSeconds / 3600
+  const includedHours = getIncludedRecordingHours(workspace.plan)
+  const extraHours = Math.max(0, Math.ceil(usedHours - includedHours)) // round up to nearest hour
+
+  if (extraHours > 0) {
+    await stripe.invoiceItems.create({
+      customer: invoice.customer as string,
+      invoice: invoice.id,
+      price: process.env.STRIPE_PRICE_RECORDING_OVERAGE_CAD!,
+      quantity: extraHours,
+      description: `${extraHours} recording hour${extraHours > 1 ? "s" : ""} beyond ${includedHours} included`,
+    })
+  }
+
+  // Write audit log for the overage charge
+  if (extraMembers > 0 || extraHours > 0) {
+    await writeAuditLog({
+      action: "BILLING_OVERAGE_CHARGED",
+      workspaceId,
+      metadata: { extraMembers, extraHours, invoiceId: invoice.id },
+    })
+  }
+}
+```
+
+**Note:** `BILLING_OVERAGE_CHARGED` is a new AuditAction enum value. Add it to `prisma/schema.prisma` enum and create a migration for it:
+```sql
+ALTER TYPE "AuditAction" ADD VALUE 'BILLING_OVERAGE_CHARGED';
+```
+Add this to the existing billing migration (Step 1) or create a separate one.
+
+**7c. Update `syncWorkspacePlanFromStripe`**
+
+The existing function handles PRO and cancellations. Update to also handle INSTITUTION:
+- Map Stripe product IDs to plan names
+- Add INSTITUTION and ENTERPRISE cases
+
+---
+
+### Step 8 — Frontend: billing page, pricing page, and gated UI
+
+**8a. Billing page** — `app/workspaces/[id]/billing/page.tsx`
+
+The billing page needs a full redesign matching the mockup (see Group 7, item 17 in the original MVP list below). Key changes from the original spec now that billing is richer:
+
+- **Active plan card:** Show plan name, base price, billing date, storage meter split into two bars (Shared storage: X GB / Y GB · Your private storage: X GB / Y GB), member meter (X members / Y included · Z on overage), recording hours meter (X hrs / Y hrs this period)
+- **Overage preview:** If currently overusing, show a projected overage amount: "Estimated overage this cycle: $12.50 CAD"
+- **Payment method card:** Fetch from Stripe `stripe.customers.listPaymentMethods(customerId, { type: 'card' })` — show card last 4 + expiry + brand. "Edit Details" → Stripe Customer Portal.
+- **Explore Plans section:** All 4 tiers side by side (Free / Pro / Institution / Enterprise). Active plan highlighted. Show upgrade button for higher tiers, "Contact sales" for Enterprise.
+- **Billing history table:** `stripe.invoices.list({ customer: customerId, limit: 10 })` — Date, Amount, Status (PAID/FAILED/PENDING badge), PDF link.
+- **Refresh billing status button:** Keep existing `refreshBillingStatus` action.
+
+**8b. Pricing page** — `app/pricing/page.tsx` (or wherever the landing page pricing section is)
+
+Update to show all 4 tiers with correct features/prices/limits. Match the final pricing table above exactly.
+
+**8c. Notes pages — whiteboard gate**
+
+`app/workspaces/[id]/notes/page.tsx` — the `canUseWhiteboard` prop pattern (see Step 4a above).
+
+**8d. Members page — correct limit messaging**
+
+`app/workspaces/[id]/members/page.tsx` — update the "plan-limit" upgrade message from "5 members" to "3 members on Free". For Pro/Institution workspaces, show the member overage info instead of a hard limit message.
+
+---
+
+### Step 9 — Verify and test
+
+After all steps are complete, test each of these flows:
+
+1. **Free workspace:** Create note → whiteboard button hidden ✓. Invite 4th member → blocked ✓. Upload file until 500MB → blocked ✓. Create 2nd workspace → blocked ✓.
+2. **Pro workspace checkout:** Click "Upgrade to Pro" → Stripe checkout at $25 CAD ✓. Webhook fires → plan updates to PRO ✓. Whiteboard unlocked ✓. Recording available ✓.
+3. **Institution workspace checkout:** Click "Upgrade to Institution" → checkout at $65 CAD ✓. Plan updates to INSTITUTION ✓. Audit log accessible ✓.
+4. **Member overage:** On a Pro workspace with 25 members (5 over), simulate `invoice.created` webhook → invoice should have a $5 CAD line item for 5 extra members ✓.
+5. **Recording overage:** After 6 hours of recording on Pro (1 over limit), simulate invoice → $1.50 CAD line item for 1 extra hour ✓.
+6. **Storage split:** Upload WORKSPACE_SHARED file → counts against workspace shared quota ✓. Upload PRIVATE file → counts against user private quota, not workspace ✓.
+7. **Enterprise:** Cannot checkout through normal flow. Billing page shows "Contact sales" → mailto link ✓.
+
+---
+
+## ⏸️ PAUSED — Frontend MVP Items
+
+The following items are paused until the billing overhaul (Priority 1 above) is complete. Do not start these until Steps 1–9 above are done and verified.
+
+## MVP Todo List (34 items — resume after billing overhaul)
 
 Work through these in order. Items 1–3 need no schema changes. Items that need schema changes are noted — batch all schema changes and run migrate/generate once.
 
@@ -151,36 +639,41 @@ Work through these in order. Items 1–3 need no schema changes. Items that need
 - Use `public/screen.png` as the text editor hero image (TipTap editor screenshot)
 - Use `public/Screenshot 2026-05-17 at 1.11.45 PM.png` as the whiteboard hero image
 - Use `<Image>` tags with proper `next/image` imports
-- Sections: Hero (headline + sub + CTA buttons "Start free" → /login, "View pricing" → /pricing), Features (with real screenshots), How it works (vs Zoom + Miro), Pricing (already exists, restyle with design tokens), Feedback widget, Coming Soon, CTA + footer
-- Keep existing indigo/purple palette — it already matches the design system
+- Sections: Hero (headline + sub + CTA buttons "Start free" → /login, "View pricing" → /pricing), session-hub hero overlay, Before/After workflow section, Features (with real screenshots), How it works, generic comparison with unnamed video-only/whiteboard-only tools, About, Meet the Team, Pricing, Feedback widget, Coming Soon, CTA + footer
+- Positioning should be general-purpose: teams, projects, companies, departments, labs, classes, and communities. Do not make the landing page feel education-only.
+- Meet the Team can use placeholder photo blocks until real names/photos are ready. Mention that Scribbl is built by four graduate and undergraduate students.
 
 **2. Feedback/review widget** — add to `components/LandingPage.tsx`
 - Simple form: textarea "What would you like to see?" + email field + submit
 - Server action that sends to `hello@scribblapp.ca` via Resend (same pattern as meeting emails)
+- Before launch: create an ImprovMX forwarding alias for `hello@scribblapp.ca` to the real inbox, or change the feedback recipient to an inbox that already works.
 - Show "Thank you" message on submit
 - Style as a section: "Shape what comes next — tell us what you want"
 
 **3. "Coming in next release" section** — add to `components/LandingPage.tsx`
 - Feature cards for: AI meeting summaries, AI note assistant, Version history, Wiki-style note linking, Workspace analytics, Mobile app, Message threading, @mentions, Direct messages, Meeting templates
 - Style as a grid of pill badges or feature cards
-- CTA: "Want early access? Join the waitlist" → link to a Tally/Typeform form or the feedback widget
+- CTA: Link to the feedback widget with copy like "Tell us what to prioritize". Do not mention a waitlist until one exists.
 
-### Group 2: Dashboard & navigation (no schema changes)
+### Group 2: Dashboard & navigation (no schema changes) — DONE
 
-**4. Cap activity feed** — `app/page.tsx`
+**4. Cap activity feed** — `app/page.tsx` — DONE
 - Change `getWorkspaceActivity(workspaceIds, 15)` → `getWorkspaceActivity(workspaceIds, 8)`
 - Add "View all →" link to a future `/activity` page for now — can link to `/` as placeholder
 
-**5. Quick-action strip** — `app/page.tsx`
+**5. Quick-action strip** — `app/page.tsx` — DONE
 - Add a row of icon+label buttons below the workspace grid and above the 2-col section
-- Actions: "New Note" (→ first workspace's notes page), "Schedule Session" (→ first workspace's meetings page), "Upload File" (→ first workspace's files page)
+- Actions: "New Note" (→ `/new/note`), "Continue" (→ newest activity item, or notifications fallback), "Upload File" (→ `/new/file`). The header already has the primary "New Session" action.
 - Style as horizontal pill row: `flex gap-3`, each is `rounded-full border bg-surface px-4 py-2 font-semibold text-sm`
+- Follow-up implementation note: dashboard actions are generalized because they live outside a workspace. Workspace-specific actions route to picker pages first.
+- Latest implementation note: replaced redundant "Open Calendar" quick action with "Continue", which links to the newest activity item when available. Add invite notifications to MVP backlog: if an invited email already belongs to a user, create a `WORKSPACE_INVITE`-style in-app notification linking to `/invites/[token]`; keep dashboard invite cards as fallback for not-yet-registered users.
 
-**6. AppSidebar improvements** — `components/AppSidebar.tsx`
-- Add "Up next" widget: query the next upcoming meeting across all user workspaces (already have `upcomingMeetings` on the dashboard page — pass down or re-query in AppSidebar)
-- Actually AppSidebar is a server component — add a small query: `prisma.meeting.findFirst({ where: { workspaceId: { in: workspaceIds }, canceledAt: null, startsAt: { gte: now } }, orderBy: { startsAt: 'asc' }, select: { id: true, title: true, startsAt: true, workspaceId: true } })`
-- Show as a small card above the nav items: title, time, "Join →" link
-- Add "Recent" workspace row: last 3 workspaces the user belongs to as small icon+name links
+**6. AppSidebar improvements** — `components/AppSidebar.tsx` — DONE
+- Added "Today" widget: links to the global day calendar and counts visible sessions across the user's workspaces.
+- Added "Up next" widget: queries the next upcoming visible meeting across all user workspaces and links directly to it.
+- Removed the redundant "Recent" workspace row.
+- Added workspace-separated storage snapshot: each visible row links to that workspace's files page and shows its own usage/limit instead of one combined total.
+- Responsive note: `AppSidebar` now renders desktop sidebar at `lg` and mobile top/bottom navigation below `lg`; dashboard and global app layout use responsive padding so content is not pushed off-screen on phones/tablets.
 
 ### Group 3: Text editor redesign (no schema changes needed beyond what's in Prisma)
 
@@ -307,6 +800,33 @@ Files: `page.tsx`, `MeetingVideoRoom.tsx`, `VideoPopoutShell.tsx`, `FloatingMeet
 - Add `ThemeToggle` to both `AppSidebar` and `WorkspaceSidebar` (bottom, near user info)
 - Persist to DB: call a `updateThemePreference(darkMode: boolean)` server action that updates `User.darkMode`
 - On page load: `app/layout.tsx` fetches user's `darkMode` preference and sets `data-theme` on `<html>` to avoid flash
+
+### Group 8.5: Organization pricing model (research + product decision, no schema changes until decided)
+
+**18A. Organization pricing/cost model deep dive**
+- Current public Organization price idea: `$299 CAD / organization / month`, not per workspace.
+- Need a detailed cost and margin model before finalizing public copy or billing implementation.
+- Analyze all variable cost drivers, not only Supabase:
+  - Supabase database/storage/bandwidth/egress, backups, custom domain, PITR if enabled
+  - LiveKit video minutes, participant minutes, Egress/recording costs, recording storage transfer
+  - Liveblocks seats/concurrent collaboration usage/rooms if applicable
+  - Resend email volume
+  - Stripe fees, failed payments, currency conversion, tax handling
+  - File uploads/downloads, recordings, PDF exports, Playwright runtime hosting costs
+  - Hosting/runtime costs (Railway/Fly/etc.), background jobs, logs/monitoring
+  - Support/admin burden for org customers
+- Decide Organization storage policy:
+  - Included pooled org storage, e.g. `100 GB included`
+  - Additional storage rate, e.g. `$0.15 CAD / GB / month` or storage packs
+  - Whether to expose bandwidth/download overages publicly or keep as fair-use/custom plan language
+  - Private file policy: private files should have per-member quotas and still be represented in org/admin storage reporting without exposing private contents
+- Produce a written pricing memo with:
+  - Cost assumptions
+  - Worst-case abuse scenarios
+  - Gross margin estimates at low/medium/high usage
+  - Recommended public pricing copy
+  - Recommended internal alerts/limits before customers create surprise costs
+- Do not implement paid Organization overage billing until this memo is reviewed.
 
 ### Group 9: Command palette (no schema changes)
 
@@ -498,20 +1018,24 @@ CREATE TABLE "FileTag" (
 
 ---
 
-## Migrations to Run Next Session (Batch Together)
+## Migrations — Complete Order
 
-Run these all at once before implementing items 15–35:
+**Already deployed:**
+- `20260517130000_add_recurring_meetings` ✓
 
-1. User profile fields (item 15): `institution`, `jobTitle`, `timezone`, `language`, `bio`, `darkMode`
-2. Chat features (items 21–30): `MessageReaction` model, `Message.attachmentFileId`, `Message.replyToId`, `Message.isPinned`, `ChannelType.DIRECT`
-3. Tags (items 31): `Tag`, `NoteTag`, `MeetingTag`, `FileTag` tables
+**Run billing migrations first (Priority 1):**
+1. `20260518000000_billing_overhaul` — `SubscriptionPlan.ENTERPRISE`, `MeetingRecording.durationSeconds`, `AuditAction.BILLING_OVERAGE_CHARGED`
 
-Create all three as a single migration file or three separate ones, then:
+**Then run all remaining migrations together (after billing is complete):**
+2. User profile fields: `institution`, `jobTitle`, `timezone`, `language`, `bio`, `darkMode`
+3. Chat features: `MessageReaction`, `Message.attachmentFileId`, `Message.replyToId`, `Message.isPinned`, `ChannelType.DIRECT`
+4. Tags: `Tag`, `NoteTag`, `MeetingTag`, `FileTag`
+
+For each batch:
 ```bash
 npx prisma migrate deploy
 npx prisma generate
-lsof -ti:3000 | xargs kill -9
-npm run dev
+lsof -ti:3000 | xargs kill -9 && npm run dev
 ```
 
 ---
@@ -524,29 +1048,70 @@ npm run dev
 - Supabase: upgrade to Pro ($25/mo), use Session Pooler URL for DATABASE_URL in production
 - Resend: configure DKIM/SPF/DMARC for scribblapp.ca
 - Email forwarding: billing@scribblapp.ca → dhyanthakkar0@gmail.com via ImprovMX
+- Email forwarding: hello@scribblapp.ca → real feedback inbox via ImprovMX before relying on landing page feedback
 
 ---
 
 ## Start Here Next Session
+
+**Frontend is PAUSED. Start with billing overhaul only.**
 
 ```
 Project: /Users/Karuna/Desktop/Dhyan/Scribbl/scribbl
 Run: npm run dev → localhost:3000
 GitHub: github.com/dhyannnn/scribbl-v3
 
+GIT STATUS:
+- Commit 7670ca3 was pushed to origin/main.
+- Current session changes are intentionally UNCOMMITTED. Do not commit unless Dhyan asks.
+- Expected local modified/untracked work includes:
+  - HANDOFF_MAY17.md
+  - app/(app)/layout.tsx
+  - app/page.tsx
+  - components/AppSidebar.tsx
+  - components/LandingPage.tsx
+  - app/landing-feedback/
+  - app/new/
+  - components/LandingFeedbackForm.tsx
+  - Unrelated image file: ChatGPT Image May 15, 2026, 01_34_09 PM.png — leave it alone.
+
 MIGRATION STATUS:
 - 20260517130000_add_recurring_meetings: DEPLOYED ✓ + prisma generate ✓
-- Next batch (user profile + chat + tags): NOT YET — do items 1-13 first, then batch migrate
+- Next batch (user profile + chat + tags): NOT YET — do not migrate until the current no-schema UI/product work is settled.
+
+WHAT WAS JUST DONE:
+- Landing page C11 pass:
+  - generalized positioning beyond education/students
+  - removed waitlist language
+  - avoided named competitor comparison
+  - added session-hub hero overlay, before/after section, screenshots, About, Meet the Team placeholders, feedback form, coming soon, org pricing card
+- Dashboard/global actions:
+  - generalized outside-workspace buttons through /new picker pages
+  - kept New Note, Continue, Upload File
+- AppSidebar:
+  - removed Recent section
+  - added Today widget
+  - added Up next widget
+  - fixed avatar display fallback/image rendering
+  - made storage snapshot workspace-separated
+  - added mobile top/bottom nav behavior
+
+VERIFY BEFORE CONTINUING:
+- npm run lint passes with two existing warnings:
+  - app/pricing/page.tsx freeWorkspaceCount unused
+  - tests/unit/artifact-lock.test.ts makeMeeting unused
+- npx tsc --noEmit still fails on pre-existing tests/helpers/factories.ts seriesId optional/null typing issue.
+- If dev server needs restarting, use npm run dev after checking port 3000.
 
 START WITH:
-Item 1 — Landing page (C11) in components/LandingPage.tsx
-  → Use public/screen.png for text editor hero
-  → Use public/Screenshot 2026-05-17 at 1.11.45 PM.png for whiteboard hero
-  → Then items 2, 3 (feedback widget, coming soon section) in same file
+1. Review the uncommitted UI changes in browser at desktop, tablet, and mobile widths.
+2. Decide whether to keep/refine the landing page "oomph" sections and sidebar widgets.
+3. Fix the pre-existing TypeScript test factory issue if Dhyan wants a fully clean typecheck before commit.
+4. Next product build candidates:
+   - Video Room redesign (C10)
+   - Text editor / whiteboard polish items
+   - Invite notifications gap (existing-user workspace invites should create in-app notification)
+   - Organization pricing memo/deep dive before implementing org overage billing
 
-Then items 4-6 (dashboard), 7-13 (editors + slash commands), 14 (video room)
-
-Then batch all schema migrations (user + chat + tags), run migrate/generate/restart
-
-Then items 15-34 in order
+Only after the UI/product pass is accepted: batch all schema migrations (user + chat + tags), run migrate/generate/restart, then continue items 15-34.
 ```
