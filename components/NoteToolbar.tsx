@@ -180,7 +180,7 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
     <div className="rounded-t-md border border-b-0 border-[#d8d8ce] bg-[#f7f7f2]">
 
       {/* ── Main toolbar row ─────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5">
+      <div className="flex items-center gap-0.5 overflow-x-auto px-2 py-1.5 sm:flex-wrap">
 
         {/* History */}
         {btn(false, "Undo (⌘Z)",    () => editor.chain().focus().undo().run(), <Undo2 size={14} />)}
@@ -375,7 +375,7 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
 
       {/* ── Table toolbar row (visible only when cursor is inside a table) ── */}
       {inTable && (
-        <div className="flex flex-wrap items-center gap-0.5 border-t border-[#d8d8ce] px-2 py-1">
+        <div className="flex items-center gap-0.5 overflow-x-auto border-t border-[#d8d8ce] px-2 py-1 sm:flex-wrap">
 
           {/* Rows */}
           <span className="mr-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#9a9c92]">Rows</span>

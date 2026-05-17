@@ -33,7 +33,7 @@ describe("updateWorkspaceDetails", () => {
 
   it("redirects unauthenticated users", async () => {
     mockGetCurrentUser.mockResolvedValue(null);
-    const fd = makeFormData({ workspaceId: workspace.id, name: "New Name", type: "STUDY_GROUP" });
+    const fd = makeFormData({ workspaceId: workspace.id, name: "New Name", type: "TEAM" });
     // No redirect thrown — action silently returns when unauthenticated
     await updateWorkspaceDetails(fd);
     expect(prismaMock.workspace.update).not.toHaveBeenCalled();
@@ -46,7 +46,7 @@ describe("updateWorkspaceDetails", () => {
       makeMembership(workspace.id, member.id, { role: "MEMBER" }),
     );
 
-    const fd = makeFormData({ workspaceId: workspace.id, name: "Hacked Name", type: "STUDY_GROUP" });
+    const fd = makeFormData({ workspaceId: workspace.id, name: "Hacked Name", type: "TEAM" });
     await updateWorkspaceDetails(fd);
 
     expect(prismaMock.workspace.update).not.toHaveBeenCalled();
@@ -57,7 +57,7 @@ describe("updateWorkspaceDetails", () => {
     prismaMock.workspaceMember.findUnique.mockResolvedValue(ownerMembership);
     prismaMock.workspace.update.mockResolvedValue({ ...workspace, name: "Updated Name" });
 
-    const fd = makeFormData({ workspaceId: workspace.id, name: "Updated Name", type: "COURSE" });
+    const fd = makeFormData({ workspaceId: workspace.id, name: "Updated Name", type: "CLASS" });
     const url = await captureRedirect(() => updateWorkspaceDetails(fd));
 
     expect(prismaMock.workspace.update).toHaveBeenCalled();

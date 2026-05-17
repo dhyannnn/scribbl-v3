@@ -363,9 +363,9 @@ describe("setMeetingPermissionOverride", () => {
     expect(prismaMock.meetingPermissionOverride.update).not.toHaveBeenCalled();
   });
 
-  it("allows a TUTOR role to approve a student's whiteboard request", async () => {
+  it("allows an ADMIN role to approve a member's whiteboard request", async () => {
     const tutor = makeUser();
-    const tutorMembership = makeMembership(workspace.id, tutor.id, { role: "TUTOR" });
+    const tutorMembership = makeMembership(workspace.id, tutor.id, { role: "ADMIN" });
     mockGetCurrentUser.mockResolvedValue(tutor);
 
     prismaMock.meeting.findFirst.mockResolvedValue({

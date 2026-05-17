@@ -87,6 +87,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
         select: {
           id: true,
           name: true,
+          plan: true,
           members: {
             where: {
               status: "ACTIVE",
@@ -482,26 +483,26 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
     : null;
 
   return (
-    <main data-meeting-hub-main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
+    <main data-meeting-hub-main className="min-h-screen overflow-x-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
       <MeetingRouteRefresher />
       {(raisedHandParticipants.length > 0 || pendingRequests.length > 0) ? (
-        <div className="sticky top-0 z-40 flex flex-col gap-0 divide-y divide-[#e8e0b5] border-b border-[#e8e0b5] bg-[#fffceb]">
+        <div className="sticky top-0 z-40 flex flex-col gap-0 divide-y divide-[var(--color-warning-dim)] border-b border-[var(--color-warning-dim)] bg-[var(--color-warning-dim)]">
           {raisedHandParticipants.length > 0 ? (
             <div className="flex items-center justify-between gap-3 px-5 py-2 sm:px-8 lg:px-10">
-              <p className="text-sm font-semibold text-[#7a5a15]">
+              <p className="text-sm font-semibold text-[var(--color-warning)]">
                 ✋ {formatRaisedHandNames(raisedHandParticipants)}
               </p>
-              <a href="#meeting-participants" className="shrink-0 text-sm font-medium text-[#7a5a15] underline underline-offset-2">
+              <a href="#meeting-participants" className="shrink-0 text-sm font-medium text-[var(--color-warning)] underline underline-offset-2">
                 View
               </a>
             </div>
           ) : null}
           {pendingRequests.length > 0 ? (
             <div className="flex items-center justify-between gap-3 px-5 py-2 sm:px-8 lg:px-10">
-              <p className="text-sm font-semibold text-[#7a5a15]">
+              <p className="text-sm font-semibold text-[var(--color-warning)]">
                 📝 {pendingRequests.length} access {pendingRequests.length === 1 ? "request" : "requests"} pending
               </p>
-              <a href="#meeting-participants" className="shrink-0 text-sm font-medium text-[#7a5a15] underline underline-offset-2">
+              <a href="#meeting-participants" className="shrink-0 text-sm font-medium text-[var(--color-warning)] underline underline-offset-2">
                 View
               </a>
             </div>
@@ -510,27 +511,35 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
       ) : null}
       <div
         data-meeting-hub-shell
-        className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10"
+        className="mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10"
       >
-        <header id="meeting-overview" className="scroll-mt-6 border-b border-[#d8d8ce] pb-6">
-          <Link href={`/workspaces/${id}/meetings`} className="text-sm font-medium text-[#2f604b]">
-            Back to meetings
+        <header id="meeting-overview" className="scroll-mt-6">
+          <Link
+            href={`/workspaces/${id}/meetings`}
+            className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)] transition hover:text-[var(--color-secondary)]"
+          >
+            ← Meetings
           </Link>
-          <div className="mt-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d7f70]">
-                {meeting.workspace.name} / {getMeetingPhaseLabel(lifecycle)}
-              </p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-normal text-[#171713] sm:text-3xl lg:text-4xl">
+          <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">
+                  {meeting.workspace.name}
+                </span>
+                <MeetingStatusBadge lifecycle={lifecycle} />
+              </div>
+              <h1 className="mt-1 font-display text-3xl font-bold text-[var(--color-text)] lg:text-4xl">
                 {meeting.title}
               </h1>
-              <p className="mt-3 max-w-3xl break-words text-base leading-7 text-[#62645c]">
-                {meeting.description ?? "No description yet."}
+              <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-[var(--color-muted)]">
+                {meeting.description ?? "No description."}
               </p>
             </div>
-            <div className="rounded-md border border-[#d8d8ce] bg-white px-4 py-3 text-sm text-[#66685f] shadow-sm">
-              <p className="font-medium text-[#20201d]">{formatMeetingLifecycleLabel(lifecycle)}</p>
-              <p className="mt-1">
+            <div className="shrink-0 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-3 text-sm shadow-sm">
+              <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">
+                {formatMeetingLifecycleLabel(lifecycle)}
+              </p>
+              <p className="mt-1 font-medium text-[var(--color-text)]">
                 {meeting.startsAt.toLocaleString("en-US", {
                   weekday: "short",
                   month: "short",
@@ -544,56 +553,56 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
         </header>
 
         {getMeetingStatusMessage(meetingStatus) ? (
-          <p className="rounded-md border border-[#d8d8ce] bg-white px-4 py-3 text-sm text-[#4d4f47] shadow-sm">
+          <p className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-muted)]">
             {getMeetingStatusMessage(meetingStatus)}
           </p>
         ) : null}
 
         {getRecordingStatusMessage(recordingStatus) ? (
-          <p className="rounded-md border border-[#d8d8ce] bg-white px-4 py-3 text-sm text-[#4d4f47] shadow-sm">
+          <p className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-muted)]">
             {getRecordingStatusMessage(recordingStatus)}
           </p>
         ) : null}
 
         {isCanceled ? (
-          <section className="rounded-md border border-[#ead1cd] bg-[#fff7f5] p-4 text-sm text-[#7a3434] shadow-sm">
+          <section className="rounded-2xl border border-[var(--color-danger-dim)] bg-[var(--color-danger-dim)] p-4 text-sm text-[var(--color-danger)]">
             <p className="font-semibold">This meeting was canceled.</p>
             {meeting.cancellationReason ? <p className="mt-2">{meeting.cancellationReason}</p> : null}
           </section>
         ) : null}
 
         {lifecycle === "ended" ? (
-          <section className="rounded-md border border-[#d8d8ce] bg-white p-4 text-sm text-[#66685f] shadow-sm">
-            <p className="font-semibold text-[#20201d]">Recap mode</p>
-            <p className="mt-2">
+          <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-muted)]">
+            <p className="font-semibold text-[var(--color-text)]">Recap mode</p>
+            <p className="mt-1">
               Notes and artifacts are locked now. Chat history, attendance, files, and saved notes remain visible.
             </p>
           </section>
         ) : null}
 
         {canManageMeeting && !canManageSchedule && !isCanceled ? (
-          <section className="rounded-md border border-[#d8d8ce] bg-white p-4 text-sm text-[#66685f] shadow-sm">
+          <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-muted)]">
             Meeting details are locked once a session starts or ends.
           </section>
         ) : null}
 
         {shouldPromptRsvp ? (
-          <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
+          <section className="rounded-2xl border border-[var(--color-secondary)] bg-[var(--color-secondary-dim)] p-5">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d7f70]">
+                <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-secondary)]">
                   RSVP
                 </p>
-                <h2 className="mt-2 text-xl font-semibold">You are invited to this live session.</h2>
+                <h2 className="mt-1 font-display text-lg font-semibold text-[var(--color-text)]">You are invited to this live session.</h2>
               </div>
-              <form action={updateCurrentUserParticipantStatus} className="grid grid-cols-2 gap-2 sm:min-w-[260px]">
+              <form action={updateCurrentUserParticipantStatus} className="grid grid-cols-2 gap-2 sm:min-w-[240px]">
                 <input type="hidden" name="workspaceId" value={id} />
                 <input type="hidden" name="meetingId" value={meeting.id} />
                 <PendingSubmitButton
                   name="status"
                   value="ACCEPTED"
                   pendingLabel="Saving..."
-                  className="rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+                  className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-80 disabled:opacity-50"
                 >
                   Accept
                 </PendingSubmitButton>
@@ -601,7 +610,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                   name="status"
                   value="DECLINED"
                   pendingLabel="Saving..."
-                  className="rounded-md border border-[#b65b5b] bg-white px-4 py-2 text-sm font-medium text-[#7a3434] transition hover:bg-[#fff7f5] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-full border border-[var(--color-danger)] bg-[var(--color-surface)] px-4 py-2 text-sm font-semibold text-[var(--color-danger)] transition hover:bg-[var(--color-danger-dim)] disabled:opacity-50"
                 >
                   Decline
                 </PendingSubmitButton>
@@ -611,36 +620,36 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
         ) : null}
 
         {canManageSchedule ? (
-          <section className="grid gap-4 rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-semibold">Meeting Settings</h2>
+          <section className="grid gap-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
+            <h2 className="font-display text-lg font-semibold text-[var(--color-text)]">Meeting Settings</h2>
             <form action={updateMeetingDetails} className="grid gap-4 lg:grid-cols-[1fr_220px_160px_auto]">
               <input type="hidden" name="workspaceId" value={id} />
               <input type="hidden" name="meetingId" value={meeting.id} />
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-[#4d4f47]">Title</span>
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium text-[var(--color-muted)]">Title</span>
                 <input
                   name="title"
                   required
                   defaultValue={meeting.title}
-                  className="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#2f604b] focus:bg-white"
+                  className="min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)]"
                 />
               </label>
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-[#4d4f47]">Starts</span>
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium text-[var(--color-muted)]">Starts</span>
                 <input
                   name="startsAt"
                   type="datetime-local"
                   required
                   defaultValue={formatDateTimeLocal(meeting.startsAt)}
-                  className="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#2f604b] focus:bg-white"
+                  className="min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)]"
                 />
               </label>
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-[#4d4f47]">Duration</span>
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium text-[var(--color-muted)]">Duration</span>
                 <select
                   name="durationMinutes"
                   defaultValue={String(getDurationMinutes(meeting.startsAt, meeting.endsAt))}
-                  className="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#2f604b] focus:bg-white"
+                  className="min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)]"
                 >
                   <option value="30">30 min</option>
                   <option value="60">1 hour</option>
@@ -651,22 +660,47 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               <div className="flex items-end">
                 <PendingSubmitButton
                   pendingLabel="Saving..."
-                  className="min-h-11 w-full rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+                  className="min-h-10 w-full rounded-full bg-[var(--color-primary)] px-5 text-sm font-semibold text-white transition hover:opacity-80 disabled:opacity-50"
                 >
                   Save
                 </PendingSubmitButton>
               </div>
-              <label className="grid gap-2 lg:col-span-4">
-                <span className="text-sm font-medium text-[#4d4f47]">Description</span>
+              <label className="grid gap-1.5 lg:col-span-4">
+                <span className="text-xs font-medium text-[var(--color-muted)]">Description</span>
                 <textarea
                   name="description"
                   rows={3}
                   defaultValue={meeting.description ?? ""}
-                  className="resize-y rounded-md border border-[#c8c8bd] bg-[#fbfbf8] p-3 text-sm leading-6 outline-none transition focus:border-[#2f604b] focus:bg-white"
+                  className="resize-none rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-low)] p-3 text-sm leading-6 outline-none transition focus:border-[var(--color-secondary)]"
                 />
               </label>
+
+              {/* Series edit scope — only shown for recurring meetings */}
+              {meeting.seriesId ? (
+                <div className="lg:col-span-4 flex flex-col gap-2 rounded-2xl border border-[var(--color-secondary-dim)] bg-[var(--color-secondary-dim)] p-4">
+                  <span className="text-xs font-semibold text-[var(--color-secondary)]">Edit scope</span>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
+                    {([
+                      ["THIS", "This meeting only"],
+                      ["THIS_AND_FUTURE", "This and all future"],
+                      ["ALL", "Entire series"],
+                    ] as const).map(([value, label]) => (
+                      <label key={value} className="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-text)]">
+                        <input
+                          type="radio"
+                          name="editScope"
+                          value={value}
+                          defaultChecked={value === "THIS"}
+                          className="accent-[var(--color-secondary)]"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </form>
-            <CancelMeetingForm workspaceId={id} meetingId={meeting.id} />
+            <CancelMeetingForm workspaceId={id} meetingId={meeting.id} isSeries={Boolean(meeting.seriesId)} />
           </section>
         ) : null}
 
@@ -675,6 +709,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
             workspaceId={id}
             meetingId={meeting.id}
             videoHref={`/workspaces/${id}/meetings/${meeting.id}/video`}
+            canRecord={meeting.workspace?.plan !== "FREE"}
             recording={{
               activeRecording,
               canManage: canManageMeeting,
@@ -695,43 +730,37 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           />
         ) : null}
 
-        <section className="flex flex-col gap-4 rounded-md border border-[#d8d8ce] bg-white px-4 py-3 text-sm text-[#4d4f47] shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <section className="flex flex-col gap-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm shadow-sm lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-3">
-            <span className={getMeetingStatusBadgeClassName(lifecycle)}>
-              {getMeetingPhaseLabel(lifecycle)}
-            </span>
-            <span>{getSessionStatusLine(lifecycle, meeting.startsAt, meetingEndsAt)}</span>
+            <MeetingStatusBadge lifecycle={lifecycle} />
+            <span className="text-[var(--color-muted)]">{getSessionStatusLine(lifecycle, meeting.startsAt, meetingEndsAt)}</span>
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-[#66685f]">
+          <div className="flex flex-wrap items-center gap-3 text-[var(--color-subtle)]">
             <span>{meeting.participants.length} participant{meeting.participants.length === 1 ? "" : "s"}</span>
             <span>{countActiveParticipants(meeting.participants)} in session</span>
             {pendingRequests.length > 0 ? (
-              <Link href="#meeting-participants" className="font-medium text-[#7a5a15]">
+              <Link href="#meeting-participants" className="font-medium text-[var(--color-warning)]">
                 {pendingRequests.length} pending {pendingRequests.length === 1 ? "request" : "requests"}
               </Link>
             ) : null}
-            <Link href="#meeting-chat" className="font-medium text-[#2f604b]">
-              Chat
-            </Link>
-            <Link href="#meeting-notes" className="font-medium text-[#2f604b]">
-              Notes and boards
-            </Link>
+            <Link href="#meeting-chat" className="font-medium text-[var(--color-secondary)]">Chat</Link>
+            <Link href="#meeting-notes" className="font-medium text-[var(--color-secondary)]">Notes and boards</Link>
           </div>
         </section>
 
         <section data-split-stack className="grid gap-6 lg:grid-cols-3">
-            <section id="meeting-participants" className="flex min-h-0 flex-col rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm lg:col-span-2 lg:row-span-2">
+            <section id="meeting-participants" className="flex min-h-0 flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm lg:col-span-2 lg:row-span-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <h2 className="flex items-center gap-2 text-xl font-semibold">
+                  <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-[var(--color-text)]">
                     Participants
                     {pendingRequests.length > 0 ? (
-                      <span className="inline-flex items-center rounded-full bg-[#fff7df] px-2 py-0.5 text-xs font-semibold text-[#7a5a15]">
+                      <span className="inline-flex items-center rounded-full bg-[var(--color-warning-dim)] px-2 py-0.5 font-mono text-xs font-semibold text-[var(--color-warning)]">
                         {pendingRequests.length}
                       </span>
                     ) : null}
                   </h2>
-                  <p className="mt-1 text-sm text-[#66685f]">
+                  <p className="mt-1 text-sm text-[var(--color-muted)]">
                     {meeting.participants.length} total / {countActiveParticipants(meeting.participants)} in session
                   </p>
                 </div>
@@ -743,8 +772,8 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                   pendingRequests={pendingRequests}
                 />
               ) : null}
-              <div className="mt-4 min-h-0 max-h-[40vh] overflow-y-auto rounded-md border border-[#e6e6dc] sm:max-h-[560px]">
-                <div className="sticky top-0 z-10 hidden grid-cols-[minmax(0,1fr)_110px_220px] gap-3 border-b border-[#e6e6dc] bg-[#fbfbf8] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#777970] lg:grid">
+              <div className="mt-4 min-h-0 max-h-[40vh] overflow-y-auto rounded-xl border border-[var(--color-border)] sm:max-h-[560px]">
+                <div className="sticky top-0 z-10 hidden grid-cols-[minmax(0,1fr)_110px_220px] gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)] lg:grid">
                   <span>Participant</span>
                   <span>Status</span>
                   <span>Moderation</span>
@@ -752,19 +781,19 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 {meeting.participants.map((participant) => (
                   <div
                     key={participant.id}
-                    className="grid gap-2 border-b border-[#e6e6dc] px-3 py-3 last:border-0 lg:grid-cols-[minmax(0,1fr)_110px_220px] lg:items-start"
+                    className="grid gap-2 border-b border-[var(--color-border)] px-3 py-3 last:border-0 lg:grid-cols-[minmax(0,1fr)_110px_220px] lg:items-start"
                   >
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{participant.user.displayName}</p>
-                      <p className="truncate text-sm text-[#777970]">{participant.user.email}</p>
+                      <p className="truncate font-medium text-[var(--color-text)]">{participant.user.displayName}</p>
+                      <p className="truncate text-xs text-[var(--color-subtle)]">{participant.user.email}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="w-fit rounded-md bg-[#e7eee7] px-3 py-1 text-xs font-medium text-[#2f604b]">
+                      <span className="w-fit rounded-full bg-[var(--color-secondary-dim)] px-2.5 py-0.5 font-mono text-xs font-semibold text-[var(--color-secondary)]">
                         {formatParticipantStatus(participant.status, participant.joinedAt, participant.leftAt)}
                       </span>
                       {isHandRaised(participant) ? (
-                        <span className="w-fit rounded-md bg-[#fff7df] px-2 py-1 text-xs font-semibold text-[#7a5a15]">
-                          ✋ Hand raised
+                        <span className="w-fit rounded-full bg-[var(--color-warning-dim)] px-2 py-0.5 font-mono text-xs font-semibold text-[var(--color-warning)]">
+                          ✋ raised
                         </span>
                       ) : null}
                     </div>
@@ -781,7 +810,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                             <input type="hidden" name="userId" value={participant.userId} />
                             <PendingSubmitButton
                               pendingLabel="Lowering..."
-                              className="min-h-8 rounded-md border border-[#c8c8bd] bg-white px-3 text-xs font-medium text-[#4d4f47] transition hover:bg-[#f7f7f2] disabled:cursor-not-allowed disabled:opacity-60"
+                              className="min-h-8 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
                             >
                               Lower Hand
                             </PendingSubmitButton>
@@ -812,26 +841,22 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
             </section>
 
             {currentParticipant ? (
-              <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-                <h2 className="text-xl font-semibold">Your RSVP</h2>
-                <p className="mt-3 text-sm text-[#66685f]">
-                  Current RSVP: {currentParticipant.status.toLowerCase()}
-                  {currentParticipant.joinedAt
-                    ? ` / joined ${formatShortDateTime(currentParticipant.joinedAt)}`
-                    : ""}
-                  {currentParticipant.leftAt
-                    ? ` / left ${formatShortDateTime(currentParticipant.leftAt)}`
-                    : ""}
+              <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
+                <h2 className="font-display text-base font-semibold text-[var(--color-text)]">Your RSVP</h2>
+                <p className="mt-2 text-sm text-[var(--color-muted)]">
+                  {currentParticipant.status.toLowerCase()}
+                  {currentParticipant.joinedAt ? ` · joined ${formatShortDateTime(currentParticipant.joinedAt)}` : ""}
+                  {currentParticipant.leftAt ? ` · left ${formatShortDateTime(currentParticipant.leftAt)}` : ""}
                 </p>
                 {canUpdateRsvp ? (
-                  <form action={updateCurrentUserParticipantStatus} className="mt-5 grid grid-cols-2 gap-2">
+                  <form action={updateCurrentUserParticipantStatus} className="mt-4 grid grid-cols-2 gap-2">
                     <input type="hidden" name="workspaceId" value={id} />
                     <input type="hidden" name="meetingId" value={meeting.id} />
                     <PendingSubmitButton
                       name="status"
                       value="ACCEPTED"
                       pendingLabel="Saving..."
-                      className="rounded-md border border-[#2f604b] bg-white px-3 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-full border border-[var(--color-secondary)] bg-[var(--color-surface)] px-3 py-2 text-sm font-semibold text-[var(--color-secondary)] transition hover:bg-[var(--color-secondary-dim)] disabled:opacity-50"
                     >
                       Accept
                     </PendingSubmitButton>
@@ -839,39 +864,35 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                       name="status"
                       value="DECLINED"
                       pendingLabel="Saving..."
-                      className="rounded-md border border-[#b65b5b] bg-white px-3 py-2 text-sm font-medium text-[#7a3434] transition hover:bg-[#fff7f5] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-semibold text-[var(--color-muted)] transition hover:border-[var(--color-danger)] hover:text-[var(--color-danger)] disabled:opacity-50"
                     >
                       Decline
                     </PendingSubmitButton>
                   </form>
                 ) : (
-                  <p className="mt-5 rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] p-3 text-sm text-[#66685f]">
+                  <p className="mt-4 text-xs text-[var(--color-subtle)]">
                     RSVP changes are closed for this meeting.
                   </p>
                 )}
               </section>
             ) : null}
 
-            <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-semibold">Session Details</h2>
-              <div className="mt-4 grid gap-2 text-sm text-[#66685f]">
+            <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
+              <h2 className="font-display text-base font-semibold text-[var(--color-text)]">Session Details</h2>
+              <div className="mt-3 flex flex-col gap-1.5 text-sm text-[var(--color-muted)]">
                 <p>Created by {meeting.createdBy.displayName}</p>
                 <p>Provider: {meeting.provider ?? "not connected"}</p>
                 <p>Ends: {formatShortDateTime(meetingEndsAt)}</p>
-                <p>
-                  {meeting.meetingUrl ? (
-                    <Link
-                      href={meeting.meetingUrl}
-                      target="_blank"
-                      rel="opener"
-                      className="font-medium text-[#2f604b]"
-                    >
-                      Open video room
-                    </Link>
-                  ) : (
-                    "No meeting link yet"
-                  )}
-                </p>
+                {meeting.meetingUrl ? (
+                  <Link
+                    href={meeting.meetingUrl}
+                    target="_blank"
+                    rel="opener"
+                    className="font-medium text-[var(--color-secondary)] hover:underline"
+                  >
+                    Open video room →
+                  </Link>
+                ) : null}
               </div>
             </section>
         </section>
@@ -889,7 +910,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           emptyText="No messages in this meeting chat yet."
           placeholder="Message this meeting"
           openInChannelsHref={
-            meetingChannel && !isCanceled ? `/workspaces/${id}/chat?channel=${meetingChannel.id}` : undefined
+            meetingChannel && !isCanceled ? `/workspaces/${id}/chat/${meetingChannel.id}` : undefined
           }
           lazy
         />
@@ -916,15 +937,15 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           pendingPermissionRequests={pendingNotePermissionRequests}
         />
 
-        <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-xl font-semibold">Saved Shared Artifacts</h2>
-              <p className="mt-2 text-sm text-[#66685f]">
+              <h2 className="font-display text-lg font-semibold text-[var(--color-text)]">Saved Shared Artifacts</h2>
+              <p className="mt-1 text-sm text-[var(--color-muted)]">
                 Attach shared workspace resources to keep the session record together.
               </p>
             </div>
-            <span className="rounded-md bg-[#e7eee7] px-3 py-1 text-sm font-medium text-[#2f604b]">
+            <span className="shrink-0 rounded-full bg-[var(--color-surface-high)] px-2.5 py-0.5 font-mono text-xs font-semibold text-[var(--color-muted)]">
               {sharedArtifacts.length}
             </span>
           </div>
@@ -932,14 +953,14 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           {hasAttachableArtifacts && canMutateArtifacts ? (
             <div data-split-stack className="mt-5 grid min-w-0 gap-4 lg:grid-cols-2">
               {unattachedNotes.length > 0 ? (
-                <form action={attachNoteToMeeting} className="grid min-w-0 gap-3 rounded-md bg-[#fbfbf8] p-4">
+                <form action={attachNoteToMeeting} className="grid min-w-0 gap-3 rounded-xl bg-[var(--color-surface-low)] p-4">
                   <input type="hidden" name="workspaceId" value={id} />
                   <input type="hidden" name="meetingId" value={meeting.id} />
-                  <label className="grid min-w-0 gap-2">
-                    <span className="text-sm font-medium text-[#4d4f47]">Attach shared note or whiteboard</span>
+                  <label className="grid min-w-0 gap-1.5">
+                    <span className="text-xs font-medium text-[var(--color-muted)]">Attach shared note or whiteboard</span>
                     <select
                       name="noteId"
-                      className="min-h-11 min-w-0 max-w-full rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
+                      className="min-h-10 min-w-0 max-w-full rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)]"
                     >
                       {unattachedNotes.map((note) => (
                         <option key={note.id} value={note.id}>
@@ -951,7 +972,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                   </label>
                   <PendingSubmitButton
                     pendingLabel="Attaching..."
-                    className="min-h-11 w-full rounded-md bg-[#2f604b] px-4 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+                    className="min-h-10 w-full rounded-full bg-[var(--color-primary)] px-4 text-sm font-semibold text-white transition hover:opacity-80 disabled:opacity-50"
                   >
                     Attach Note
                   </PendingSubmitButton>
@@ -959,14 +980,14 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               ) : null}
 
               {unattachedFiles.length > 0 ? (
-                <form action={attachFileToMeeting} className="grid min-w-0 gap-3 rounded-md bg-[#fbfbf8] p-4">
+                <form action={attachFileToMeeting} className="grid min-w-0 gap-3 rounded-xl bg-[var(--color-surface-low)] p-4">
                   <input type="hidden" name="workspaceId" value={id} />
                   <input type="hidden" name="meetingId" value={meeting.id} />
-                  <label className="grid min-w-0 gap-2">
-                    <span className="text-sm font-medium text-[#4d4f47]">Attach shared file</span>
+                  <label className="grid min-w-0 gap-1.5">
+                    <span className="text-xs font-medium text-[var(--color-muted)]">Attach shared file</span>
                     <select
                       name="fileId"
-                      className="min-h-11 min-w-0 max-w-full rounded-md border border-[#c8c8bd] bg-white px-3 text-sm outline-none transition focus:border-[#2f604b]"
+                      className="min-h-10 min-w-0 max-w-full rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)]"
                     >
                       {unattachedFiles.map((file) => (
                         <option key={file.id} value={file.id}>
@@ -977,7 +998,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                   </label>
                   <PendingSubmitButton
                     pendingLabel="Attaching..."
-                    className="min-h-11 w-full rounded-md bg-[#2f604b] px-4 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+                    className="min-h-10 w-full rounded-full bg-[var(--color-primary)] px-4 text-sm font-semibold text-white transition hover:opacity-80 disabled:opacity-50"
                   >
                     Attach File
                   </PendingSubmitButton>
@@ -985,7 +1006,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               ) : null}
             </div>
           ) : (
-            <p className="mt-5 rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] p-4 text-sm text-[#66685f]">
+            <p className="mt-4 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-low)] p-4 text-sm text-[var(--color-muted)]">
               {canMutateArtifacts
                 ? "All available shared notes and files are already attached, or there are no shared resources yet."
                 : "This meeting is in recap mode, so saved artifacts are view-only."}
@@ -995,17 +1016,17 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           {sharedArtifacts.length > 0 ? (
             <div data-split-stack className="mt-5 grid gap-4 md:grid-cols-2">
               {sharedArtifacts.map((artifact) => (
-                <article key={artifact.id} className="rounded-md border border-[#e6e6dc] bg-[#fbfbf8] p-4">
-                  <p className="text-sm font-medium text-[#2f604b]">{formatEnumLabel(artifact.type)}</p>
-                  <h3 className="mt-2 break-words font-semibold">
+                <article key={artifact.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-low)] p-4">
+                  <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-secondary)]">{formatEnumLabel(artifact.type)}</p>
+                  <h3 className="mt-1.5 break-words font-display font-semibold text-[var(--color-text)]">
                     {artifact.note?.title ?? artifact.file?.name ?? "Saved artifact"}
                   </h3>
-                  <p className="mt-2 text-sm text-[#66685f]">
+                  <p className="mt-1 text-xs text-[var(--color-subtle)]">
                     Added by {artifact.createdBy.displayName}
-                    {artifact.note ? ` / owned by ${artifact.note.owner.displayName}` : ""}
-                    {artifact.file ? ` / uploaded by ${artifact.file.uploadedBy.displayName}` : ""}
+                    {artifact.note ? ` · ${artifact.note.owner.displayName}` : ""}
+                    {artifact.file ? ` · ${artifact.file.uploadedBy.displayName}` : ""}
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     {artifact.note ? (
                       <Link
                         href={`/workspaces/${id}/meetings/${meeting.id}?sharedNoteId=${artifact.note.id}${
@@ -1013,7 +1034,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                             ? `&privateNoteId=${selectedPrivateArtifact.noteId}`
                             : ""
                         }#meeting-notes`}
-                        className="rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a]"
+                        className="rounded-full bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-80"
                       >
                         Select Here
                       </Link>
@@ -1021,7 +1042,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                     {artifact.file ? (
                       <Link
                         href={`/api/files/${artifact.file.id}`}
-                        className="rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a]"
+                        className="rounded-full bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-80"
                         target="_blank"
                       >
                         Open File
@@ -1032,7 +1053,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               ))}
             </div>
           ) : (
-            <p className="mt-5 text-sm leading-6 text-[#66685f]">
+            <p className="mt-4 text-sm text-[var(--color-subtle)]">
               Shared notes, whiteboards, files, PDFs, and recordings saved from this session will show up here.
             </p>
           )}
@@ -1040,6 +1061,31 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
       </div>
     </main>
   );
+}
+
+function MeetingStatusBadge({ lifecycle }: { lifecycle: MeetingLifecycleState }) {
+  const { bg, text } = getMeetingBadgeTokens(lifecycle);
+  return (
+    <span className={`rounded-full px-2.5 py-0.5 font-mono text-xs font-semibold ${bg} ${text}`}>
+      {formatMeetingLifecycleLabel(lifecycle)}
+    </span>
+  );
+}
+
+function getMeetingBadgeTokens(state: MeetingLifecycleState): { bg: string; text: string } {
+  switch (state) {
+    case "live":
+      return { bg: "bg-[var(--color-danger-dim)]", text: "text-[var(--color-danger)]" };
+    case "joinable":
+    case "starting-soon":
+      return { bg: "bg-[var(--color-warning-dim)]", text: "text-[var(--color-warning)]" };
+    case "ended":
+      return { bg: "bg-[var(--color-surface-high)]", text: "text-[var(--color-muted)]" };
+    case "canceled":
+      return { bg: "bg-[var(--color-danger-dim)]", text: "text-[var(--color-danger)]" };
+    default:
+      return { bg: "bg-[var(--color-secondary-dim)]", text: "text-[var(--color-secondary)]" };
+  }
 }
 
 type ArtifactWithNote = {
@@ -1135,23 +1181,23 @@ function ParticipantPermissionControls({
 
   return (
     <details className="group w-full min-w-0">
-      <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-2.5 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 text-sm font-medium text-[var(--color-secondary)] transition hover:bg-[var(--color-secondary-dim)] [&::-webkit-details-marker]:hidden">
         <span>Permissions</span>
-        <span className="truncate text-xs font-normal text-[#66685f]">
+        <span className="truncate text-xs font-normal text-[var(--color-muted)]">
           {requestedCount > 0 ? `${requestedCount} requested` : blockedCount > 0 ? `${blockedCount} blocked` : "All allowed"}
         </span>
       </summary>
-      <div className="mt-2 grid gap-1 rounded-md border border-[#e6e6dc] bg-[#fbfbf8] p-1.5">
+      <div className="mt-2 grid gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] p-1.5">
         {permissionRows.map((row) => (
           <div
             key={row.key}
-            className="grid gap-1.5 rounded-sm px-1.5 py-1.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+            className="flex items-center gap-2 px-1.5 py-1"
           >
-            <span className="truncate text-sm font-medium text-[#4d4f47]">{row.label}</span>
-            <div className="flex min-w-0 items-center gap-1.5">
-              <span className={getPermissionBadgeClassName(row.status.allowed, row.status.source)}>
-                {row.status.label}
-              </span>
+            <span className="w-[90px] shrink-0 text-xs font-medium text-[var(--color-text)]">{row.label}</span>
+            <span className={`min-w-0 flex-1 truncate text-[10px] ${getPermissionBadgeClassName(row.status.allowed, row.status.source)}`}>
+              {row.status.label}
+            </span>
+            <div className="shrink-0">
               <PermissionOverrideButton
                 workspaceId={workspaceId}
                 meetingId={meetingId}
@@ -1225,19 +1271,19 @@ function PendingPermissionRequestsPanel({
   workspaceId: string;
 }) {
   return (
-    <div className="mt-4 rounded-md border border-[#e8e0b5] bg-[#fffceb] p-4">
-      <p className="text-sm font-semibold text-[#7a5a15]">
+    <div className="mt-4 rounded-xl border border-[var(--color-warning-dim)] bg-[var(--color-warning-dim)] p-4">
+      <p className="text-sm font-semibold text-[var(--color-warning)]">
         {pendingRequests.length} pending permission {pendingRequests.length === 1 ? "request" : "requests"}
       </p>
       <div className="mt-3 grid gap-2">
         {pendingRequests.map((request) => (
           <div
             key={`${request.userId}:${request.targetType}:${request.artifactId ?? "meeting"}`}
-            className="grid gap-1.5 rounded-md border border-[#e8e0b5] bg-white px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+            className="grid gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
           >
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-[#20201d]">{request.user.displayName}</p>
-              <p className="truncate text-xs text-[#777970]">
+              <p className="truncate text-sm font-medium text-[var(--color-text)]">{request.user.displayName}</p>
+              <p className="truncate text-xs text-[var(--color-subtle)]">
                 {getPermissionTargetLabel(request.targetType)}
                 {request.artifact?.note?.title ? ` — ${request.artifact.note.title}` : ""}
               </p>
@@ -1351,26 +1397,26 @@ function getPermissionBadgeClassName(
   source: "default" | "override" | "requested",
 ) {
   if (source === "requested") {
-    return "rounded-md bg-[#fff7df] px-2 py-1 text-[11px] font-semibold text-[#7a5a15]";
+    return "rounded-full bg-[var(--color-warning-dim)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-warning)]";
   }
 
   if (allowed) {
     return source === "default"
-      ? "rounded-md bg-[#e7eee7] px-2 py-1 text-[11px] font-semibold text-[#2f604b]"
-      : "rounded-md bg-[#dff4e5] px-2 py-1 text-[11px] font-semibold text-[#1d6a3b]";
+      ? "rounded-full bg-[var(--color-success-dim)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-success)]"
+      : "rounded-full bg-[var(--color-success-dim)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-success)]";
   }
 
   return source === "default"
-    ? "rounded-md bg-[#ecece4] px-2 py-1 text-[11px] font-semibold text-[#55584f]"
-    : "rounded-md bg-[#fff0ed] px-2 py-1 text-[11px] font-semibold text-[#7a3434]";
+    ? "rounded-full bg-[var(--color-surface-high)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-muted)]"
+    : "rounded-full bg-[var(--color-danger-dim)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-danger)]";
 }
 
 function getPermissionButtonClassName(variant: "danger" | "primary") {
   if (variant === "danger") {
-    return "min-h-8 w-full rounded-md border border-[#b65b5b] bg-white px-3 text-xs font-medium text-[#7a3434] transition hover:bg-[#fff7f5] disabled:cursor-not-allowed disabled:opacity-60 sm:w-16";
+    return "min-h-8 w-full rounded-full border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-danger)] transition hover:border-[var(--color-danger)] hover:bg-[var(--color-danger-dim)] disabled:opacity-50 sm:w-16";
   }
 
-  return "min-h-8 w-full rounded-md border border-[#2f604b] bg-white px-3 text-xs font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60 sm:w-16";
+  return "min-h-8 w-full rounded-full border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-secondary)] transition hover:border-[var(--color-secondary)] hover:bg-[var(--color-secondary-dim)] disabled:opacity-50 sm:w-16";
 }
 
 function RecordingStatusPanel({
@@ -1385,24 +1431,24 @@ function RecordingStatusPanel({
   workspaceId: string;
 }) {
   return (
-    <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
+    <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d7f70]">Recording</p>
-          <h2 className="mt-2 text-xl font-semibold">{getRecordingPanelTitle(latestRecording)}</h2>
+          <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">Recording</p>
+          <h2 className="mt-1 font-display text-lg font-semibold text-[var(--color-text)]">{getRecordingPanelTitle(latestRecording)}</h2>
           {latestRecording ? (
-            <p className="mt-2 text-sm leading-6 text-[#66685f]">
-              Started by {latestRecording.startedBy.displayName} / {formatShortDateTime(latestRecording.startedAt)}
-              {latestRecording.stoppedBy ? ` / stopped by ${latestRecording.stoppedBy.displayName}` : ""}
-              {latestRecording.file?.sizeBytes ? ` / ${formatFileSize(latestRecording.file.sizeBytes)}` : ""}
+            <p className="mt-1 text-sm text-[var(--color-muted)]">
+              Started by {latestRecording.startedBy.displayName} · {formatShortDateTime(latestRecording.startedAt)}
+              {latestRecording.stoppedBy ? ` · stopped by ${latestRecording.stoppedBy.displayName}` : ""}
+              {latestRecording.file?.sizeBytes ? ` · ${formatFileSize(latestRecording.file.sizeBytes)}` : ""}
             </p>
           ) : (
-            <p className="mt-2 text-sm leading-6 text-[#66685f]">
+            <p className="mt-1 text-sm text-[var(--color-muted)]">
               Recordings saved from video appear here and in this workspace&apos;s Files.
             </p>
           )}
           {latestRecording?.errorMessage ? (
-            <p className="mt-2 text-sm text-[#7a3434]">{latestRecording.errorMessage}</p>
+            <p className="mt-1 text-sm text-[var(--color-danger)]">{latestRecording.errorMessage}</p>
           ) : null}
         </div>
 
@@ -1410,7 +1456,7 @@ function RecordingStatusPanel({
           {activeRecording ? (
             <Link
               href={`/workspaces/${workspaceId}/meetings/${meetingId}/video`}
-              className="inline-flex min-h-11 items-center rounded-md border border-[#c8c8bd] bg-white px-4 text-sm font-medium text-[#4d4f47] transition hover:bg-[#fbfbf8]"
+              className="inline-flex min-h-9 items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
             >
               Manage in Video
             </Link>
@@ -1420,7 +1466,7 @@ function RecordingStatusPanel({
             <Link
               href={`/api/files/${latestRecording.file.id}`}
               target="_blank"
-              className="inline-flex min-h-11 items-center rounded-md bg-[#2f604b] px-4 text-sm font-medium text-white transition hover:bg-[#244b3a]"
+              className="inline-flex min-h-9 items-center rounded-full bg-[var(--color-primary)] px-4 text-sm font-semibold text-white transition hover:opacity-80"
             >
               Open Recording
             </Link>
@@ -1551,6 +1597,8 @@ function getRecordingStatusMessage(status?: string) {
       return "You do not have permission to manage recordings.";
     case "start-failed":
       return "Recording could not be started. Check LiveKit and recording storage settings.";
+    case "plan-limit":
+      return "Recording is not available on the Free plan. Upgrade to Pro to record meetings.";
     case "stop-failed":
       return "Recording could not be stopped.";
     case "refresh-failed":
@@ -1585,21 +1633,6 @@ function formatFileSize(sizeBytes: number) {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getMeetingPhaseLabel(state: MeetingLifecycleState) {
-  switch (state) {
-    case "live":
-      return "live session";
-    case "joinable":
-      return "ready to join";
-    case "ended":
-      return "recap";
-    case "canceled":
-      return "canceled";
-    default:
-      return "prep";
-  }
-}
-
 function getSessionStatusLine(state: MeetingLifecycleState, startsAt: Date, endsAt: Date) {
   switch (state) {
     case "live":
@@ -1615,22 +1648,6 @@ function getSessionStatusLine(state: MeetingLifecycleState, startsAt: Date, ends
     default:
       return `Starts at ${formatShortDateTime(startsAt)}.`;
   }
-}
-
-function getMeetingStatusBadgeClassName(state: MeetingLifecycleState) {
-  if (state === "live" || state === "joinable") {
-    return "rounded-md bg-[#e7eee7] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#2f604b]";
-  }
-
-  if (state === "ended") {
-    return "rounded-md bg-[#ecece4] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#55584f]";
-  }
-
-  if (state === "canceled") {
-    return "rounded-md bg-[#fff0ed] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#7a3434]";
-  }
-
-  return "rounded-md bg-[#f1f1e9] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#6d7f70]";
 }
 
 function formatRaisedHandNames(participants: { user: { displayName: string } }[]) {

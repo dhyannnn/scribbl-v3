@@ -125,6 +125,22 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
 
   const typeLabel = workspace.type.replace("_", " ").toLowerCase();
 
+  const announcements = await prisma.message.findMany({
+    where: {
+      channel: { workspaceId: id, type: "ANNOUNCEMENT" },
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      body: true,
+      createdAt: true,
+      sender: { select: { displayName: true } },
+      channel: { select: { id: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 3,
+  });
+
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
       {workspaceStatus?.startsWith("invite-accepted") ? (
@@ -279,6 +295,42 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
               </form>
             </div>
           </details>
+        ) : null}
+
+        {/* Announcements */}
+        {announcements.length > 0 ? (
+          <section className="mb-8">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-secondary)]">
+                  <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+                </svg>
+                <span className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">
+                  Announcements
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              {announcements.map((a) => (
+                <div
+                  key={a.id}
+                  className="rounded-2xl border border-[var(--color-secondary-dim)] bg-[var(--color-secondary-dim)] px-5 py-4"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-semibold text-[var(--color-secondary)]">
+                      {a.sender.displayName}
+                    </span>
+                    <span className="font-mono text-xs text-[var(--color-subtle)]">
+                      {a.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-sm text-[var(--color-text)] leading-relaxed line-clamp-3">
+                    {a.body}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
         ) : null}
 
         {/* Main content grid */}

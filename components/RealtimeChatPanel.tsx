@@ -118,7 +118,7 @@ function ChatConnectingPanel({
 
 function sectionClass(variant: "fullscreen" | "card") {
   return variant === "fullscreen"
-    ? "flex min-w-0 w-full flex-col bg-[var(--color-surface)]"
+    ? "flex min-h-0 min-w-0 w-full flex-1 flex-col bg-[var(--color-surface)]"
     : "min-w-0 scroll-mt-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm";
 }
 
@@ -376,17 +376,17 @@ function RealtimeChatPanelContent({
           return (
             <article
               key={message.id}
-              className={`flex min-w-0 items-end gap-2 ${isOwnMessage ? "flex-row-reverse" : "flex-row"}`}
+              className={`flex min-w-0 items-start gap-2.5 ${isOwnMessage ? "flex-row-reverse" : "flex-row"} ${message.isFirstInGroup && !isOwnMessage ? "mt-3" : "mt-0.5"}`}
             >
-              {!isOwnMessage && message.showAvatar ? (
-                <Avatar name={message.sender.displayName} avatarUrl={message.sender.avatarUrl} size={28} />
-              ) : !isOwnMessage ? (
-                <div className="w-7 shrink-0" />
+              {!isOwnMessage ? (
+                <div className="mt-0.5 shrink-0">
+                  <Avatar name={message.sender.displayName} avatarUrl={message.sender.avatarUrl} size={28} />
+                </div>
               ) : null}
 
-              <div className={`flex max-w-[82%] flex-col gap-0.5 sm:max-w-[72%] ${isOwnMessage ? "items-end" : "items-start"}`}>
+              <div className={`flex max-w-[80%] flex-col gap-0.5 sm:max-w-[70%] ${isOwnMessage ? "items-end" : "items-start"}`}>
                 {!isOwnMessage && message.isFirstInGroup ? (
-                  <span className="max-w-full truncate px-3 text-xs font-medium text-[var(--color-muted)]">{message.sender.displayName}</span>
+                  <span className="max-w-full truncate px-1 text-xs font-semibold text-[var(--color-muted)]">{message.sender.displayName}</span>
                 ) : null}
 
                 {editingMessageId === message.id && !message.deletedAt ? (
@@ -565,7 +565,7 @@ function groupMessages(messages: RealtimeChatMessage[]): MessageWithGroup[] {
       ...message,
       isFirstInGroup,
       isLastInGroup,
-      showAvatar: isLastInGroup,
+      showAvatar: true,
     };
   });
 }

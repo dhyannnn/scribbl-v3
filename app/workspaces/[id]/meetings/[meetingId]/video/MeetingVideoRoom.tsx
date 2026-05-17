@@ -72,6 +72,7 @@ type MeetingVideoRoomProps = {
   workspaceId: string;
   meetingId: string;
   autoJoin?: boolean;
+  canRecord?: boolean;
   disabled?: boolean;
   mode?: "full" | "floating";
   recording?: MeetingVideoRecordingProps;
@@ -90,6 +91,7 @@ export function MeetingVideoRoom({
   workspaceId,
   meetingId,
   autoJoin = false,
+  canRecord = true,
   disabled = false,
   mode = "full",
   permissions,
@@ -249,6 +251,7 @@ export function MeetingVideoRoom({
         meetingId={meetingId}
         mode={mode}
         recording={recording}
+        canRecord={canRecord}
         hasJoinedVideo={hasMarkedJoined}
         recordingReturnTo={recordingReturnTo}
         permissions={permissions}
@@ -289,6 +292,7 @@ function ConferenceSurface({
   meetingId,
   mode,
   recording,
+  canRecord,
   recordingReturnTo,
   permissions,
   workspaceId,
@@ -297,6 +301,7 @@ function ConferenceSurface({
   meetingId: string;
   mode: "full" | "floating";
   recording?: MeetingVideoRecordingProps;
+  canRecord: boolean;
   recordingReturnTo: "current" | "hub" | "video";
   permissions: MeetingVideoPermissionsProps;
   workspaceId: string;
@@ -387,6 +392,7 @@ function ConferenceSurface({
             workspaceId={workspaceId}
             meetingId={meetingId}
             recording={recording}
+            canRecord={canRecord}
             hasJoinedVideo={hasJoinedVideo}
             mode={mode}
             recordingReturnTo={recordingReturnTo}
@@ -543,6 +549,7 @@ function RecordingControls({
   hasJoinedVideo,
   meetingId,
   recording,
+  canRecord,
   recordingReturnTo,
   workspaceId,
   mode,
@@ -551,6 +558,7 @@ function RecordingControls({
   meetingId: string;
   mode: "full" | "floating";
   recording: MeetingVideoRecordingProps;
+  canRecord: boolean;
   recordingReturnTo: "current" | "hub" | "video";
   workspaceId: string;
 }) {
@@ -559,7 +567,7 @@ function RecordingControls({
   const latestRecording = recording.latestRecording;
   const isRecordingMutable =
     activeRecording && ["STARTING", "ACTIVE", "STOPPING"].includes(activeRecording.status);
-  const canStartRecording = recording.canManage && hasJoinedVideo && !activeRecording;
+  const canStartRecording = canRecord && recording.canManage && hasJoinedVideo && !activeRecording;
   async function submitStartRecording(formData: FormData) {
     await startMeetingRecording(formData);
     router.refresh();
@@ -617,7 +625,13 @@ function RecordingControls({
       </div>
 
       <div className={mode === "floating" ? "flex shrink-0 flex-wrap gap-2" : "flex flex-wrap gap-2"}>
-        {recording.canManage && !activeRecording ? (
+        {recording.canManage && !activeRecording && !canRecord ? (
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-white/60">Recording requires a Pro workspace.</p>
+            <a href={`/workspaces/${workspaceId}/billing`} className="text-xs font-medium text-[#818cf8] hover:underline">Upgrade →</a>
+          </div>
+        ) : null}
+        {recording.canManage && !activeRecording && canRecord ? (
           <form action={submitStartRecording}>
             <input type="hidden" name="workspaceId" value={workspaceId} />
             <input type="hidden" name="meetingId" value={meetingId} />

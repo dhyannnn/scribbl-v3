@@ -15,6 +15,7 @@ type VideoPopoutShellProps = {
   workspaceName: string;
   lifecycleLabel: string;
   hubHref: string;
+  canRecord?: boolean;
   disabled: boolean;
   recording: MeetingVideoRecordingProps;
   recordingStatusMessage: string | null;
@@ -135,6 +136,7 @@ export function VideoPopoutShell({
   workspaceName,
   lifecycleLabel,
   hubHref,
+  canRecord = true,
   disabled,
   permissions,
   recording,
@@ -278,6 +280,7 @@ export function VideoPopoutShell({
                 autoJoin={shouldAutoJoin}
                 disabled={disabled}
                 recording={recording}
+                canRecord={canRecord}
                 permissions={permissions}
               />
             </div>

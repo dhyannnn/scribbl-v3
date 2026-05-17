@@ -288,3 +288,13 @@ body.scribbl-video-split-active [data-split-stack] {
 @media (max-width: 1100px) {
   body.scribbl-video-split-active [data-meeting-hub-main] { width: 100vw; }
 }
+
+/* ── Chat right panel resizable ──────────────────────────────────────────── */
+
+@media (min-width: 1280px) {
+  [data-chat-right-panel] {
+    width: var(--scribbl-chat-panel-width, 288px);
+    min-width: 220px;
+    max-width: 520px;
+  }
+}

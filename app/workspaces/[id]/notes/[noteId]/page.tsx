@@ -124,7 +124,7 @@ export default async function NoteEditorPage({ params }: PageProps) {
               <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d7f70]">
                 {note.workspace.name} / {note.type.toLowerCase()}
               </p>
-              <h1 className="mt-2 text-4xl font-semibold">Note Editor</h1>
+              <h1 className="mt-2 text-2xl font-semibold sm:text-3xl lg:text-4xl">Note Editor</h1>
               <p className="mt-3 text-sm text-[#62645c]">
                 {formatEnumLabel(note.visibility, "WORKSPACE_SHARED")} /{" "}
                 {formatEnumLabel(note.collaboration, "SOLO")} / {formatEnumLabel(note.sourceDevice, "WEB")}

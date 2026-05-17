@@ -337,6 +337,7 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
         workspaceName={meeting.workspace.name}
         lifecycleLabel={formatMeetingLifecycleLabel(lifecycle)}
         hubHref={`/workspaces/${id}/meetings/${meeting.id}`}
+        canRecord={meeting.workspace.plan !== "FREE"}
         disabled={!isVideoOpen}
         recordingStatusMessage={getRecordingStatusMessage(recordingStatus)}
         recording={{
@@ -385,6 +386,8 @@ function getRecordingStatusMessage(status?: string) {
       return "You do not have permission to manage recordings.";
     case "start-failed":
       return "Recording could not be started. Check LiveKit and recording storage settings.";
+    case "plan-limit":
+      return "Recording is not available on the Free plan. Upgrade to Pro to record meetings.";
     case "stop-failed":
       return "Recording could not be stopped.";
     default:

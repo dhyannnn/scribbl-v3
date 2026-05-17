@@ -24,7 +24,7 @@ export type MeetingPermissionOverrideInput = {
   state: MeetingPermissionState;
 };
 
-export type MeetingRole = "OWNER" | "ADMIN" | "MEMBER" | "TUTOR" | "PROFESSOR";
+export type MeetingRole = "OWNER" | "ADMIN" | "MEMBER";
 
 export type MeetingPermissionContext = {
   currentUserId: string;
@@ -57,9 +57,7 @@ export function canModerateMeeting(context: Pick<MeetingPermissionContext, "curr
   return (
     context.currentUserId === context.meetingCreatedByUserId ||
     context.currentUserRole === "OWNER" ||
-    context.currentUserRole === "ADMIN" ||
-    context.currentUserRole === "TUTOR" ||
-    context.currentUserRole === "PROFESSOR"
+    context.currentUserRole === "ADMIN"
   );
 }
 
@@ -257,9 +255,6 @@ function getMeetingModerationRank(
       return 50;
     case "ADMIN":
       return 40;
-    case "PROFESSOR":
-    case "TUTOR":
-      return 30;
     default:
       return userId === meetingCreatedByUserId ? 20 : 0;
   }

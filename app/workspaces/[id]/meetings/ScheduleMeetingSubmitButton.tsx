@@ -6,7 +6,7 @@ export function ScheduleMeetingSubmitButton() {
   return (
     <PendingSubmitButton
       pendingLabel="Scheduling..."
-      className="min-h-11 w-full rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
+      className="min-h-10 w-full rounded-full bg-[var(--color-primary)] px-5 text-sm font-semibold text-white transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
     >
       Schedule
     </PendingSubmitButton>

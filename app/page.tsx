@@ -58,7 +58,10 @@ export default async function Home({
     .filter((m) => m.role === "MEMBER")
     .map((m) => m.workspace.id) ?? [];
 
-  const [pendingInvites, upcomingMeetings, activity] = await Promise.all([
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  const [pendingInvites, upcomingMeetings, activity, calendarMeetings] = await Promise.all([
     prisma.workspaceInvite.findMany({
       where: {
         email: currentUser.email,
@@ -123,9 +126,22 @@ export default async function Home({
         })
       : [],
     getWorkspaceActivity(workspaceIds, 15),
+    workspaceIds.length > 0
+      ? prisma.meeting.findMany({
+          where: {
+            workspaceId: { in: workspaceIds },
+            canceledAt: null,
+            startsAt: { gte: monthStart, lte: monthEnd },
+          },
+          select: { startsAt: true },
+        })
+      : [],
   ]);
 
   const liveOrNext = upcomingMeetings[0] ?? null;
+  const datesWithMeetings = new Set(
+    calendarMeetings.map((m) => m.startsAt.toISOString().slice(0, 10))
+  );
   const heroLifecycle = liveOrNext ? getMeetingLifecycle(liveOrNext, now) : null;
   const isHeroLive = heroLifecycle ? canJoinMeeting(heroLifecycle) : false;
 
@@ -357,6 +373,18 @@ export default async function Home({
 
             {/* Right column — activity feed */}
             <aside className="flex flex-col gap-6">
+
+              {/* Mini calendar */}
+              {workspaces.length > 0 ? (
+                <MiniCalendar
+                  year={now.getFullYear()}
+                  month={now.getMonth()}
+                  today={now}
+                  datesWithMeetings={datesWithMeetings}
+                  calendarHref="/calendar"
+                />
+              ) : null}
+
               {/* Upcoming meetings list */}
               {upcomingMeetings.length > 1 ? (
                 <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
@@ -418,6 +446,85 @@ export default async function Home({
         </div>
       </main>
     </div>
+  );
+}
+
+function MiniCalendar({
+  year, month, today, datesWithMeetings, calendarHref,
+}: {
+  year: number;
+  month: number;
+  today: Date;
+  datesWithMeetings: Set<string>;
+  calendarHref: string;
+}) {
+  const firstDay = new Date(year, month, 1);
+  const startDow = (firstDay.getDay() + 6) % 7; // 0=Mon
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(startDow).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  // Pad to complete last week
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const monthLabel = firstDay.toLocaleString("en-US", { month: "long", year: "numeric" });
+  const todayDate = today.getDate();
+  const todayMonth = today.getMonth();
+  const todayYear = today.getFullYear();
+
+  return (
+    <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-display text-sm font-semibold text-[var(--color-text)]">{monthLabel}</h2>
+        <Link
+          href={calendarHref}
+          className="font-mono text-xs text-[var(--color-secondary)] hover:underline"
+        >
+          Open →
+        </Link>
+      </div>
+
+      {/* Day headers */}
+      <div className="mb-1 grid grid-cols-7">
+        {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+          <div key={i} className="py-0.5 text-center font-mono text-[10px] font-semibold uppercase text-[var(--color-subtle)]">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Day cells */}
+      <div className="grid grid-cols-7 gap-y-0.5">
+        {cells.map((day, i) => {
+          if (!day) return <div key={i} />;
+          const isToday = day === todayDate && month === todayMonth && year === todayYear;
+          const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const hasMeeting = datesWithMeetings.has(dateStr);
+
+          return (
+            <Link
+              key={i}
+              href={`${calendarHref}?view=day&date=${dateStr}`}
+              className="flex flex-col items-center py-0.5"
+            >
+              <span className={`flex h-6 w-6 items-center justify-center rounded-full font-mono text-xs transition hover:bg-[var(--color-surface-mid)] ${
+                isToday
+                  ? "bg-[var(--color-secondary)] font-semibold text-white"
+                  : "text-[var(--color-text)]"
+              }`}>
+                {day}
+              </span>
+              {hasMeeting ? (
+                <span className={`mt-0.5 h-1 w-1 rounded-full ${isToday ? "bg-white" : "bg-[var(--color-secondary)]"}`} />
+              ) : (
+                <span className="mt-0.5 h-1 w-1" />
+              )}
+            </Link>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

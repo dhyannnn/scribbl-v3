@@ -18,6 +18,7 @@ type FloatingMeetingVideoProps = {
   workspaceId: string;
   meetingId: string;
   videoHref: string;
+  canRecord?: boolean;
   disabled?: boolean;
   recording?: MeetingVideoRecordingProps;
   permissions: MeetingVideoPermissionsProps;
@@ -81,6 +82,7 @@ export function FloatingMeetingVideo({
   workspaceId,
   meetingId,
   videoHref,
+  canRecord = true,
   disabled = false,
   recording,
   permissions,
@@ -554,6 +556,7 @@ export function FloatingMeetingVideo({
             disabled={disabled}
             mode="floating"
             recording={recording}
+            canRecord={canRecord}
             recordingReturnTo="current"
             permissions={permissions}
           />

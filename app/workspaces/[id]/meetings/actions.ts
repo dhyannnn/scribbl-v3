@@ -125,53 +125,119 @@ export async function scheduleMeeting(formData: FormData) {
     redirect(`/workspaces/${workspaceId}/meetings?meeting=scheduled`);
   }
 
+  // Parse optional recurrence
+  const recurrenceRaw = String(formData.get("recurrence") ?? "").trim();
+  const recurrenceEndsAtRaw = String(formData.get("recurrenceEndsAt") ?? "").trim();
+  const recurrenceEndsAtDate = recurrenceEndsAtRaw
+    ? new Date(recurrenceEndsAtRaw + "T23:59:59")
+    : null;
+  const isRecurringSeries =
+    Boolean(recurrenceRaw) &&
+    recurrenceEndsAtDate !== null &&
+    !isNaN(recurrenceEndsAtDate.getTime()) &&
+    recurrenceEndsAtDate > startsAt;
+
   let meetingId = "";
 
-  await prisma.$transaction(async (tx) => {
-    const meeting = await tx.meeting.create({
-      data: {
-        workspaceId: workspace.id,
-        groupId,
-        title,
-        description: description || null,
-        startsAt,
-        endsAt,
-        provider: "livekit",
-        createdByUserId: currentUser.id,
-        participants: {
-          create: participantUserIds.map((userId) => ({
-            userId,
-            status: userId === currentUser.id ? "ACCEPTED" : "INVITED",
-          })),
+  if (isRecurringSeries) {
+    // ── Recurring series ─────────────────────────────────────────────────────
+    const seriesId = crypto.randomUUID();
+    const durationMs = safeDuration * 60 * 1000;
+    const slots = generateSeriesDates(startsAt, durationMs, recurrenceRaw, recurrenceEndsAtDate!);
+
+    await prisma.$transaction(async (tx) => {
+      for (let i = 0; i < slots.length; i++) {
+        const slot = slots[i];
+        const meeting = await tx.meeting.create({
+          data: {
+            workspaceId: workspace.id,
+            groupId,
+            title,
+            description: description || null,
+            startsAt: slot.startsAt,
+            endsAt: slot.endsAt,
+            provider: "livekit",
+            createdByUserId: currentUser.id,
+            seriesId,
+            recurrence: recurrenceRaw as "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY",
+            seriesIndex: i + 1,
+            recurrenceEndsAt: recurrenceEndsAtDate,
+            participants: {
+              create: participantUserIds.map((userId) => ({
+                userId,
+                status: userId === currentUser.id ? "ACCEPTED" : "INVITED",
+              })),
+            },
+          },
+          select: { id: true },
+        });
+
+        if (i === 0) meetingId = meeting.id;
+
+        const roomName = createLiveKitMeetingRoomName(meeting.id);
+        await tx.meeting.update({
+          where: { id: meeting.id },
+          data: {
+            providerMeetingId: roomName,
+            meetingUrl: `/workspaces/${workspace.id}/meetings/${meeting.id}/video`,
+          },
+        });
+
+        await tx.channel.create({
+          data: {
+            workspaceId: workspace.id,
+            meetingId: meeting.id,
+            name: formatMeetingChannelName(title),
+            type: "CHAT",
+            createdByUserId: currentUser.id,
+          },
+        });
+      }
+    });
+  } else {
+    // ── Single meeting ───────────────────────────────────────────────────────
+    await prisma.$transaction(async (tx) => {
+      const meeting = await tx.meeting.create({
+        data: {
+          workspaceId: workspace.id,
+          groupId,
+          title,
+          description: description || null,
+          startsAt,
+          endsAt,
+          provider: "livekit",
+          createdByUserId: currentUser.id,
+          participants: {
+            create: participantUserIds.map((userId) => ({
+              userId,
+              status: userId === currentUser.id ? "ACCEPTED" : "INVITED",
+            })),
+          },
         },
-      },
-      select: {
-        id: true,
-      },
-    });
-    meetingId = meeting.id;
-    const roomName = createLiveKitMeetingRoomName(meeting.id);
+        select: { id: true },
+      });
+      meetingId = meeting.id;
+      const roomName = createLiveKitMeetingRoomName(meeting.id);
 
-    await tx.meeting.update({
-      where: {
-        id: meeting.id,
-      },
-      data: {
-        providerMeetingId: roomName,
-        meetingUrl: `/workspaces/${workspace.id}/meetings/${meeting.id}/video`,
-      },
-    });
+      await tx.meeting.update({
+        where: { id: meeting.id },
+        data: {
+          providerMeetingId: roomName,
+          meetingUrl: `/workspaces/${workspace.id}/meetings/${meeting.id}/video`,
+        },
+      });
 
-    await tx.channel.create({
-      data: {
-        workspaceId: workspace.id,
-        meetingId: meeting.id,
-        name: formatMeetingChannelName(title),
-        type: "CHAT",
-        createdByUserId: currentUser.id,
-      },
+      await tx.channel.create({
+        data: {
+          workspaceId: workspace.id,
+          meetingId: meeting.id,
+          name: formatMeetingChannelName(title),
+          type: "CHAT",
+          createdByUserId: currentUser.id,
+        },
+      });
     });
-  });
+  }
 
   await writeAuditLog({
     action: "MEETING_SCHEDULED",
@@ -237,6 +303,8 @@ export async function updateMeetingDetails(formData: FormData) {
   const description = String(formData.get("description") ?? "").trim();
   const startsAtValue = String(formData.get("startsAt") ?? "");
   const durationMinutes = Number(formData.get("durationMinutes") ?? 60);
+  const scopeRaw = String(formData.get("editScope") ?? "THIS");
+  const editScope = scopeRaw === "THIS_AND_FUTURE" || scopeRaw === "ALL" ? scopeRaw : "THIS";
 
   if (!workspaceId || !meetingId || !title || !startsAtValue) {
     redirect(workspaceId ? `/workspaces/${workspaceId}/meetings?meeting=invalid` : "/");
@@ -271,6 +339,8 @@ export async function updateMeetingDetails(formData: FormData) {
         startsAt: true,
         endsAt: true,
         canceledAt: true,
+        seriesId: true,
+        seriesIndex: true,
         workspace: {
           select: {
             name: true,
@@ -315,27 +385,50 @@ export async function updateMeetingDetails(formData: FormData) {
     redirect(`/workspaces/${workspaceId}/meetings/${meetingId}?meeting=read-only`);
   }
 
-  await prisma.$transaction([
-    prisma.meeting.update({
+  const timeDelta = startsAt.getTime() - meeting.startsAt.getTime();
+  const durationMs = endsAt.getTime() - startsAt.getTime();
+
+  if ((editScope === "THIS_AND_FUTURE" || editScope === "ALL") && meeting.seriesId) {
+    const seriesMeetings = await prisma.meeting.findMany({
       where: {
-        id: meeting.id,
+        seriesId: meeting.seriesId,
+        ...(editScope === "THIS_AND_FUTURE" && meeting.seriesIndex != null
+          ? { seriesIndex: { gte: meeting.seriesIndex } }
+          : {}),
+        canceledAt: null,
       },
-      data: {
-        title,
-        description: description || null,
-        startsAt,
-        endsAt,
-      },
-    }),
-    prisma.channel.updateMany({
-      where: {
-        meetingId: meeting.id,
-      },
-      data: {
-        name: formatMeetingChannelName(title),
-      },
-    }),
-  ]);
+      select: { id: true, startsAt: true },
+      orderBy: { seriesIndex: "asc" },
+    });
+
+    await prisma.$transaction(
+      seriesMeetings.flatMap((sm) => {
+        const newStart = new Date(sm.startsAt.getTime() + timeDelta);
+        const newEnd = new Date(newStart.getTime() + durationMs);
+        return [
+          prisma.meeting.update({
+            where: { id: sm.id },
+            data: { title, description: description || null, startsAt: newStart, endsAt: newEnd },
+          }),
+          prisma.channel.updateMany({
+            where: { meetingId: sm.id },
+            data: { name: formatMeetingChannelName(title) },
+          }),
+        ];
+      }),
+    );
+  } else {
+    await prisma.$transaction([
+      prisma.meeting.update({
+        where: { id: meeting.id },
+        data: { title, description: description || null, startsAt, endsAt },
+      }),
+      prisma.channel.updateMany({
+        where: { meetingId: meeting.id },
+        data: { name: formatMeetingChannelName(title) },
+      }),
+    ]);
+  }
 
   runAfterResponse(() =>
     createWorkspaceNotifications({
@@ -366,6 +459,8 @@ export async function cancelMeeting(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
   const meetingId = String(formData.get("meetingId") ?? "");
   const cancellationReason = String(formData.get("cancellationReason") ?? "").trim();
+  const cancelScopeRaw = String(formData.get("cancelScope") ?? "THIS");
+  const cancelScope = cancelScopeRaw === "THIS_AND_FUTURE" ? "THIS_AND_FUTURE" : "THIS";
 
   if (!workspaceId || !meetingId) {
     redirect(workspaceId ? `/workspaces/${workspaceId}/meetings?meeting=invalid` : "/");
@@ -391,6 +486,7 @@ export async function cancelMeeting(formData: FormData) {
         startsAt: true,
         endsAt: true,
         canceledAt: true,
+        seriesId: true,
         workspace: {
           select: {
             name: true,
@@ -441,16 +537,27 @@ export async function cancelMeeting(formData: FormData) {
     redirect(`/workspaces/${workspaceId}/meetings/${meetingId}?meeting=read-only`);
   }
 
-  await prisma.meeting.update({
-    where: {
-      id: meeting.id,
-    },
-    data: {
-      canceledAt: new Date(),
-      canceledByUserId: currentUser.id,
-      cancellationReason: cancellationReason || null,
-    },
-  });
+  const cancelData = {
+    canceledAt: new Date(),
+    canceledByUserId: currentUser.id,
+    cancellationReason: cancellationReason || null,
+  };
+
+  if (cancelScope === "THIS_AND_FUTURE" && meeting.seriesId) {
+    await prisma.meeting.updateMany({
+      where: {
+        seriesId: meeting.seriesId,
+        startsAt: { gte: meeting.startsAt },
+        canceledAt: null,
+      },
+      data: cancelData,
+    });
+  } else {
+    await prisma.meeting.update({
+      where: { id: meeting.id },
+      data: cancelData,
+    });
+  }
 
   await writeAuditLog({
     action: "MEETING_CANCELED",
@@ -503,6 +610,27 @@ export async function cancelMeeting(formData: FormData) {
 
 function canManageMeeting(createdByUserId: string, currentUserId: string, role: string) {
   return createdByUserId === currentUserId || role === "OWNER" || role === "ADMIN";
+}
+
+function generateSeriesDates(
+  startsAt: Date,
+  durationMs: number,
+  frequency: string,
+  endsAt: Date,
+): Array<{ startsAt: Date; endsAt: Date }> {
+  const results: Array<{ startsAt: Date; endsAt: Date }> = [];
+  const current = new Date(startsAt);
+  while (current <= endsAt && results.length < 365) {
+    results.push({ startsAt: new Date(current), endsAt: new Date(current.getTime() + durationMs) });
+    switch (frequency) {
+      case "DAILY": current.setDate(current.getDate() + 1); break;
+      case "WEEKLY": current.setDate(current.getDate() + 7); break;
+      case "BIWEEKLY": current.setDate(current.getDate() + 14); break;
+      case "MONTHLY": current.setMonth(current.getMonth() + 1); break;
+      default: return results; // unknown frequency, stop
+    }
+  }
+  return results;
 }
 
 function formatMeetingChannelName(title: string) {

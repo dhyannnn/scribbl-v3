@@ -118,7 +118,7 @@ export function MeetingNotesSection({
         className={`fixed inset-0 scroll-mt-6 flex h-screen flex-col overflow-hidden ${
           showFloatingVideo ? "z-[2147482999]" : "z-[2147483001]"
         } ${
-          selectedType === "WHITEBOARD" ? "bg-[#f1f3f6]" : "bg-[#eef1f5]"
+          "bg-[var(--color-bg)]"
         }`}
       >
         <FocusedMeetingNoteChrome
@@ -235,7 +235,7 @@ function NoteCard({
   onExpand: () => void;
 }) {
   return (
-    <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
+    <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
       <NoteHeader
         title={title}
         badge={badge}
@@ -294,8 +294,8 @@ function NoteHeader({
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
-        <h2 className="text-xl font-semibold">{title}</h2>
-        <span className="mt-2 inline-flex rounded-md bg-[#e7eee7] px-3 py-1 text-sm font-medium text-[#2f604b]">
+        <h2 className="font-display text-lg font-semibold text-[var(--color-text)]">{title}</h2>
+        <span className="mt-1.5 inline-flex rounded-full bg-[var(--color-secondary-dim)] px-2.5 py-0.5 font-mono text-xs font-semibold text-[var(--color-secondary)]">
           {badge}
         </span>
       </div>
@@ -306,7 +306,7 @@ function NoteHeader({
           <input type="hidden" name="scope" value={scope} />
           <input type="hidden" name="type" value="TEXT" />
           <PendingSubmitButton
-            className="rounded-md bg-[#2f604b] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-full bg-[var(--color-primary)] px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-80 disabled:opacity-50"
             disabled={disabled}
             pendingLabel="Creating..."
           >
@@ -319,7 +319,7 @@ function NoteHeader({
           <input type="hidden" name="scope" value={scope} />
           <input type="hidden" name="type" value="WHITEBOARD" />
           <PendingSubmitButton
-            className="rounded-md border border-[#2f604b] bg-white px-3 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
             disabled={disabled}
             pendingLabel="Creating..."
           >
@@ -329,7 +329,7 @@ function NoteHeader({
         {onExpand ? (
           <button
             onClick={onExpand}
-            className="flex items-center gap-1.5 rounded-md border border-[#c8c8bd] bg-white px-3 py-2 text-sm font-medium text-[#4d4f47] transition hover:bg-[#f7f7f2]"
+            className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
           >
             <Maximize2 size={14} />
             Expand
@@ -338,7 +338,7 @@ function NoteHeader({
         {onCollapse ? (
           <button
             onClick={onCollapse}
-            className="flex items-center gap-1.5 rounded-md border border-[#c8c8bd] bg-white px-3 py-2 text-sm font-medium text-[#4d4f47] transition hover:bg-[#f7f7f2]"
+            className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
           >
             <Minimize2 size={14} />
             Collapse
@@ -378,31 +378,27 @@ function FocusedMeetingNoteChrome({
 
   return (
     <header
-      className={`relative z-10 border-b border-[#d8d8ce] bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:px-6 ${
-        isWhiteboard ? "bg-[#f8fafc]/95" : ""
-      }`}
+      className="relative z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)]/95 px-4 py-3 shadow-sm backdrop-blur sm:px-6"
     >
       <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <div
-            className={`grid size-10 shrink-0 place-items-center rounded-md ${
-              isWhiteboard ? "bg-[#e6f2ff] text-[#235789]" : "bg-[#e7eee7] text-[#2f604b]"
-            }`}
+            className="grid size-9 shrink-0 place-items-center rounded-xl bg-[var(--color-secondary-dim)] text-[var(--color-secondary)]"
             aria-hidden="true"
           >
-            {isWhiteboard ? <SquarePen size={20} /> : <FileText size={20} />}
+            {isWhiteboard ? <SquarePen size={18} /> : <FileText size={18} />}
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h2 className="truncate text-base font-semibold text-[#20201d] sm:text-lg">
+              <h2 className="truncate font-display text-base font-semibold text-[var(--color-text)] sm:text-lg">
                 {selected?.noteTitle ?? title}
               </h2>
-              <span className="shrink-0 rounded-md bg-[#e7eee7] px-2.5 py-1 text-xs font-medium text-[#2f604b]">
+              <span className="shrink-0 rounded-full bg-[var(--color-secondary-dim)] px-2 py-0.5 font-mono text-xs font-semibold text-[var(--color-secondary)]">
                 {badge}
               </span>
             </div>
-            <p className="mt-0.5 text-xs text-[#66685f]">
-              {isWhiteboard ? "Focused whiteboard" : "Focused document"} / {title}
+            <p className="mt-0.5 text-xs text-[var(--color-subtle)]">
+              {isWhiteboard ? "Focused whiteboard" : "Focused document"} · {title}
             </p>
           </div>
         </div>
@@ -417,11 +413,11 @@ function FocusedMeetingNoteChrome({
               <input type="hidden" name="type" value="TEXT" />
               <input type="hidden" name="noteFocus" value={scope === "SHARED" ? "shared" : "private"} />
               <PendingSubmitButton
-                className="flex min-h-10 items-center gap-1.5 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm font-medium text-[#4d4f47] transition hover:bg-[#f7f7f2] disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
                 disabled={disabled}
                 pendingLabel="Creating..."
               >
-                <Plus size={14} />
+                <Plus size={13} />
                 Note
               </PendingSubmitButton>
             </form>
@@ -432,29 +428,29 @@ function FocusedMeetingNoteChrome({
               <input type="hidden" name="type" value="WHITEBOARD" />
               <input type="hidden" name="noteFocus" value={scope === "SHARED" ? "shared" : "private"} />
               <PendingSubmitButton
-                className="flex min-h-10 items-center gap-1.5 rounded-md border border-[#c8c8bd] bg-white px-3 text-sm font-medium text-[#4d4f47] transition hover:bg-[#f7f7f2] disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
                 disabled={disabled}
                 pendingLabel="Creating..."
               >
-                <SquarePen size={14} />
+                <SquarePen size={13} />
                 Board
               </PendingSubmitButton>
             </form>
             <button
               onClick={onToggleFloatingVideo}
-              className={`flex min-h-10 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition ${
+              className={`flex min-h-9 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition ${
                 showFloatingVideo
-                  ? "border border-[#2f604b] bg-[#eef5ef] text-[#2f604b]"
-                  : "border border-[#c8c8bd] bg-white text-[#4d4f47] hover:bg-[#f7f7f2]"
+                  ? "border border-[var(--color-secondary)] bg-[var(--color-secondary-dim)] text-[var(--color-secondary)]"
+                  : "border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)]"
               }`}
             >
               {showFloatingVideo ? "Hide video" : "Show video"}
             </button>
             <button
               onClick={onCollapse}
-              className="flex min-h-10 items-center gap-1.5 rounded-md bg-[#20201d] px-3 text-sm font-medium text-white transition hover:bg-[#353530]"
+              className="flex min-h-9 items-center gap-1.5 rounded-full bg-[var(--color-primary)] px-3 text-sm font-semibold text-white transition hover:opacity-80"
             >
-              <Minimize2 size={14} />
+              <Minimize2 size={13} />
               Back to hub
             </button>
           </div>
@@ -478,13 +474,13 @@ function FocusedPermissionRequestsBanner({
   }
 
   return (
-    <div className="relative z-10 border-b border-[#e8e0b5] bg-[#fffceb] px-4 py-3 sm:px-6">
+    <div className="relative z-10 border-b border-[var(--color-warning-dim)] bg-[var(--color-warning-dim)] px-4 py-3 sm:px-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm font-semibold text-[#7a5a15]">
+          <p className="text-sm font-semibold text-[var(--color-warning)]">
             {pendingRequests.length} edit access {pendingRequests.length === 1 ? "request" : "requests"} pending
           </p>
-          <p className="mt-1 text-xs text-[#806a2f]">
+          <p className="mt-1 text-xs text-[var(--color-warning)]">
             Review requests without leaving focused mode.
           </p>
         </div>
@@ -492,11 +488,11 @@ function FocusedPermissionRequestsBanner({
           {pendingRequests.map((request) => (
             <div
               key={`${request.userId}:${request.targetType}:${request.artifactId ?? "meeting"}`}
-              className="grid min-w-0 gap-2 rounded-md border border-[#e8e0b5] bg-white px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              className="grid min-w-0 gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[#20201d]">{request.user.displayName}</p>
-                <p className="truncate text-xs text-[#777970]">
+                <p className="truncate text-sm font-medium text-[var(--color-text)]">{request.user.displayName}</p>
+                <p className="truncate text-xs text-[var(--color-subtle)]">
                   {getPermissionTargetLabel(request.targetType)}
                   {request.artifact?.note?.title ? ` - ${request.artifact.note.title}` : ""}
                 </p>
@@ -632,11 +628,11 @@ function NotePickerForm({
       {preserveValue ? <input type="hidden" name={preserveName} value={preserveValue} /> : null}
       {focusValue ? <input type="hidden" name="noteFocus" value={focusValue} /> : null}
       <label className="grid min-w-0 gap-2">
-        <span className={`${compact ? "sr-only" : "text-sm font-medium text-[#4d4f47]"}`}>Choose note or board</span>
+        <span className={`${compact ? "sr-only" : "text-xs font-medium text-[var(--color-muted)]"}`}>Choose note or board</span>
         <select
           name={name}
           defaultValue={selectedId}
-          className="min-h-10 min-w-0 max-w-full rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#2f604b] focus:bg-white"
+          className="min-h-10 min-w-0 max-w-full rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 text-sm outline-none transition focus:border-[var(--color-secondary)] focus:bg-[var(--color-surface)]"
         >
           {artifacts.map((a) => (
             <option key={a.noteId} value={a.noteId}>
@@ -650,7 +646,7 @@ function NotePickerForm({
         </select>
       </label>
       <div className="flex min-w-0 items-end">
-        <button className="min-h-10 w-full rounded-md border border-[#2f604b] bg-white px-4 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] min-[720px]:w-auto">
+        <button className="min-h-10 w-full rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] min-[720px]:w-auto">
           Switch
         </button>
       </div>
@@ -681,7 +677,7 @@ function NoteEditorSlot({
 
   if (!selected) {
     return (
-      <div className="mt-5 rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] p-5 text-sm leading-6 text-[#66685f]">
+      <div className="mt-4 rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-low)] p-5 text-sm leading-6 text-[var(--color-subtle)]">
         {emptyText}
       </div>
     );
@@ -758,19 +754,19 @@ function AccessRequestPanel({
   const targetType = selected.noteType === "WHITEBOARD" ? "WHITEBOARD" : "SHARED_NOTES";
   const className =
     focusMode === "document"
-      ? "mx-auto mt-4 w-full max-w-[816px] rounded-md border border-[#d8d8ce] bg-[#fbfbf8] p-3"
+      ? "mx-auto mt-4 w-full max-w-[816px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] p-3"
       : focusMode === "whiteboard"
-        ? "mx-4 mt-4 rounded-md border border-[#d8d8ce] bg-white p-3 shadow-sm sm:mx-6"
-        : "mt-4 rounded-md border border-[#d8d8ce] bg-[#fbfbf8] p-3";
+        ? "mx-4 mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-sm sm:mx-6"
+        : "mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] p-3";
 
   return (
     <div className={className}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-[#66685f]">
+        <p className="text-sm text-[var(--color-muted)]">
           You can view this {selected.noteType === "WHITEBOARD" ? "board" : "note"}. Request edit access from the meeting owner.
         </p>
         {isRequested ? (
-          <p className="shrink-0 text-sm font-medium text-[#7a5a15]">Edit access requested.</p>
+          <p className="shrink-0 text-sm font-medium text-[var(--color-warning)]">Edit access requested.</p>
         ) : (
           <form action={requestMeetingPermission} className="shrink-0">
             <input type="hidden" name="workspaceId" value={workspaceId} />
@@ -779,7 +775,7 @@ function AccessRequestPanel({
             <input type="hidden" name="targetType" value={targetType} />
             <PendingSubmitButton
               pendingLabel="Requesting..."
-              className="min-h-10 rounded-md border border-[#2f604b] bg-white px-3 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]"
+              className="min-h-9 rounded-full border border-[var(--color-secondary)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-secondary)] transition hover:bg-[var(--color-secondary-dim)]"
             >
               Request edit access
             </PendingSubmitButton>
@@ -792,8 +788,8 @@ function AccessRequestPanel({
 
 function MeetingNoteConnectingFallback() {
   return (
-    <div className="mt-5 rounded-md border border-[#c8c8bd] bg-white" style={{ minHeight: "360px" }}>
-      <p className="p-4 text-sm text-[#9a9c92]">Connecting to live session...</p>
+    <div className="mt-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]" style={{ minHeight: "360px" }}>
+      <p className="p-4 text-sm text-[var(--color-subtle)]">Connecting to live session...</p>
     </div>
   );
 }
@@ -823,11 +819,11 @@ function getPermissionTargetLabel(targetType: PendingMeetingPermissionRequest["t
 }
 
 function getFocusedPermissionButtonClassName(variant: "danger" | "primary") {
-  const base = "min-h-9 rounded-md px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60";
+  const base = "min-h-9 rounded-full px-3 text-xs font-semibold transition disabled:opacity-50";
 
   if (variant === "danger") {
-    return `${base} border border-[#c97d7d] bg-white text-[#9a3535] hover:bg-[#fff5f5]`;
+    return `${base} border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-danger)] hover:border-[var(--color-danger)] hover:bg-[var(--color-danger-dim)]`;
   }
 
-  return `${base} border border-[#2f604b] bg-[#2f604b] text-white hover:bg-[#244b3a]`;
+  return `${base} bg-[var(--color-primary)] text-white hover:opacity-80`;
 }

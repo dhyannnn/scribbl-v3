@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { RealtimeChatPanel } from "@/components/RealtimeChatPanel";
+import { ChatPanelResizer } from "@/components/ChatPanelResizer";
 import { getCurrentUser } from "@/lib/current-user";
 import { createChatRoomId } from "@/lib/liveblocks-room";
 import { prisma } from "@/lib/prisma";
@@ -171,10 +172,10 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
         ) : null}
       </header>
 
-      {/* Body */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Chat — fills all remaining width */}
-        <div className="flex min-w-0 flex-1 flex-col">
+      {/* Body — padded, gap between cards */}
+      <div className="flex min-h-0 flex-1 gap-3 overflow-hidden p-3">
+        {/* Chat card */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
           <RealtimeChatPanel
             workspaceId={workspaceId}
             roomId={createChatRoomId(workspaceId, channelId)}
@@ -199,8 +200,11 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
           />
         </div>
 
-        {/* Right panel */}
-        <aside className="hidden w-72 shrink-0 overflow-y-auto border-l border-[var(--color-border)] bg-[var(--color-surface)] xl:flex xl:flex-col">
+        {/* Drag handle */}
+        <ChatPanelResizer />
+
+        {/* Right panel card */}
+        <aside data-chat-right-panel className="hidden overflow-hidden overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm xl:flex xl:flex-col">
 
           {/* Recent Notes */}
           <section className="border-b border-[var(--color-border)] p-4">

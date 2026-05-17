@@ -6,7 +6,6 @@ import { getCurrentUser } from "@/lib/current-user";
 import {
   FREE_MEMBER_LIMIT,
   FREE_STORAGE_BYTES,
-  FREE_WORKSPACE_LIMIT,
   PRO_STORAGE_BYTES,
   getWorkspaceActiveMemberCount,
   getWorkspaceStorageBytes,
@@ -81,165 +80,190 @@ export default async function BillingPage({ params, searchParams }: PageProps) {
   const memberPercent = isFree ? Math.min(100, Math.round((memberCount / FREE_MEMBER_LIMIT) * 100)) : 0;
 
   return (
-    <main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10">
+    <div className="min-h-screen bg-[var(--color-bg)]">
+      <div className="mx-auto max-w-[700px] px-8 py-8">
 
-        <header className="border-b border-[#d8d8ce] pb-6">
-          <Link href={`/workspaces/${id}`} className="text-sm font-medium text-[#2f604b]">
-            Back to {workspace.name}
+        {/* Header */}
+        <header className="mb-8">
+          <Link
+            href={`/workspaces/${id}`}
+            className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)] transition hover:text-[var(--color-secondary)]"
+          >
+            ← {workspace.name}
           </Link>
-          <h1 className="mt-4 text-2xl font-semibold sm:text-3xl lg:text-4xl">Billing</h1>
-          <p className="mt-3 text-base leading-7 text-[#62645c]">
+          <h1 className="mt-2 font-display text-3xl font-bold text-[var(--color-text)] lg:text-4xl">
+            Billing
+          </h1>
+          <p className="mt-1.5 text-sm text-[var(--color-muted)]">
             Manage your workspace plan and subscription.
           </p>
+
+          {getBillingStatusMessage(billingStatus) ? (
+            <p className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+              billingStatus === "success"
+                ? "border-[var(--color-success)] bg-[var(--color-success-dim)] text-[var(--color-success)]"
+                : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)]"
+            }`}>
+              {getBillingStatusMessage(billingStatus)}
+            </p>
+          ) : null}
         </header>
 
-        {getBillingStatusMessage(billingStatus) ? (
-          <p className={`rounded-md border px-4 py-3 text-sm shadow-sm ${billingStatus === "success" ? "border-[#d8e8d8] bg-[#f0f8f0] text-[#2f604b]" : "border-[#d8d8ce] bg-white text-[#4d4f47]"}`}>
-            {getBillingStatusMessage(billingStatus)}
-          </p>
-        ) : null}
-
-        {/* Current plan */}
-        <section className="rounded-md border border-[#d8d8ce] bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#777970]">Current plan</p>
-              <h2 className="mt-1 text-2xl font-bold">
-                {isFree ? "Free" : isPro ? "Pro" : "Institution"}
-              </h2>
+        <div className="flex flex-col gap-6">
+          {/* Current plan card */}
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">
+                  Current plan
+                </p>
+                <h2 className="mt-1 font-display text-2xl font-bold text-[var(--color-text)]">
+                  {isFree ? "Free" : isPro ? "Pro" : "Institution"}
+                </h2>
+              </div>
+              <span className={`rounded-full px-3 py-1 font-mono text-xs font-semibold ${
+                isFree
+                  ? "bg-[var(--color-surface-high)] text-[var(--color-muted)]"
+                  : "bg-[var(--color-secondary-dim)] text-[var(--color-secondary)]"
+              }`}>
+                {isFree ? "Free" : `$${isPro ? "20" : "299"} CAD/mo`}
+              </span>
             </div>
-            <span className={`rounded-full px-3 py-1 text-sm font-semibold ${isFree ? "bg-[#f1f1eb] text-[#66685f]" : "bg-[#e7eee7] text-[#2f604b]"}`}>
-              {isFree ? "Free" : `$${isPro ? "20" : "299"} CAD/mo`}
-            </span>
+
+            {/* Usage meters */}
+            <div className="mt-6 flex flex-col gap-4">
+              <UsageMeter
+                label="Members"
+                current={memberCount}
+                limit={isFree ? FREE_MEMBER_LIMIT : null}
+                percent={isFree ? memberPercent : null}
+                formatValue={(v) => String(v)}
+                unit="members"
+                linkHref={isFree && memberCount >= FREE_MEMBER_LIMIT ? "#upgrade" : undefined}
+              />
+              <UsageMeter
+                label="File storage"
+                current={storageBytes}
+                limit={storageLimitBytes}
+                percent={storagePercent}
+                formatValue={formatBytes}
+                unit="storage"
+              />
+            </div>
+
+            {/* Subscription info */}
+            {!isFree && subscription?.currentPeriodEnd ? (
+              <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+                subscription.cancelAtPeriodEnd
+                  ? "border-[var(--color-warning-dim)] bg-[var(--color-warning-dim)] text-[var(--color-warning)]"
+                  : "border-[var(--color-border)] bg-[var(--color-surface-low)] text-[var(--color-muted)]"
+              }`}>
+                {subscription.cancelAtPeriodEnd
+                  ? `Subscription cancels on ${formatDate(subscription.currentPeriodEnd)} — recordings and group access will stop.`
+                  : `Next billing date: ${formatDate(subscription.currentPeriodEnd)}`}
+              </div>
+            ) : null}
+
+            {/* Refresh button */}
+            <form action={refreshBillingStatus} className="mt-4">
+              <input type="hidden" name="workspaceId" value={id} />
+              <PendingSubmitButton
+                pendingLabel="Refreshing..."
+                className="rounded-full border border-[var(--color-border)] px-4 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
+              >
+                Refresh billing status
+              </PendingSubmitButton>
+            </form>
           </div>
 
-          {/* Usage meters — always show */}
-          <div className="mt-6 grid gap-4">
-            <UsageMeter
-              label="Members"
-              current={memberCount}
-              limit={isFree ? FREE_MEMBER_LIMIT : null}
-              unit="members"
-              percent={isFree ? memberPercent : null}
-              linkHref={isFree && memberCount >= FREE_MEMBER_LIMIT ? `#upgrade` : undefined}
-            />
-            <UsageMeter
-              label="File storage"
-              current={storageBytes}
-              limit={storageLimitBytes}
-              unit="storage"
-              percent={storagePercent}
-              formatValue={formatBytes}
-            />
-          </div>
+          {/* Upgrade to Pro */}
+          {isFree ? (
+            <div id="upgrade" className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
+              <h2 className="font-display text-xl font-semibold text-[var(--color-text)]">Upgrade to Pro</h2>
+              <p className="mt-1.5 text-sm text-[var(--color-muted)]">
+                $20 CAD per month. Unlock everything for this workspace.
+              </p>
 
-          {/* Manual sync button — useful when webhook hasn't fired yet */}
-          <form action={refreshBillingStatus} className="mt-4">
-            <input type="hidden" name="workspaceId" value={id} />
-            <PendingSubmitButton
-              pendingLabel="Refreshing..."
-              className="rounded-md border border-[#c8c8bd] bg-white px-3 py-1.5 text-xs font-medium text-[#66685f] transition hover:border-[#2f604b] hover:text-[#2f604b] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Refresh billing status
-            </PendingSubmitButton>
-          </form>
+              <ul className="mt-4 flex flex-col gap-2">
+                {[
+                  "Unlimited members",
+                  "Meeting recordings (auto-saved to workspace files)",
+                  "Groups — scope meetings and notifications to sub-teams",
+                  "10 GB file storage",
+                  "No tldraw whiteboard watermark",
+                ].map((feature) => (
+                  <li key={feature} className="flex items-center gap-2.5 text-sm text-[var(--color-muted)]">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--color-success-dim)]">
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="var(--color-success)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="2 6 5 9 10 3" /></svg>
+                    </span>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
 
-          {/* Subscription info for paid plans */}
-          {!isFree && subscription?.currentPeriodEnd ? (
-            <div className={`mt-6 rounded-md border px-4 py-3 text-sm ${subscription.cancelAtPeriodEnd ? "border-[#ead1cd] bg-[#fff7f5] text-[#7a3434]" : "border-[#e2e2d8] bg-[#fbfbf8] text-[#4d4f47]"}`}>
-              {subscription.cancelAtPeriodEnd
-                ? `⚠️ Subscription cancels on ${formatDate(subscription.currentPeriodEnd)} — recordings and group access will stop.`
-                : `Next billing date: ${formatDate(subscription.currentPeriodEnd)}`}
+              <form action={upgradeWorkspaceToPro} className="mt-6">
+                <input type="hidden" name="workspaceId" value={id} />
+                <PendingSubmitButton
+                  pendingLabel="Redirecting to checkout..."
+                  className="rounded-full bg-[var(--color-primary)] px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-80 disabled:opacity-50"
+                >
+                  Upgrade to Pro — $20 CAD/month
+                </PendingSubmitButton>
+              </form>
+
+              <p className="mt-3 text-xs text-[var(--color-subtle)]">
+                Cancel anytime.{" "}
+                <Link href="/pricing" className="underline hover:no-underline">
+                  Compare all plans →
+                </Link>
+              </p>
             </div>
           ) : null}
-        </section>
 
-        {/* Actions */}
-        {isFree ? (
-          <section id="upgrade" className="rounded-md border border-[#d8d8ce] bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-semibold">Upgrade to Pro</h2>
-            <p className="mt-2 text-sm leading-6 text-[#62645c]">
-              $20 CAD per month. Unlock everything for this workspace.
-            </p>
+          {/* Manage subscription (Pro only, not Institution) */}
+          {isPro ? (
+            <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
+              <h2 className="font-display text-xl font-semibold text-[var(--color-text)]">Manage subscription</h2>
+              <p className="mt-1.5 text-sm text-[var(--color-muted)]">
+                Update your payment method, download invoices, or cancel your subscription.
+              </p>
+              <form action={openBillingPortal} className="mt-5">
+                <input type="hidden" name="workspaceId" value={id} />
+                <PendingSubmitButton
+                  pendingLabel="Opening billing portal..."
+                  className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-2.5 text-sm font-semibold text-[var(--color-text)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
+                >
+                  Open billing portal
+                </PendingSubmitButton>
+              </form>
+            </div>
+          ) : null}
 
-            <ul className="mt-4 grid gap-2 text-sm text-[#4d4f47]">
-              {[
-                "Unlimited members",
-                "Meeting recordings (auto-saved to workspace files)",
-                "Groups — scope meetings and notifications to sub-teams",
-                "10 GB file storage",
-                "No tldraw whiteboard watermark",
-              ].map((feature) => (
-                <li key={feature} className="flex items-center gap-2">
-                  <span className="text-[#2f604b]">✓</span>
-                  {feature}
-                </li>
-              ))}
-            </ul>
-
-            <form action={upgradeWorkspaceToPro} className="mt-6">
-              <input type="hidden" name="workspaceId" value={id} />
-              <PendingSubmitButton
-                pendingLabel="Redirecting to checkout..."
-                className="w-full rounded-md bg-[#2f604b] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+          {/* Institution */}
+          {isInstitution ? (
+            <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
+              <h2 className="font-display text-xl font-semibold text-[var(--color-text)]">Institution plan</h2>
+              <p className="mt-1.5 text-sm text-[var(--color-muted)]">
+                Your workspace is on the Institution plan.
+                To manage billing, update payment details, or cancel, contact us directly.
+              </p>
+              <a
+                href="mailto:hello@scribblapp.ca"
+                className="mt-5 inline-block rounded-full border border-[var(--color-border)] px-5 py-2.5 text-sm font-semibold text-[var(--color-text)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
               >
-                Upgrade to Pro — $20 CAD/month
-              </PendingSubmitButton>
-            </form>
+                Contact billing support
+              </a>
+            </div>
+          ) : null}
 
-            <p className="mt-3 text-xs text-[#777970]">
-              Cancel anytime. Taxes calculated at checkout.{" "}
-              <Link href="/pricing" className="underline hover:no-underline">
-                Compare all plans
-              </Link>
-            </p>
-          </section>
-        ) : null}
-
-        {(isPro || isInstitution) && !isInstitution ? (
-          <section className="rounded-md border border-[#d8d8ce] bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-semibold">Manage subscription</h2>
-            <p className="mt-2 text-sm leading-6 text-[#62645c]">
-              Update your payment method, download invoices, or cancel your subscription.
-            </p>
-            <form action={openBillingPortal} className="mt-5">
-              <input type="hidden" name="workspaceId" value={id} />
-              <PendingSubmitButton
-                pendingLabel="Opening billing portal..."
-                className="rounded-md border border-[#2f604b] bg-white px-5 py-2.5 text-sm font-semibold text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Open billing portal
-              </PendingSubmitButton>
-            </form>
-          </section>
-        ) : null}
-
-        {isInstitution ? (
-          <section className="rounded-md border border-[#d8d8ce] bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-semibold">Institution plan</h2>
-            <p className="mt-2 text-sm leading-6 text-[#62645c]">
-              Your workspace is covered by an Institution subscription.
-              To manage billing, update payment details, or cancel, contact us directly.
-            </p>
-            <a
-              href="mailto:hello@scribblapp.ca"
-              className="mt-5 inline-block rounded-md border border-[#2f604b] bg-white px-5 py-2.5 text-sm font-semibold text-[#2f604b] transition hover:bg-[#eef5ef]"
-            >
-              Contact billing support
-            </a>
-          </section>
-        ) : null}
-
-        {/* Link to pricing page */}
-        <p className="text-center text-sm text-[#777970]">
-          <Link href="/pricing" className="font-medium text-[#2f604b] hover:underline">
-            View all plans and features →
-          </Link>
-        </p>
-
+          <p className="text-center text-sm text-[var(--color-subtle)]">
+            <Link href="/pricing" className="font-medium text-[var(--color-secondary)] hover:underline">
+              View all plans and features →
+            </Link>
+          </p>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -247,48 +271,48 @@ function UsageMeter({
   label,
   current,
   limit,
-  unit,
   percent,
   formatValue = (v: number) => String(v),
+  unit,
   linkHref,
 }: {
   label: string;
   current: number;
   limit: number | null;
-  unit: string;
   percent: number | null;
   formatValue?: (v: number) => string;
+  unit: string;
   linkHref?: string;
 }) {
   const barColor =
-    percent === null ? "bg-[#2f604b]"
-    : percent >= 95 ? "bg-[#b65b5b]"
-    : percent >= 80 ? "bg-[#c47d1f]"
-    : "bg-[#2f604b]";
+    percent === null
+      ? "bg-[var(--color-secondary)]"
+      : percent >= 95
+      ? "bg-[var(--color-danger)]"
+      : percent >= 80
+      ? "bg-[var(--color-warning)]"
+      : "bg-[var(--color-secondary)]";
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="font-medium text-[#4d4f47]">{label}</span>
-        <span className="text-[#66685f]">
+      <div className="mb-1.5 flex items-center justify-between gap-2 text-sm">
+        <span className="font-medium text-[var(--color-text)]">{label}</span>
+        <span className="font-mono text-xs text-[var(--color-subtle)]">
           {formatValue(current)}
           {limit !== null ? ` / ${formatValue(limit)}` : " (unlimited)"}
         </span>
       </div>
       {percent !== null ? (
-        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#e6e6dc]">
-          <div
-            className={`h-full rounded-full transition-all ${barColor}`}
-            style={{ width: `${percent}%` }}
-          />
+        <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-surface-high)]">
+          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${percent}%` }} />
         </div>
       ) : (
-        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#e7eee7]">
-          <div className="h-full w-full rounded-full bg-[#2f604b] opacity-30" />
+        <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-secondary-dim)]">
+          <div className="h-full w-full rounded-full bg-[var(--color-secondary)] opacity-40" />
         </div>
       )}
       {linkHref && percent !== null && percent >= 100 ? (
-        <p className="mt-1 text-xs text-[#7a3434]">
+        <p className="mt-1 text-xs text-[var(--color-danger)]">
           Limit reached —{" "}
           <a href={linkHref} className="font-medium underline">upgrade to Pro</a>
           {" "}for unlimited {unit}.

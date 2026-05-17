@@ -163,6 +163,13 @@ enum MeetingPermissionState {
   REQUESTED
 }
 
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
 enum FileVisibility {
   PRIVATE
   WORKSPACE_SHARED
@@ -417,6 +424,10 @@ model Meeting {
   canceledAt         DateTime?
   canceledByUserId   String?   @db.Uuid
   cancellationReason String?
+  seriesId           String?              @db.Uuid
+  recurrence         RecurrenceFrequency?
+  seriesIndex        Int?
+  recurrenceEndsAt   DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -435,6 +446,7 @@ model Meeting {
   @@index([workspaceId, startsAt])
   @@index([groupId])
   @@index([createdByUserId])
+  @@index([seriesId])
 }
 
 model MeetingModerationSettings {

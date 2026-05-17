@@ -50,89 +50,103 @@ export default async function AuditLogPage({ params }: PageProps) {
 
   if (workspace.plan !== "INSTITUTION") {
     return (
-      <main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
-        <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10">
-          <header className="border-b border-[#d8d8ce] pb-6">
-            <Link href={`/workspaces/${id}`} className="text-sm font-medium text-[#2f604b]">
-              Back to {workspace.name}
+      <div className="min-h-screen bg-[var(--color-bg)]">
+        <div className="mx-auto max-w-[800px] px-8 py-8">
+          <header className="mb-8">
+            <Link
+              href={`/workspaces/${id}`}
+              className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)] transition hover:text-[var(--color-secondary)]"
+            >
+              ← {workspace.name}
             </Link>
-            <h1 className="mt-4 text-2xl font-semibold sm:text-3xl">Audit Log</h1>
+            <h1 className="mt-2 font-display text-3xl font-bold text-[var(--color-text)]">Audit Log</h1>
           </header>
-          <div className="rounded-md border border-[#d8d8ce] bg-white p-8 text-center shadow-sm">
-            <p className="text-sm font-medium text-[#20201d]">Audit log is an Institution feature</p>
-            <p className="mt-2 text-sm text-[#66685f]">
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-10 text-center shadow-sm">
+            <p className="font-display text-base font-semibold text-[var(--color-text)]">Institution feature</p>
+            <p className="mt-2 text-sm text-[var(--color-muted)]">
               Upgrade to Institution to access full audit logs for member changes, billing events, and more.
             </p>
             <Link
               href={`/workspaces/${id}/billing`}
-              className="mt-5 inline-block rounded-md bg-[#2f604b] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#244b3a]"
+              className="mt-5 inline-block rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-80"
             >
               View billing options
             </Link>
           </div>
         </div>
-      </main>
+      </div>
     );
   }
 
   const logs = await prisma.auditLog.findMany({
     where: { workspaceId: id },
     include: {
-      actor: {
-        select: { displayName: true, email: true },
-      },
+      actor: { select: { displayName: true, email: true } },
     },
     orderBy: { createdAt: "desc" },
     take: PAGE_SIZE,
   });
 
   return (
-    <main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10">
-        <header className="border-b border-[#d8d8ce] pb-6">
-          <Link href={`/workspaces/${id}`} className="text-sm font-medium text-[#2f604b]">
-            Back to {workspace.name}
+    <div className="min-h-screen bg-[var(--color-bg)]">
+      <div className="mx-auto max-w-[800px] px-8 py-8">
+
+        <header className="mb-8">
+          <Link
+            href={`/workspaces/${id}`}
+            className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)] transition hover:text-[var(--color-secondary)]"
+          >
+            ← {workspace.name}
           </Link>
-          <h1 className="mt-4 text-2xl font-semibold sm:text-3xl lg:text-4xl">Audit Log</h1>
-          <p className="mt-3 text-base leading-7 text-[#62645c]">
+          <h1 className="mt-2 font-display text-3xl font-bold text-[var(--color-text)] lg:text-4xl">
+            Audit Log
+          </h1>
+          <p className="mt-1.5 text-sm text-[var(--color-muted)]">
             Last {PAGE_SIZE} events for this workspace.
           </p>
         </header>
 
         {logs.length === 0 ? (
-          <div className="rounded-md border border-dashed border-[#c8c8bd] bg-white p-8 text-center text-sm text-[#66685f]">
-            No audit events recorded yet.
+          <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-10 text-center">
+            <p className="text-sm text-[var(--color-subtle)]">No audit events recorded yet.</p>
           </div>
         ) : (
-          <div className="rounded-md border border-[#d8d8ce] bg-white shadow-sm">
-            <div className="divide-y divide-[#f1f1eb]">
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
+            <div className="divide-y divide-[var(--color-border)]">
               {logs.map((log) => (
-                <div key={log.id} className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-start sm:gap-6">
-                  <div className="shrink-0 text-xs text-[#777970] sm:w-36">
-                    {log.createdAt.toLocaleString("en-CA", {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
+                <div key={log.id} className="flex gap-4 px-6 py-4">
+                  {/* Timeline dot */}
+                  <div className="mt-1.5 flex shrink-0 flex-col items-center">
+                    <div className={`h-2.5 w-2.5 rounded-full ${getTimelineDotColor(log.action)}`} />
                   </div>
+
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getActionBadgeClass(log.action)}`}>
-                        {formatAction(log.action)}
-                      </span>
+                      <ActionBadge action={log.action} />
                       {log.actor ? (
-                        <span className="text-sm text-[#4d4f47]">{log.actor.displayName}</span>
+                        <span className="text-sm font-medium text-[var(--color-text)]">
+                          {log.actor.displayName}
+                        </span>
                       ) : (
-                        <span className="text-sm text-[#777970]">System</span>
+                        <span className="text-sm text-[var(--color-subtle)]">System</span>
                       )}
                     </div>
-                    <p className="mt-1 text-sm text-[#66685f]">
+                    <p className="mt-0.5 text-sm text-[var(--color-muted)]">
                       {getActionDescription(log.action, log.metadata, log.actor?.displayName)}
                     </p>
-                    {log.targetId ? (
-                      <p className="mt-0.5 font-mono text-xs text-[#9a9b94]">{log.targetId}</p>
-                    ) : null}
+                    <div className="mt-1 flex flex-wrap items-center gap-3">
+                      <span className="font-mono text-xs text-[var(--color-subtle)]">
+                        {log.createdAt.toLocaleString("en-CA", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                      {log.targetId ? (
+                        <span className="font-mono text-xs text-[var(--color-subtle)]">{log.targetId}</span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -140,8 +154,44 @@ export default async function AuditLogPage({ params }: PageProps) {
           </div>
         )}
       </div>
-    </main>
+    </div>
   );
+}
+
+function ActionBadge({ action }: { action: AuditAction }) {
+  const { bg, text } = getActionBadgeTokens(action);
+  return (
+    <span className={`rounded-full px-2 py-0.5 font-mono text-xs font-semibold ${bg} ${text}`}>
+      {formatAction(action)}
+    </span>
+  );
+}
+
+function getActionBadgeTokens(action: AuditAction): { bg: string; text: string } {
+  if (action === "BILLING_PAYMENT_FAILED" || action === "RECORDING_FAILED") {
+    return { bg: "bg-[var(--color-danger-dim)]", text: "text-[var(--color-danger)]" };
+  }
+  if (action === "BILLING_CANCELED") {
+    return { bg: "bg-[var(--color-warning-dim)]", text: "text-[var(--color-warning)]" };
+  }
+  if (action === "BILLING_UPGRADED" || action.startsWith("RECORDING_")) {
+    return { bg: "bg-[var(--color-success-dim)]", text: "text-[var(--color-success)]" };
+  }
+  if (action.startsWith("MEMBER_") || action.startsWith("OWNERSHIP_")) {
+    return { bg: "bg-[var(--color-secondary-dim)]", text: "text-[var(--color-secondary)]" };
+  }
+  if (action.startsWith("MEETING_")) {
+    return { bg: "bg-[var(--color-warning-dim)]", text: "text-[var(--color-warning)]" };
+  }
+  return { bg: "bg-[var(--color-surface-high)]", text: "text-[var(--color-muted)]" };
+}
+
+function getTimelineDotColor(action: AuditAction): string {
+  if (action === "BILLING_PAYMENT_FAILED" || action === "RECORDING_FAILED") return "bg-[var(--color-danger)]";
+  if (action === "BILLING_UPGRADED" || action.startsWith("RECORDING_")) return "bg-[var(--color-success)]";
+  if (action.startsWith("MEMBER_") || action.startsWith("OWNERSHIP_")) return "bg-[var(--color-secondary)]";
+  if (action.startsWith("MEETING_")) return "bg-[var(--color-warning)]";
+  return "bg-[var(--color-border-strong)]";
 }
 
 function formatAction(action: AuditAction): string {
@@ -208,17 +258,4 @@ function getActionDescription(
     default:
       return action.toLowerCase().replaceAll("_", " ");
   }
-}
-
-function getActionBadgeClass(action: AuditAction): string {
-  if (action.startsWith("BILLING_")) {
-    if (action === "BILLING_PAYMENT_FAILED") return "bg-[#fdecea] text-[#b65b5b]";
-    if (action === "BILLING_CANCELED") return "bg-[#fff3d8] text-[#7a5a1f]";
-    return "bg-[#e7eee7] text-[#2f604b]";
-  }
-  if (action.startsWith("RECORDING_FAILED")) return "bg-[#fdecea] text-[#b65b5b]";
-  if (action.startsWith("RECORDING_")) return "bg-[#e7eee7] text-[#2f604b]";
-  if (action.startsWith("MEMBER_") || action.startsWith("OWNERSHIP_")) return "bg-[#eeeef9] text-[#4a4a8a]";
-  if (action.startsWith("MEETING_")) return "bg-[#fff3d8] text-[#7a5a1f]";
-  return "bg-[#f1f1eb] text-[#66685f]";
 }

@@ -360,6 +360,15 @@ export async function startMeetingRecording(formData: FormData) {
     return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
   }
 
+  // Plan check before rate limit — no point consuming a slot for a blocked action
+  const workspacePlan = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { plan: true },
+  });
+  if (workspacePlan?.plan === "FREE") {
+    return finishRecordingAction(formData, workspaceId, meetingId, "plan-limit");
+  }
+
   if (!RateLimits.recordingStart(currentUser.id)) {
     return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
   }

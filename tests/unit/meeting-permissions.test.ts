@@ -142,7 +142,7 @@ describe("hand raise", () => {
       canRaiseHand({
         currentUserId: "tutor",
         meetingCreatedByUserId,
-        currentUserRole: "TUTOR",
+        currentUserRole: "ADMIN",
         settings: { sharedNotesDefaultEdit: false, whiteboardDefaultEdit: false, micDefaultEnabled: true, cameraDefaultEnabled: true, screenShareDefaultEnabled: false, reactionsEnabled: true, handRaiseEnabled: false },
         overrides: [],
       }),
@@ -153,7 +153,7 @@ describe("hand raise", () => {
     expect(
       canManageMeetingParticipantPermissions({
         currentUserId: "tutor",
-        currentUserRole: "TUTOR",
+        currentUserRole: "ADMIN",
         meetingCreatedByUserId,
         targetUserId: "student",
         targetUserRole: "MEMBER",
@@ -244,7 +244,7 @@ describe("permission request (REQUESTED state)", () => {
     expect(
       canManageMeetingParticipantPermissions({
         currentUserId: "tutor",
-        currentUserRole: "TUTOR",
+        currentUserRole: "ADMIN",
         meetingCreatedByUserId: "other",
         targetUserId: "student",
         targetUserRole: "MEMBER",

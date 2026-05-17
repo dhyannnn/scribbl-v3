@@ -21,6 +21,11 @@ const required = [
   "RECORDINGS_S3_BUCKET",
   "RECORDINGS_S3_ACCESS_KEY",
   "RECORDINGS_S3_SECRET_KEY",
+  "STRIPE_SECRET_KEY",
+  "STRIPE_PUBLISHABLE_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_PRO_PRICE_ID",
+  "STRIPE_INSTITUTION_PRICE_ID",
 ] as const;
 
 export type EnvKey = (typeof required)[number];

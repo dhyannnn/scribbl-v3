@@ -59,6 +59,7 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
   const pageNav = [
     { label: "Home", href: `/workspaces/${workspaceId}`, page: "home" as const },
     { label: "Notes", href: `/workspaces/${workspaceId}/notes`, page: "notes" as const },
+    { label: "Calendar", href: `/workspaces/${workspaceId}/calendar`, page: "calendar" as const },
     { label: "Meetings", href: `/workspaces/${workspaceId}/meetings`, page: "meetings" as const },
     { label: "Files", href: `/workspaces/${workspaceId}/files`, page: "files" as const },
     ...(workspace.plan !== "FREE"
