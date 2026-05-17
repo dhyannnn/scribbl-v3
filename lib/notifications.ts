@@ -19,6 +19,7 @@ export const notificationPreferenceDefaults: Record<NotificationPreferenceKey, b
 type CreateWorkspaceNotificationsInput = {
   actorUserId: string;
   body?: string | null;
+  groupId?: string | null;
   href: string;
   preference: NotificationPreferenceKey;
   title: string;
@@ -29,6 +30,7 @@ type CreateWorkspaceNotificationsInput = {
 export async function createWorkspaceNotifications({
   actorUserId,
   body,
+  groupId,
   href,
   preference,
   title,
@@ -44,6 +46,8 @@ export async function createWorkspaceNotifications({
       },
       user: {
         deletedAt: null,
+        // When a meeting is scoped to a group, only notify members of that group
+        ...(groupId ? { groupMemberships: { some: { groupId } } } : {}),
       },
     },
     select: {

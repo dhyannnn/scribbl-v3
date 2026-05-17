@@ -1,0 +1,5 @@
+-- Add group management events to AuditAction enum
+ALTER TYPE "AuditAction" ADD VALUE 'GROUP_CREATED';
+ALTER TYPE "AuditAction" ADD VALUE 'GROUP_DELETED';
+ALTER TYPE "AuditAction" ADD VALUE 'GROUP_MEMBER_ADDED';
+ALTER TYPE "AuditAction" ADD VALUE 'GROUP_MEMBER_REMOVED';

@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InviteAcceptedBroadcast } from "@/components/InviteAcceptedBroadcast";
-import { NotificationBell } from "@/components/NotificationBell";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
 import {
   formatMeetingLifecycleLabel,
   getMeetingLifecycle,
+  canJoinMeeting,
   type MeetingLifecycleState,
 } from "@/lib/meeting-lifecycle";
 import { prisma } from "@/lib/prisma";
@@ -15,105 +15,56 @@ import { isUuid } from "@/lib/uuid";
 import { updateWorkspaceDetails } from "./actions";
 
 type WorkspacePageProps = {
-  params: Promise<{
-    id: string;
-  }>;
-  searchParams: Promise<{
-    workspace?: string;
-  }>;
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ workspace?: string }>;
 };
 
 export default async function WorkspacePage({ params, searchParams }: WorkspacePageProps) {
   const { id } = await params;
   const { workspace: workspaceStatus } = await searchParams;
-  const currentUser = await getCurrentUser();
 
-  if (!isUuid(id)) {
-    notFound();
-  }
+  if (!isUuid(id)) notFound();
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return <ProtectedPageMessage />;
 
   const workspace = await prisma.workspace.findUnique({
-    where: {
-      id,
-    },
-    include: {
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      description: true,
+      plan: true,
       _count: {
         select: {
-          members: {
-            where: {
-              status: "ACTIVE",
-            },
-          },
-          notes: {
-            where: {
-              deletedAt: null,
-              visibility: "WORKSPACE_SHARED",
-            },
-          },
+          members: { where: { status: "ACTIVE" } },
+          notes: { where: { deletedAt: null, visibility: "WORKSPACE_SHARED" } },
           meetings: true,
         },
       },
       members: {
-        where: {
-          status: "ACTIVE",
-        },
-        select: {
-          id: true,
-          userId: true,
-          role: true,
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
+        where: { status: "ACTIVE" },
+        select: { id: true, userId: true, role: true },
+        orderBy: { createdAt: "asc" },
       },
-      channels: {
-        where: {
-          type: "CHAT",
-          meetingId: null,
-        },
-        select: {
-          name: true,
-          messages: {
-            where: {
-              deletedAt: null,
-            },
-            select: {
-              id: true,
-              body: true,
-              createdAt: true,
-              sender: {
-                select: {
-                  displayName: true,
-                },
-              },
-            },
-            orderBy: {
-              createdAt: "desc",
-            },
-            take: 3,
-          },
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
+      groups: {
+        where: { members: { some: { userId: currentUser.id } } },
+        select: { id: true },
       },
       notes: {
-        where: {
-          deletedAt: null,
-          visibility: "WORKSPACE_SHARED",
-        },
-        select: {
-          id: true,
-          title: true,
-          type: true,
-          updatedAt: true,
-        },
-        orderBy: {
-          updatedAt: "desc",
-        },
+        where: { deletedAt: null, visibility: "WORKSPACE_SHARED" },
+        select: { id: true, title: true, type: true, updatedAt: true },
+        orderBy: { updatedAt: "desc" },
         take: 4,
       },
       meetings: {
+        where: {
+          OR: [
+            { groupId: null },
+            { group: { members: { some: { userId: currentUser.id } } } },
+          ],
+        },
         select: {
           id: true,
           title: true,
@@ -121,75 +72,34 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
           startsAt: true,
           endsAt: true,
           canceledAt: true,
+          groupId: true,
           participants: {
-            where: {
-              user: {
-                deletedAt: null,
-              },
-            },
-            select: {
-              id: true,
-            },
-          },
-          artifacts: {
-            where: {
-              OR: [
-                {
-                  note: {
-                    deletedAt: null,
-                  },
-                },
-                {
-                  fileId: {
-                    not: null,
-                  },
-                },
-              ],
-            },
-            select: {
-              id: true,
-            },
+            where: { user: { deletedAt: null } },
+            select: { id: true },
           },
         },
-        orderBy: {
-          startsAt: "asc",
-        },
-        take: 5,
+        orderBy: { startsAt: "asc" },
+        take: 20,
       },
       files: {
-        where: {
-          visibility: "WORKSPACE_SHARED",
-        },
+        where: { visibility: "WORKSPACE_SHARED" },
         select: {
           id: true,
           name: true,
           mimeType: true,
           sizeBytes: true,
           createdAt: true,
-          uploadedBy: {
-            select: {
-              displayName: true,
-            },
-          },
+          uploadedBy: { select: { displayName: true } },
         },
-        orderBy: {
-          createdAt: "desc",
-        },
+        orderBy: { createdAt: "desc" },
         take: 4,
       },
     },
   });
 
-  if (!workspace) {
-    notFound();
-  }
+  if (!workspace) notFound();
 
-  if (!currentUser) {
-    return <ProtectedPageMessage />;
-  }
-
-  const currentMembership = workspace.members.find((member) => member.userId === currentUser.id);
-
+  const currentMembership = workspace.members.find((m) => m.userId === currentUser.id);
   if (!currentMembership) {
     return (
       <ProtectedPageMessage
@@ -199,367 +109,369 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
     );
   }
 
-  const primaryChannel = workspace.channels[0];
-  const primaryChannelMessages = primaryChannel ? [...primaryChannel.messages].reverse() : [];
   const canManageWorkspace = currentMembership.role === "OWNER";
+  const canManage = currentMembership.role === "OWNER" || currentMembership.role === "ADMIN";
+  const now = new Date();
+
+  const myGroupIds = new Set(workspace.groups.map((g) => g.id));
+  const visibleMeetings = canManage
+    ? workspace.meetings.slice(0, 5)
+    : workspace.meetings.filter((m) => m.groupId === null || myGroupIds.has(m.groupId)).slice(0, 5);
+
+  const liveMeeting = visibleMeetings.find((m) => {
+    const lc = getMeetingLifecycle(m, now);
+    return canJoinMeeting(lc);
+  });
+
+  const typeLabel = workspace.type.replace("_", " ").toLowerCase();
 
   return (
-    <main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
+    <div className="min-h-screen bg-[var(--color-bg)]">
       {workspaceStatus?.startsWith("invite-accepted") ? (
         <InviteAcceptedBroadcast href={`/workspaces/${workspace.id}`} />
       ) : null}
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-6 sm:px-8 lg:px-10">
-        <header className="border-b border-[#d8d8ce] pb-6">
-          <Link href={"/"} className="text-sm font-medium text-[#2f604b]">
-            Back to dashboard
-          </Link>
-          <div className="mt-5 flex min-w-0 flex-col gap-5 md:flex-row md:items-end md:justify-between">
+
+      <div className="mx-auto max-w-[1100px] px-8 py-8">
+
+        {/* Header */}
+        <header className="mb-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d7f70]">
-                {workspace.type.replace("_", " ").toLowerCase()}
-              </p>
-              <h1 className="mt-2 break-words text-3xl font-semibold tracking-normal text-[#171713] sm:text-4xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">
+                  {typeLabel}
+                </span>
+                {workspace.plan !== "FREE" ? (
+                  <span className="rounded-full bg-[var(--color-secondary-dim)] px-2.5 py-0.5 font-mono text-xs font-semibold text-[var(--color-secondary)]">
+                    {workspace.plan === "INSTITUTION" ? "Institution" : "Pro"}
+                  </span>
+                ) : null}
+              </div>
+              <h1 className="mt-1 font-display text-3xl font-bold text-[var(--color-text)] lg:text-4xl">
                 {workspace.name}
               </h1>
-              <p className="mt-3 max-w-3xl text-base leading-7 text-[#62645c]">
-                {workspace.description}
-              </p>
+              {workspace.description ? (
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--color-muted)]">
+                  {workspace.description}
+                </p>
+              ) : null}
             </div>
-            <div className="flex w-full min-w-0 items-start gap-3 md:w-auto">
-              <NotificationBell />
-              <div className="grid min-w-0 flex-1 grid-cols-3 gap-2 sm:gap-3 md:w-[360px] md:flex-none">
-                <MiniMetric
-                  label="Members"
-                  value={workspace._count.members}
-                  href={`/workspaces/${workspace.id}/members`}
-                />
-                <MiniMetric label="Notes" value={workspace._count.notes} />
-                <MiniMetric label="Meetings" value={workspace._count.meetings} />
-              </div>
+
+            {/* Quick stats */}
+            <div className="flex shrink-0 gap-3">
+              {[
+                { label: "Members", value: workspace._count.members, href: `/workspaces/${id}/members` },
+                { label: "Notes", value: workspace._count.notes },
+                { label: "Meetings", value: workspace._count.meetings },
+              ].map((stat) =>
+                stat.href ? (
+                  <Link
+                    key={stat.label}
+                    href={stat.href}
+                    className="flex min-w-[72px] flex-col items-center rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-center shadow-sm transition hover:border-[var(--color-secondary)]"
+                  >
+                    <span className="font-display text-2xl font-bold text-[var(--color-text)]">{stat.value}</span>
+                    <span className="mt-0.5 font-mono text-xs text-[var(--color-subtle)]">{stat.label}</span>
+                  </Link>
+                ) : (
+                  <div key={stat.label} className="flex min-w-[72px] flex-col items-center rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-center shadow-sm">
+                    <span className="font-display text-2xl font-bold text-[var(--color-text)]">{stat.value}</span>
+                    <span className="mt-0.5 font-mono text-xs text-[var(--color-subtle)]">{stat.label}</span>
+                  </div>
+                )
+              )}
             </div>
           </div>
+
+          {/* Status messages */}
+          {getWorkspaceStatusMessage(workspaceStatus) ? (
+            <p className="mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-muted)]">
+              {getWorkspaceStatusMessage(workspaceStatus)}
+            </p>
+          ) : null}
         </header>
 
-        {getWorkspaceStatusMessage(workspaceStatus) ? (
-          <p className="rounded-md border border-[#d8d8ce] bg-white px-4 py-3 text-sm text-[#4d4f47] shadow-sm">
-            {getWorkspaceStatusMessage(workspaceStatus)}
-          </p>
+        {/* Live meeting banner */}
+        {liveMeeting ? (
+          <Link
+            href={`/workspaces/${id}/meetings/${liveMeeting.id}`}
+            className="mb-8 flex items-center justify-between gap-4 rounded-2xl bg-[var(--color-live)] px-6 py-4 text-white transition hover:opacity-95"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 font-mono text-xs font-semibold uppercase tracking-widest text-red-400">
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-400" />
+                Live session
+              </span>
+              <span className="font-semibold">{liveMeeting.title}</span>
+            </div>
+            <span className="rounded-full bg-[var(--color-secondary)] px-4 py-1.5 text-sm font-semibold">
+              Join now
+            </span>
+          </Link>
         ) : null}
 
+        {/* Workspace settings (owners only) */}
         {canManageWorkspace ? (
-          <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-semibold">Workspace Settings</h2>
-            <form action={updateWorkspaceDetails} className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
-              <input type="hidden" name="workspaceId" value={workspace.id} />
-              <label className="grid min-w-0 gap-2">
-                <span className="text-sm font-medium text-[#4d4f47]">Name</span>
-                <input
-                  name="name"
-                  required
-                  defaultValue={workspace.name}
-                  className="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#2f604b] focus:bg-white"
-                />
-              </label>
-              <label className="grid min-w-0 gap-2">
-                <span className="text-sm font-medium text-[#4d4f47]">Type</span>
-                <select
-                  name="type"
-                  defaultValue={workspace.type}
-                  className="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#2f604b] focus:bg-white"
+          <details className="group mb-8 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-6 py-4">
+              <span className="font-display text-base font-semibold text-[var(--color-text)]">Workspace Settings</span>
+              <div className="flex items-center gap-2">
+                {workspace.plan === "INSTITUTION" ? (
+                  <Link
+                    href={`/workspaces/${id}/audit-log`}
+                    className="rounded-full border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
+                  >
+                    Audit Log
+                  </Link>
+                ) : null}
+                <Link
+                  href={`/workspaces/${id}/billing`}
+                  className="rounded-full border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
                 >
-                  <option value="COURSE">Course</option>
-                  <option value="STUDY_GROUP">Study group</option>
-                  <option value="TUTORING_GROUP">Tutoring group</option>
-                </select>
-              </label>
-              <div className="flex items-end">
-                <PendingSubmitButton
-                  pendingLabel="Saving..."
-                  className="min-h-11 w-full rounded-md bg-[#2f604b] px-5 text-sm font-medium text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:bg-[#9cac9f]"
-                >
-                  Save
-                </PendingSubmitButton>
+                  Billing
+                </Link>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-subtle)] transition group-open:rotate-180">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
               </div>
-              <label className="grid gap-2 lg:col-span-3">
-                <span className="text-sm font-medium text-[#4d4f47]">Description</span>
-                <textarea
-                  name="description"
-                  rows={3}
-                  defaultValue={workspace.description ?? ""}
-                  className="resize-y rounded-md border border-[#c8c8bd] bg-[#fbfbf8] p-3 text-sm leading-6 outline-none transition focus:border-[#2f604b] focus:bg-white"
-                />
-              </label>
-            </form>
-          </section>
+            </summary>
+            <div className="border-t border-[var(--color-border)] px-6 py-5">
+              <form action={updateWorkspaceDetails} className="grid gap-4 lg:grid-cols-[1fr_200px_auto]">
+                <input type="hidden" name="workspaceId" value={workspace.id} />
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-[var(--color-muted)]">Name</span>
+                  <input
+                    name="name"
+                    required
+                    defaultValue={workspace.name}
+                    className="min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-[var(--color-muted)]">Type</span>
+                  <select
+                    name="type"
+                    defaultValue={workspace.type}
+                    className="min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)]"
+                  >
+                    <option value="TEAM">Team</option>
+                    <option value="PROJECT">Project</option>
+                    <option value="CLASS">Class</option>
+                  </select>
+                </label>
+                <div className="flex items-end">
+                  <PendingSubmitButton
+                    pendingLabel="Saving..."
+                    className="min-h-10 w-full rounded-full bg-[var(--color-primary)] px-5 text-sm font-semibold text-white transition hover:opacity-80 disabled:opacity-50"
+                  >
+                    Save
+                  </PendingSubmitButton>
+                </div>
+                <label className="flex flex-col gap-1.5 lg:col-span-3">
+                  <span className="text-xs font-medium text-[var(--color-muted)]">Description</span>
+                  <textarea
+                    name="description"
+                    rows={2}
+                    defaultValue={workspace.description ?? ""}
+                    className="resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 py-2.5 text-sm outline-none transition focus:border-[var(--color-secondary)]"
+                  />
+                </label>
+              </form>
+            </div>
+          </details>
         ) : null}
 
-        <nav className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ["Chat", `/workspaces/${workspace.id}/chat`],
-            ["Notes", `/workspaces/${workspace.id}/notes`],
-            ["Meetings", `/workspaces/${workspace.id}/meetings`],
-            ["Files", `/workspaces/${workspace.id}/files`],
-          ].map(([item, href]) => (
-            <Link
-              key={item}
-              href={href}
-              className="rounded-md border border-[#d8d8ce] bg-white px-4 py-3 text-center text-sm font-medium text-[#2f604b] shadow-sm"
-            >
-              {item}
-            </Link>
-          ))}
-        </nav>
+        {/* Main content grid */}
+        <div className="grid gap-8 lg:grid-cols-2">
 
-        <section>
-          <div id="chat" className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-1 border-b border-[#e6e6dc] pb-4">
-              <p className="text-sm font-medium text-[#2f604b]">#{primaryChannel?.name ?? "general"}</p>
-              <h2 className="text-xl font-semibold">Course Chat</h2>
-            </div>
-            <div className="mt-5 grid gap-4">
-              {primaryChannelMessages.map((message) => (
-                <article key={message.id} className="rounded-md bg-[#fbfbf8] p-4">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                    <p className="min-w-0 break-words font-semibold">{message.sender.displayName}</p>
-                    <p className="shrink-0 text-xs text-[#777970]">
-                      {message.createdAt.toLocaleString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-                  <p className="mt-2 break-words text-sm leading-6 text-[#4d4f47]">{message.body}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="notes">
-          <SectionHeader
-            title="Workspace Notes"
-            action="Open Notes"
-            href={`/workspaces/${workspace.id}/notes`}
-          />
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            {workspace.notes.map((note) => (
-              <article key={note.id} className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-                <p className="text-sm font-medium text-[#2f604b]">{note.type.toLowerCase()}</p>
-                <h3 className="mt-2 break-words text-lg font-semibold">{note.title}</h3>
-                <p className="mt-3 text-sm text-[#66685f]">
-                  Updated {note.updatedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section id="meetings">
-          <SectionHeader
-            title="Meetings"
-            action="Open Meetings"
-            href={`/workspaces/${workspace.id}/meetings`}
-          />
-          <div className="mt-4 grid gap-4">
-            {workspace.meetings.map((meeting) => (
-              <Link
-                key={meeting.id}
-                href={`/workspaces/${workspace.id}/meetings/${meeting.id}`}
-                className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm"
-              >
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-[#2f604b]">
-                      {meeting.startsAt.toLocaleString("en-US", {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <h3 className="min-w-0 break-words text-lg font-semibold">{meeting.title}</h3>
-                      <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${getMeetingBadgeClassName(getMeetingLifecycle(meeting))}`}>
-                        {formatMeetingLifecycleLabel(getMeetingLifecycle(meeting))}
-                      </span>
-                    </div>
-                    <p className="mt-2 break-words text-sm leading-6 text-[#66685f]">{meeting.description}</p>
-                  </div>
-                  <div className="grid w-full shrink-0 gap-2 rounded-md bg-[#fbfbf8] px-4 py-3 text-sm text-[#4d4f47] md:w-auto">
-                    <span>
-                      {meeting.participants.length} participant
-                      {meeting.artifacts.length > 0 ? ` / ${meeting.artifacts.length} saved artifact` : ""}
-                    </span>
-                    <span className="font-medium text-[#2f604b]">
-                      {getMeetingActionLabel(getMeetingLifecycle(meeting))}
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        <section id="files">
-          <SectionHeader
-            title="Workspace Files"
-            action="Open Files"
-            href={`/workspaces/${workspace.id}/files`}
-          />
-          {workspace.files.length > 0 ? (
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              {workspace.files.map((file) => (
-                <article key={file.id} className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          {/* Recent meetings */}
+          <section>
+            <SectionHeader title="Meetings" href={`/workspaces/${id}/meetings`} action="View all" />
+            <div className="mt-4 flex flex-col gap-3">
+              {visibleMeetings.length > 0 ? visibleMeetings.map((meeting) => {
+                const lifecycle = getMeetingLifecycle(meeting, now);
+                const joinable = canJoinMeeting(lifecycle);
+                return (
+                  <Link
+                    key={meeting.id}
+                    href={`/workspaces/${id}/meetings/${meeting.id}`}
+                    className="flex items-start justify-between gap-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm transition hover:border-[var(--color-secondary)]"
+                  >
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-[#2f604b]">{formatFileType(file.mimeType)}</p>
-                      <h3 className="mt-2 break-words text-lg font-semibold">{file.name}</h3>
-                      <p className="mt-3 text-sm text-[#66685f]">
-                        Uploaded by {file.uploadedBy.displayName} on{" "}
-                        {file.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 font-mono text-xs font-semibold ${getMeetingBadgeClass(lifecycle)}`}>
+                          {formatMeetingLifecycleLabel(lifecycle)}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 truncate font-semibold text-[var(--color-text)]">{meeting.title}</p>
+                      <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+                        {meeting.startsAt.toLocaleString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
                       </p>
-                      <p className="mt-1 text-xs text-[#777970]">{formatFileSize(file.sizeBytes)}</p>
                     </div>
-                    <Link
-                      href={`/api/files/${file.id}`}
-                      target="_blank"
-                      className="w-full rounded-md bg-[#2f604b] px-4 py-2 text-center text-sm font-medium text-white transition hover:bg-[#244b3a] sm:w-auto"
-                    >
-                      Open
-                    </Link>
+                    <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                      joinable
+                        ? "bg-[var(--color-secondary)] text-white"
+                        : "border border-[var(--color-border)] text-[var(--color-muted)]"
+                    }`}>
+                      {getMeetingActionLabel(lifecycle)}
+                    </span>
+                  </Link>
+                );
+              }) : (
+                <EmptyCard text="No upcoming meetings." href={`/workspaces/${id}/meetings`} linkText="Schedule one" />
+              )}
+            </div>
+          </section>
+
+          {/* Recent notes */}
+          <section>
+            <SectionHeader title="Notes" href={`/workspaces/${id}/notes`} action="View all" />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {workspace.notes.length > 0 ? workspace.notes.map((note) => (
+                <Link
+                  key={note.id}
+                  href={`/workspaces/${id}/notes/${note.id}`}
+                  className="flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm transition hover:border-[var(--color-secondary)]"
+                >
+                  <div className="flex items-center gap-2">
+                    {note.type === "WHITEBOARD" ? (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-secondary)]">
+                        <path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/>
+                      </svg>
+                    ) : (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-secondary)]">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                    )}
+                    <span className="font-mono text-xs text-[var(--color-subtle)]">{note.type.toLowerCase()}</span>
                   </div>
-                </article>
-              ))}
+                  <p className="mt-2 line-clamp-2 text-sm font-semibold text-[var(--color-text)]">{note.title}</p>
+                  <p className="mt-auto pt-3 text-xs text-[var(--color-subtle)]">
+                    {note.updatedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </p>
+                </Link>
+              )) : (
+                <div className="col-span-2">
+                  <EmptyCard text="No shared notes yet." href={`/workspaces/${id}/notes`} linkText="Create a note" />
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="mt-4 rounded-md border border-dashed border-[#c8c8bd] bg-white p-8 text-center text-sm text-[#66685f]">
-              Workspace-shared uploads, PDFs, and meeting recordings will show up here.
+          </section>
+
+          {/* Recent files */}
+          <section className="lg:col-span-2">
+            <SectionHeader title="Files" href={`/workspaces/${id}/files`} action="View all" />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {workspace.files.length > 0 ? workspace.files.map((file) => (
+                <a
+                  key={file.id}
+                  href={`/api/files/${file.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm transition hover:border-[var(--color-secondary)]"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--color-surface-low)]">
+                    <FileIcon mimeType={file.mimeType} />
+                  </div>
+                  <p className="mt-3 truncate text-sm font-semibold text-[var(--color-text)]">{file.name}</p>
+                  <p className="mt-1 text-xs text-[var(--color-muted)]">
+                    {file.uploadedBy.displayName}
+                  </p>
+                  {file.sizeBytes ? (
+                    <p className="mt-0.5 font-mono text-xs text-[var(--color-subtle)]">{formatFileSize(file.sizeBytes)}</p>
+                  ) : null}
+                </a>
+              )) : (
+                <div className="col-span-4">
+                  <EmptyCard text="No files uploaded yet." href={`/workspaces/${id}/files`} linkText="Upload a file" />
+                </div>
+              )}
             </div>
-          )}
-        </section>
+          </section>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
 
-function MiniMetric({ label, value, href }: { label: string; value: number; href?: string }) {
-  const content = (
-    <>
-      <p className="truncate text-xs font-medium text-[#686a62]">{label}</p>
-      <p className="mt-1 text-xl font-semibold sm:text-2xl">{value}</p>
-    </>
-  );
-
-  if (href) {
-    return (
-      <Link
-        href={href}
-        className="min-w-0 rounded-md border border-[#d8d8ce] bg-white p-2 text-center shadow-sm transition hover:border-[#9ab09e] hover:bg-[#fbfbf8] sm:p-3"
-      >
-        {content}
+function SectionHeader({ title, href, action }: { title: string; href: string; action: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <h2 className="font-display text-lg font-semibold text-[var(--color-text)]">{title}</h2>
+      <Link href={href} className="text-sm font-medium text-[var(--color-secondary)] hover:underline">
+        {action} →
       </Link>
-    );
+    </div>
+  );
+}
+
+function EmptyCard({ text, href, linkText }: { text: string; href: string; linkText: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-center">
+      <p className="text-sm text-[var(--color-muted)]">{text}</p>
+      <Link href={href} className="mt-2 inline-block text-sm font-medium text-[var(--color-secondary)] hover:underline">
+        {linkText} →
+      </Link>
+    </div>
+  );
+}
+
+function FileIcon({ mimeType }: { mimeType: string }) {
+  const cls = "text-[var(--color-secondary)]";
+  if (mimeType === "application/pdf") {
+    return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
   }
-
-  return (
-    <div className="min-w-0 rounded-md border border-[#d8d8ce] bg-white p-2 text-center shadow-sm sm:p-3">
-      {content}
-    </div>
-  );
+  if (mimeType.startsWith("video/")) {
+    return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>;
+  }
+  if (mimeType.startsWith("image/")) {
+    return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>;
+  }
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cls}><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>;
 }
 
-function SectionHeader({ title, action, href }: { title: string; action: string; href: string }) {
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-      <h2 className="text-xl font-semibold">{title}</h2>
-      <Link href={href} className="rounded-md bg-[#2f604b] px-4 py-2 text-center text-sm font-medium text-white">
-        {action}
-      </Link>
-    </div>
-  );
+function getMeetingActionLabel(state: MeetingLifecycleState) {
+  if (canJoinMeeting(state)) return "Join";
+  if (state === "ended") return "Review";
+  if (state === "canceled") return "Canceled";
+  return "View";
+}
+
+function getMeetingBadgeClass(state: MeetingLifecycleState) {
+  switch (state) {
+    case "live":
+    case "joinable":
+      return "bg-[var(--color-secondary-dim)] text-[var(--color-secondary)]";
+    case "starting-soon":
+      return "bg-[var(--color-warning-dim)] text-[var(--color-warning)]";
+    case "ended":
+      return "bg-[var(--color-surface-high)] text-[var(--color-muted)]";
+    case "canceled":
+      return "bg-[var(--color-danger-dim)] text-[var(--color-danger)]";
+    default:
+      return "bg-[var(--color-surface-mid)] text-[var(--color-muted)]";
+  }
+}
+
+function formatFileSize(bytes: number) {
+  const units = ["B", "KB", "MB", "GB"];
+  let size = bytes;
+  let i = 0;
+  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
+  return `${i === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[i]}`;
 }
 
 function getWorkspaceStatusMessage(status?: string) {
   switch (status) {
-    case "updated":
-      return "Workspace settings updated.";
-    case "invite-accepted":
-      return "Invite accepted. Workspace owners were notified.";
-    case "invite-accepted-email-not-configured":
-      return "Invite accepted. Add RESEND_API_KEY and EMAIL_FROM to notify workspace owners.";
-    case "invite-accepted-email-failed":
-      return "Invite accepted, but workspace owners could not be notified by email.";
-    default:
-      return null;
-  }
-}
-
-function formatFileType(mimeType: string) {
-  if (mimeType === "application/pdf") {
-    return "PDF";
-  }
-
-  if (mimeType.startsWith("image/")) {
-    return `${mimeType.replace("image/", "").toUpperCase()} image`;
-  }
-
-  if (mimeType.startsWith("video/")) {
-    return `${mimeType.replace("video/", "").toUpperCase()} video`;
-  }
-
-  if (mimeType === "text/plain") {
-    return "Text file";
-  }
-
-  return mimeType || "File";
-}
-
-function formatFileSize(sizeBytes: number | null) {
-  if (!sizeBytes) {
-    return "Size unknown";
-  }
-
-  const units = ["bytes", "KB", "MB", "GB"];
-  let size = sizeBytes;
-  let unitIndex = 0;
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-
-  return `${unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`;
-}
-
-function getMeetingActionLabel(state: MeetingLifecycleState) {
-  switch (state) {
-    case "joinable":
-    case "live":
-      return "Join";
-    case "ended":
-      return "Review";
-    case "canceled":
-      return "Canceled";
-    default:
-      return "View";
-  }
-}
-
-function getMeetingBadgeClassName(state: MeetingLifecycleState) {
-  switch (state) {
-    case "live":
-    case "joinable":
-      return "bg-[#e7eee7] text-[#2f604b]";
-    case "starting-soon":
-      return "bg-[#fff3d8] text-[#7a5a1f]";
-    case "ended":
-      return "bg-[#eeeee7] text-[#66685f]";
-    case "canceled":
-      return "bg-[#fff7f5] text-[#7a3434]";
-    default:
-      return "bg-[#f0f0ea] text-[#66685f]";
+    case "updated": return "Workspace settings updated.";
+    case "invite-accepted": return "Invite accepted.";
+    case "invite-accepted-email-not-configured": return "Invite accepted. Add RESEND_API_KEY to notify owners.";
+    case "invite-accepted-email-failed": return "Invite accepted, but owners could not be notified.";
+    default: return null;
   }
 }

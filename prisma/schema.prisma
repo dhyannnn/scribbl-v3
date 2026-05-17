@@ -35,20 +35,29 @@ enum AuditAction {
 
   // File
   FILE_DELETED
+
+  // Billing
+  BILLING_UPGRADED
+  BILLING_CANCELED
+  BILLING_PAYMENT_FAILED
+
+  // Groups
+  GROUP_CREATED
+  GROUP_DELETED
+  GROUP_MEMBER_ADDED
+  GROUP_MEMBER_REMOVED
 }
 
 enum WorkspaceType {
-  COURSE
-  STUDY_GROUP
-  TUTORING_GROUP
+  TEAM
+  PROJECT
+  CLASS
 }
 
 enum WorkspaceRole {
   OWNER
   ADMIN
   MEMBER
-  TUTOR
-  PROFESSOR
 }
 
 enum MembershipStatus {
@@ -165,6 +174,20 @@ enum UserRole {
   ADMIN
 }
 
+enum SubscriptionPlan {
+  FREE
+  PRO
+  INSTITUTION
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
 enum NotificationType {
   ANNOUNCEMENT_POSTED
   CHAT_MESSAGE
@@ -190,6 +213,8 @@ model User {
   updatedAt           DateTime  @updatedAt
 
   createdWorkspaces         Workspace[]                 @relation("WorkspaceCreator")
+  ownedOrganizations        Organization[]              @relation("OrganizationOwner")
+  groupMemberships          GroupMember[]
   memberships               WorkspaceMember[]
   createdChannels           Channel[]                   @relation("ChannelCreator")
   sentMessages              Message[]
@@ -212,23 +237,30 @@ model User {
 }
 
 model Workspace {
-  id              String        @id @default(uuid()) @db.Uuid
+  id              String           @id @default(uuid()) @db.Uuid
   name            String
   type            WorkspaceType
   description     String?
-  createdByUserId String        @db.Uuid
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  plan            SubscriptionPlan @default(FREE)
+  organizationId  String?          @db.Uuid
+  createdByUserId String           @db.Uuid
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
-  createdBy User @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdBy    User          @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
-  members  WorkspaceMember[]
-  channels Channel[]
-  notes    Note[]
-  files    File[]
-  meetings Meeting[]
-  invites  WorkspaceInvite[]
+  members       WorkspaceMember[]
+  channels      Channel[]
+  notes         Note[]
+  files         File[]
+  meetings      Meeting[]
+  invites       WorkspaceInvite[]
   notifications Notification[]
+  groups        Group[]
+  subscription  Subscription?
+
+  @@index([organizationId])
 }
 
 model WorkspaceInvite {
@@ -353,6 +385,7 @@ model File {
   mimeType         String
   sizeBytes        Int?
   visibility       FileVisibility @default(WORKSPACE_SHARED)
+  isPinned         Boolean        @default(false)
   storageBucket    String?
   storageKey       String
   publicUrl        String?
@@ -372,6 +405,7 @@ model File {
 model Meeting {
   id                 String    @id @default(uuid()) @db.Uuid
   workspaceId        String?   @db.Uuid
+  groupId            String?   @db.Uuid
   title              String
   description        String?
   startsAt           DateTime
@@ -387,6 +421,7 @@ model Meeting {
   updatedAt          DateTime  @updatedAt
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  group     Group?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
   createdBy User       @relation("MeetingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   participants        MeetingParticipant[]
@@ -398,6 +433,7 @@ model Meeting {
   permissionOverrides MeetingPermissionOverride[]
 
   @@index([workspaceId, startsAt])
+  @@index([groupId])
   @@index([createdByUserId])
 }
 
@@ -568,4 +604,74 @@ model NotificationPreference {
   updatedAt     DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Groups ────────────────────────────────────────────────────────────────────
+
+model Group {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members   GroupMember[]
+  meetings  Meeting[]
+
+  @@index([workspaceId])
+}
+
+model GroupMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  groupId   String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@index([groupId])
+}
+
+// ── Billing ───────────────────────────────────────────────────────────────────
+
+model Organization {
+  id               String           @id @default(uuid()) @db.Uuid
+  name             String
+  ownerUserId      String           @db.Uuid
+  stripeCustomerId String?          @unique
+  plan             SubscriptionPlan @default(FREE)
+  currentPeriodEnd DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  owner      User          @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  workspaces Workspace[]
+  subscription Subscription?
+
+  @@index([ownerUserId])
+}
+
+model Subscription {
+  id                   String             @id @default(uuid()) @db.Uuid
+  workspaceId          String?            @unique @db.Uuid
+  organizationId       String?            @unique @db.Uuid
+  stripeCustomerId     String             @unique
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+  plan                 SubscriptionPlan   @default(FREE)
+  status               SubscriptionStatus @default(ACTIVE)
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  workspace    Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([stripeCustomerId])
 }

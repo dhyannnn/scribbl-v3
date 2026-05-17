@@ -45,7 +45,7 @@ export default async function NotificationsPage() {
             <Link href="/" className="text-sm font-medium text-[#2f604b]">
               Back to dashboard
             </Link>
-            <h1 className="mt-4 text-4xl font-semibold tracking-normal text-[#171713]">Notifications</h1>
+            <h1 className="mt-4 text-2xl font-semibold tracking-normal text-[#171713] sm:text-3xl lg:text-4xl">Notifications</h1>
             <p className="mt-2 text-sm text-[#66685f]">{unreadText}</p>
           </div>
           {unreadCount > 0 ? (

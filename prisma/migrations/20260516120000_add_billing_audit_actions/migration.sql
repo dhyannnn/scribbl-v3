@@ -1,0 +1,4 @@
+-- Add billing events to AuditAction enum
+ALTER TYPE "AuditAction" ADD VALUE 'BILLING_UPGRADED';
+ALTER TYPE "AuditAction" ADD VALUE 'BILLING_CANCELED';
+ALTER TYPE "AuditAction" ADD VALUE 'BILLING_PAYMENT_FAILED';

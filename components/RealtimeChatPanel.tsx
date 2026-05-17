@@ -45,6 +45,8 @@ type RealtimeChatPanelProps = {
   openInChannelsHref?: string;
   maxMessagesHeightClassName?: string;
   lazy?: boolean;
+  /** fullscreen: fills parent, no border/shadow. card: rounded card (default, for meeting hub) */
+  variant?: "fullscreen" | "card";
 };
 
 const maxMessageLength = 2000;
@@ -60,14 +62,14 @@ type MessageWithGroup = RealtimeChatMessage & {
   showAvatar: boolean;
 };
 
-export function RealtimeChatPanel({ roomId, lazy = false, ...props }: RealtimeChatPanelProps) {
+export function RealtimeChatPanel({ roomId, lazy = false, variant = "card", ...props }: RealtimeChatPanelProps) {
   if (!props.channel) {
-    return <EmptyChatPanel title={props.title} openInChannelsHref={props.openInChannelsHref} />;
+    return <EmptyChatPanel title={props.title} openInChannelsHref={props.openInChannelsHref} variant={variant} />;
   }
 
   return (
-    <LiveblocksRoom key={roomId} roomId={roomId} lazy={lazy} fallback={<ChatConnectingPanel title={props.title} openInChannelsHref={props.openInChannelsHref} />}>
-      <RealtimeChatPanelContent {...props} />
+    <LiveblocksRoom key={roomId} roomId={roomId} lazy={lazy} fallback={<ChatConnectingPanel title={props.title} openInChannelsHref={props.openInChannelsHref} variant={variant} />}>
+      <RealtimeChatPanelContent {...props} variant={variant} />
     </LiveblocksRoom>
   );
 }
@@ -75,27 +77,17 @@ export function RealtimeChatPanel({ roomId, lazy = false, ...props }: RealtimeCh
 function EmptyChatPanel({
   title,
   openInChannelsHref,
+  variant = "card",
 }: {
   title: string;
   openInChannelsHref?: string;
+  variant?: "fullscreen" | "card";
 }) {
   return (
-    <section id="meeting-chat" className="min-w-0 scroll-mt-6 rounded-md border border-[#d8d8ce] bg-white shadow-sm">
-      <header className="border-b border-[#e6e6dc] px-4 py-4 sm:px-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <p className="max-w-full truncate text-sm font-medium text-[#2f604b]">{title}</p>
-            <h2 className="mt-1 break-words text-xl font-semibold sm:text-2xl">{title}</h2>
-          </div>
-          {openInChannelsHref ? (
-            <Link href={openInChannelsHref} className="text-sm font-medium text-[#2f604b]">
-              Open in channels
-            </Link>
-          ) : null}
-        </div>
-      </header>
+    <section id="meeting-chat" className={sectionClass(variant)}>
+      <PanelHeader title={title} openInChannelsHref={openInChannelsHref} />
       <div className="p-4 sm:p-5">
-        <div className="rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] px-4 py-3 text-sm text-[#66685f]">
+        <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 py-3 text-sm text-[var(--color-muted)]">
           Create a channel before sending messages.
         </div>
       </div>
@@ -106,31 +98,45 @@ function EmptyChatPanel({
 function ChatConnectingPanel({
   title,
   openInChannelsHref,
+  variant = "card",
 }: {
   title: string;
   openInChannelsHref?: string;
+  variant?: "fullscreen" | "card";
 }) {
   return (
-    <section id="meeting-chat" className="min-w-0 scroll-mt-6 rounded-md border border-[#d8d8ce] bg-white shadow-sm">
-      <header className="border-b border-[#e6e6dc] px-4 py-4 sm:px-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <p className="max-w-full truncate text-sm font-medium text-[#2f604b]">{title}</p>
-            <h2 className="mt-1 break-words text-xl font-semibold sm:text-2xl">{title}</h2>
-          </div>
-          {openInChannelsHref ? (
-            <Link href={openInChannelsHref} className="text-sm font-medium text-[#2f604b]">
-              Open in channels
-            </Link>
-          ) : null}
-        </div>
-      </header>
+    <section id="meeting-chat" className={sectionClass(variant)}>
+      <PanelHeader title={title} openInChannelsHref={openInChannelsHref} />
       <div className="p-4 sm:p-5">
-        <div className="rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] px-4 py-3 text-sm text-[#66685f]">
+        <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 py-3 text-sm text-[var(--color-muted)]">
           Connecting chat...
         </div>
       </div>
     </section>
+  );
+}
+
+function sectionClass(variant: "fullscreen" | "card") {
+  return variant === "fullscreen"
+    ? "flex min-w-0 w-full flex-col bg-[var(--color-surface)]"
+    : "min-w-0 scroll-mt-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm";
+}
+
+function PanelHeader({ title, openInChannelsHref }: { title: string; openInChannelsHref?: string }) {
+  return (
+    <header className="border-b border-[var(--color-border)] px-4 py-4 sm:px-5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="max-w-full truncate text-sm font-medium text-[var(--color-secondary)]">{title}</p>
+          <h2 className="mt-1 break-words text-xl font-semibold sm:text-2xl">{title}</h2>
+        </div>
+        {openInChannelsHref ? (
+          <Link href={openInChannelsHref} className="text-sm font-medium text-[var(--color-secondary)]">
+            Open in channels
+          </Link>
+        ) : null}
+      </div>
+    </header>
   );
 }
 
@@ -149,6 +155,7 @@ function RealtimeChatPanelContent({
   readOnlyText = "You can read this channel, but you cannot post here.",
   openInChannelsHref,
   maxMessagesHeightClassName = "max-h-[50vh] sm:max-h-[460px]",
+  variant = "card",
 }: Omit<RealtimeChatPanelProps, "roomId">) {
   const [messages, setMessages] = useState(channel?.messages ?? []);
   const [sendStatus, setSendStatus] = useState<string | null>(status ?? null);
@@ -327,30 +334,40 @@ function RealtimeChatPanelContent({
     }
   }
 
-  return (
-    <section id="meeting-chat" className="min-w-0 scroll-mt-6 rounded-md border border-[#d8d8ce] bg-white shadow-sm">
-      <header className="border-b border-[#e6e6dc] px-4 py-4 sm:px-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <p className="max-w-full truncate text-sm font-medium text-[#2f604b]" title={channel?.name ?? title}>
-              {channel?.name ?? title}
-            </p>
-            <h2 className="mt-1 break-words text-xl font-semibold sm:text-2xl">{title}</h2>
-          </div>
-          {openInChannelsHref ? (
-            <Link href={openInChannelsHref} className="text-sm font-medium text-[#2f604b]">
-              Open in channels
-            </Link>
-          ) : null}
-        </div>
-        {statusMessage ? (
-          <p className="mt-3 rounded-md border border-[#d8d8ce] bg-[#fbfbf8] px-3 py-2 text-sm text-[#4d4f47]">
-            {statusMessage}
-          </p>
-        ) : null}
-      </header>
+  const messagesClass = variant === "fullscreen"
+    ? "flex-1 grid gap-2 overflow-y-auto bg-[var(--color-bg)] p-3 sm:p-5 content-start"
+    : `grid gap-2 overflow-y-auto bg-[var(--color-bg)] p-3 sm:p-5 ${maxMessagesHeightClassName}`;
 
-      <div ref={messagesContainerRef} className={`grid gap-2 overflow-y-auto bg-[#fbfbf8] p-3 sm:p-5 ${maxMessagesHeightClassName}`}>
+  return (
+    <section id="meeting-chat" className={sectionClass(variant)}>
+      {variant === "card" ? (
+        <header className="border-b border-[var(--color-border)] px-4 py-4 sm:px-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="max-w-full truncate text-sm font-medium text-[var(--color-secondary)]" title={channel?.name ?? title}>
+                {channel?.name ?? title}
+              </p>
+              <h2 className="mt-1 break-words text-xl font-semibold sm:text-2xl">{title}</h2>
+            </div>
+            {openInChannelsHref ? (
+              <Link href={openInChannelsHref} className="text-sm font-medium text-[var(--color-secondary)]">
+                Open in channels
+              </Link>
+            ) : null}
+          </div>
+          {statusMessage ? (
+            <p className="mt-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 py-2 text-sm text-[var(--color-muted)]">
+              {statusMessage}
+            </p>
+          ) : null}
+        </header>
+      ) : statusMessage ? (
+        <div className="border-b border-[var(--color-border)] px-5 py-2">
+          <p className="text-sm text-[var(--color-muted)]">{statusMessage}</p>
+        </div>
+      ) : null}
+
+      <div ref={messagesContainerRef} className={messagesClass}>
         {groupedMessages.map((message) => {
           const isOwnMessage = message.senderUserId === currentUserId;
           const canEditMessage = isOwnMessage && !message.deletedAt && !message.isPending;
@@ -369,13 +386,13 @@ function RealtimeChatPanelContent({
 
               <div className={`flex max-w-[82%] flex-col gap-0.5 sm:max-w-[72%] ${isOwnMessage ? "items-end" : "items-start"}`}>
                 {!isOwnMessage && message.isFirstInGroup ? (
-                  <span className="max-w-full truncate px-3 text-xs font-medium text-[#66685f]">{message.sender.displayName}</span>
+                  <span className="max-w-full truncate px-3 text-xs font-medium text-[var(--color-muted)]">{message.sender.displayName}</span>
                 ) : null}
 
                 {editingMessageId === message.id && !message.deletedAt ? (
                   <form
                     onSubmit={(event) => editChatMessage(event, message.id)}
-                    className="grid w-[min(100%,360px)] gap-2 rounded-2xl border border-[#c8c8bd] bg-white p-2"
+                    className="grid w-[min(100%,360px)] gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2"
                   >
                     <textarea
                       name="body"
@@ -384,13 +401,13 @@ function RealtimeChatPanelContent({
                       defaultValue={message.body}
                       rows={2}
                       onInput={(event) => autoGrowTextarea(event.currentTarget)}
-                      className="max-h-40 min-h-16 resize-none rounded-xl border border-[#d8d8ce] bg-[#fbfbf8] px-3 py-2 text-sm text-[#20201d] outline-none transition focus:border-[#2f604b] focus:bg-white"
+                      className="max-h-40 min-h-16 resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 py-2 text-sm text-[var(--color-text)] outline-none transition focus:border-[var(--color-secondary)] focus:bg-[var(--color-surface)]"
                     />
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
                         onClick={() => setEditingMessageId("")}
-                        className="grid size-9 place-items-center rounded-full border border-[#c8c8bd] text-[#4d4f47] transition hover:bg-[#f0f0eb]"
+                        className="grid size-9 place-items-center rounded-full border border-[var(--color-border)] text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
                         aria-label="Cancel edit"
                         title="Cancel"
                       >
@@ -398,7 +415,7 @@ function RealtimeChatPanelContent({
                       </button>
                       <button
                         disabled={isPending}
-                        className="grid size-9 place-items-center rounded-full bg-[#2f604b] text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:opacity-60"
+                        className="grid size-9 place-items-center rounded-full bg-[var(--color-secondary)] text-white transition hover:bg-[var(--color-secondary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                         aria-label="Save edit"
                         title="Save"
                       >
@@ -410,8 +427,8 @@ function RealtimeChatPanelContent({
                   <div
                     className={`max-w-full whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm leading-relaxed sm:px-4 ${
                       isOwnMessage
-                        ? "rounded-br-sm bg-[#2f604b] text-white"
-                        : "rounded-bl-sm bg-[#f0f0eb] text-[#20201d]"
+                        ? "rounded-br-sm bg-[var(--color-secondary)] text-white"
+                        : "rounded-bl-sm bg-[var(--color-surface-high)] text-[var(--color-text)]"
                     } ${message.isPending ? "opacity-60" : ""}`}
                   >
                     {message.deletedAt ? <span className="italic opacity-60">Message deleted</span> : message.body}
@@ -419,7 +436,7 @@ function RealtimeChatPanelContent({
                 )}
 
                 {message.isLastInGroup ? (
-                  <span className={`px-3 text-[10px] text-[#8a8c82] ${isOwnMessage ? "text-right" : ""}`}>
+                  <span className={`px-3 text-[10px] text-[var(--color-subtle)] ${isOwnMessage ? "text-right" : ""}`}>
                     {formatMessageTime(message.createdAt)}
                     {message.editedAt && !message.deletedAt ? " · edited" : ""}
                     {message.isPending ? " · sending" : ""}
@@ -432,7 +449,7 @@ function RealtimeChatPanelContent({
                       <button
                         type="button"
                         onClick={() => setEditingMessageId(message.id)}
-                        className="grid size-7 place-items-center rounded-full text-[#6d7f70] transition hover:bg-[#e7eee7] hover:text-[#2f604b]"
+                        className="grid size-7 place-items-center rounded-full text-[var(--color-subtle)] transition hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-secondary)]"
                         aria-label="Edit message"
                         title="Edit"
                       >
@@ -444,7 +461,7 @@ function RealtimeChatPanelContent({
                         type="button"
                         onClick={() => deleteChatMessage(message.id)}
                         disabled={isPending}
-                        className="grid size-7 place-items-center rounded-full text-[#9a5a52] transition hover:bg-[#fff0ed] hover:text-[#7a3434] disabled:cursor-not-allowed disabled:opacity-60"
+                        className="grid size-7 place-items-center rounded-full text-[var(--color-danger)] transition hover:bg-[var(--color-danger-dim)] disabled:cursor-not-allowed disabled:opacity-60"
                         aria-label="Delete message"
                         title="Delete"
                       >
@@ -458,15 +475,15 @@ function RealtimeChatPanelContent({
           );
         })}
         {channel && messages.length === 0 ? (
-          <p className="rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] p-4 text-sm text-[#66685f]">
+          <p className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-low)] p-4 text-sm text-[var(--color-muted)]">
             {emptyText}
           </p>
         ) : null}
       </div>
 
-      <footer className="border-t border-[#e6e6dc] p-3 sm:p-5">
+      <footer className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface)] p-3 sm:p-4">
         {typingUsers.length > 0 ? (
-          <div className="mb-3 flex items-center gap-2 px-1 text-xs text-[#777970]">
+          <div className="mb-3 flex items-center gap-2 px-1 text-xs text-[var(--color-subtle)]">
             <ThreeDotsAnimation />
             <span className="min-w-0 truncate">{formatTypingUsers(typingUsers)}</span>
           </div>
@@ -482,12 +499,12 @@ function RealtimeChatPanelContent({
               rows={1}
               onInput={handleInputChange}
               onKeyDown={handleComposerKeyDown}
-              className="max-h-32 min-h-11 min-w-0 flex-1 resize-none rounded-2xl border border-[#c8c8bd] bg-[#fbfbf8] px-4 py-3 text-sm leading-5 text-[#20201d] outline-none transition focus:border-[#2f604b] focus:bg-white focus:ring-2 focus:ring-[#2f604b]/15"
+              className="max-h-32 min-h-11 min-w-0 flex-1 resize-none rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 py-3 text-sm leading-5 text-[var(--color-text)] outline-none transition focus:border-[var(--color-secondary)] focus:bg-[var(--color-surface)] focus:ring-2 focus:ring-[var(--color-secondary)]/10"
             />
             <button
               type="submit"
               disabled={isPending}
-              className="grid size-11 shrink-0 place-items-center rounded-full bg-[#2f604b] text-white transition hover:bg-[#244b3a] disabled:cursor-not-allowed disabled:opacity-60"
+              className="grid size-11 shrink-0 place-items-center rounded-full bg-[var(--color-secondary)] text-white transition hover:bg-[var(--color-secondary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Send message"
               title="Send"
             >
@@ -495,11 +512,11 @@ function RealtimeChatPanelContent({
             </button>
           </form>
         ) : channel ? (
-          <div className="rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] px-4 py-3 text-sm text-[#66685f]">
+          <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 py-3 text-sm text-[var(--color-muted)]">
             {readOnlyText}
           </div>
         ) : (
-          <div className="rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] px-4 py-3 text-sm text-[#66685f]">
+          <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 py-3 text-sm text-[var(--color-muted)]">
             Create a channel before sending messages.
           </div>
         )}
@@ -586,7 +603,7 @@ function Avatar({
     );
   }
 
-  const colors = ["#2f604b", "#4a7c6a", "#1e4a38", "#3d6b5a"];
+  const colors = ["#085ac0", "#2170e4", "#004395", "#0041a8"];
   const color = colors[(name.charCodeAt(0) || 0) % colors.length];
 
   return (

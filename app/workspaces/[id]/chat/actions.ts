@@ -4,6 +4,124 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
+import { RateLimits } from "@/lib/rate-limit";
+
+const MAX_CHANNELS_PER_WORKSPACE = 20;
+
+export async function createChannel(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const rawName = String(formData.get("name") ?? "").trim().toLowerCase();
+  const name = rawName.replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 50);
+
+  if (!workspaceId || !name) {
+    redirect(`/workspaces/${workspaceId}/chat?chat=invalid`);
+  }
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    redirect(`/login?next=${encodeURIComponent(`/workspaces/${workspaceId}/chat`)}`);
+  }
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+    select: { role: true, status: true },
+  });
+
+  if (!membership || membership.status !== "ACTIVE") {
+    redirect(`/workspaces/${workspaceId}/chat?chat=unauthorized`);
+  }
+
+  if (membership.role !== "OWNER" && membership.role !== "ADMIN") {
+    redirect(`/workspaces/${workspaceId}/chat?chat=unauthorized`);
+  }
+
+  if (!RateLimits.channelCreate(currentUser.id)) {
+    redirect(`/workspaces/${workspaceId}/chat?chat=rate-limited`);
+  }
+
+  const [existingCount, duplicate] = await Promise.all([
+    prisma.channel.count({ where: { workspaceId, meetingId: null } }),
+    prisma.channel.findFirst({ where: { workspaceId, name, meetingId: null }, select: { id: true } }),
+  ]);
+
+  if (existingCount >= MAX_CHANNELS_PER_WORKSPACE) {
+    redirect(`/workspaces/${workspaceId}/chat?chat=limit`);
+  }
+
+  if (duplicate) {
+    redirect(`/workspaces/${workspaceId}/chat/${duplicate.id}?chat=duplicate`);
+  }
+
+  const channel = await prisma.channel.create({
+    data: { workspaceId, name, type: "CHAT", createdByUserId: currentUser.id },
+    select: { id: true },
+  });
+
+  revalidatePath(`/workspaces/${workspaceId}/chat`);
+  redirect(`/workspaces/${workspaceId}/chat/${channel.id}`);
+}
+
+export async function deleteChannel(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const channelId = String(formData.get("channelId") ?? "");
+
+  if (!workspaceId || !channelId) {
+    redirect(`/workspaces/${workspaceId}/chat?chat=invalid`);
+  }
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    redirect(`/login?next=${encodeURIComponent(`/workspaces/${workspaceId}/chat`)}`);
+  }
+
+  const [membership, channel] = await Promise.all([
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { role: true, status: true },
+    }),
+    prisma.channel.findFirst({
+      where: { id: channelId, workspaceId, meetingId: null },
+      select: { id: true, type: true },
+    }),
+  ]);
+
+  if (!membership || membership.status !== "ACTIVE" || !channel) {
+    redirect(`/workspaces/${workspaceId}/chat?chat=unauthorized`);
+  }
+
+  if (membership.role !== "OWNER" && membership.role !== "ADMIN") {
+    redirect(`/workspaces/${workspaceId}/chat?chat=unauthorized`);
+  }
+
+  // Protect the last CHAT channel
+  if (channel.type === "CHAT") {
+    const chatCount = await prisma.channel.count({
+      where: { workspaceId, type: "CHAT", meetingId: null },
+    });
+    if (chatCount <= 1) {
+      redirect(`/workspaces/${workspaceId}/chat/${channelId}?chat=last-channel`);
+    }
+  }
+
+  if (!RateLimits.channelDelete(currentUser.id)) {
+    redirect(`/workspaces/${workspaceId}/chat?chat=rate-limited`);
+  }
+
+  await prisma.channel.delete({ where: { id: channelId } });
+
+  const fallback = await prisma.channel.findFirst({
+    where: { workspaceId, type: "CHAT", meetingId: null },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+
+  revalidatePath(`/workspaces/${workspaceId}/chat`);
+  redirect(
+    fallback
+      ? `/workspaces/${workspaceId}/chat/${fallback.id}?chat=deleted`
+      : `/workspaces/${workspaceId}?chat=deleted`,
+  );
+}
 
 export async function sendMessage(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
@@ -183,13 +301,18 @@ function getChatRedirectPath(workspaceId: string, channelId: string, status: str
     return `${pathAndQuery}${separator}chat=${status}${hash ? `#${hash}` : ""}`;
   }
 
-  const channelParam = channelId ? `channel=${channelId}&` : "";
-  return `/workspaces/${workspaceId}/chat?${channelParam}chat=${status}`;
+  if (channelId) {
+    return `/workspaces/${workspaceId}/chat/${channelId}?chat=${status}`;
+  }
+
+  return `/workspaces/${workspaceId}/chat?chat=${status}`;
 }
 
 function revalidateChatPaths(workspaceId: string, channelId: string, returnTo?: string) {
   revalidatePath(`/workspaces/${workspaceId}/chat`);
-  revalidatePath(`/workspaces/${workspaceId}/chat?channel=${channelId}`);
+  if (channelId) {
+    revalidatePath(`/workspaces/${workspaceId}/chat/${channelId}`);
+  }
   revalidatePath(`/workspaces/${workspaceId}`);
   if (returnTo) {
     revalidatePath(returnTo.split(/[?#]/)[0]);

@@ -67,6 +67,20 @@ export async function uploadWorkspaceFile(formData: FormData) {
     redirect(`/workspaces/${workspace.id}/files?file=unauthorized`);
   }
 
+  // Storage limit check — before rate limit to avoid consuming a slot for a blocked upload
+  const workspaceWithPlan = await prisma.workspace.findUnique({
+    where: { id: workspace.id },
+    select: { plan: true },
+  });
+  const { getWorkspaceStorageBytes, getStorageLimitBytes } = await import("@/lib/billing");
+  const [currentStorage, storageLimit] = await Promise.all([
+    getWorkspaceStorageBytes(workspace.id),
+    Promise.resolve(getStorageLimitBytes(workspaceWithPlan?.plan ?? "FREE")),
+  ]);
+  if (currentStorage + uploadedFile.size > storageLimit) {
+    redirect(`/workspaces/${workspace.id}/files?file=storage-limit`);
+  }
+
   if (!RateLimits.fileUpload(currentUser.id)) {
     redirect(`/workspaces/${workspace.id}/files?file=upload-rate-limited`);
   }
@@ -300,6 +314,57 @@ export async function updateWorkspaceFile(formData: FormData) {
   }
   revalidatePath("/");
   redirect(`/workspaces/${workspaceId}/files?file=updated`);
+}
+
+export async function togglePinFile(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const fileId = String(formData.get("fileId") ?? "");
+
+  if (!workspaceId || !fileId) return;
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    redirect(`/login?next=${encodeURIComponent(`/workspaces/${workspaceId}/files`)}`);
+  }
+
+  const [membership, file] = await Promise.all([
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { role: true, status: true },
+    }),
+    prisma.file.findFirst({
+      where: { id: fileId, workspaceId, visibility: "WORKSPACE_SHARED" },
+      select: { id: true, isPinned: true },
+    }),
+  ]);
+
+  if (membership?.status !== "ACTIVE" || !file) {
+    redirect(`/workspaces/${workspaceId}/files?file=unauthorized`);
+  }
+
+  const canPin = membership.role === "OWNER" || membership.role === "ADMIN";
+  if (!canPin) {
+    redirect(`/workspaces/${workspaceId}/files?file=unauthorized`);
+  }
+
+  // Cap pinned files per workspace at 10
+  if (!file.isPinned) {
+    const pinnedCount = await prisma.file.count({
+      where: { workspaceId, isPinned: true, visibility: "WORKSPACE_SHARED" },
+    });
+    if (pinnedCount >= 10) {
+      redirect(`/workspaces/${workspaceId}/files?file=pin-limit`);
+    }
+  }
+
+  await prisma.file.update({
+    where: { id: fileId },
+    data: { isPinned: !file.isPinned },
+  });
+
+  revalidatePath(`/workspaces/${workspaceId}/files`);
+  revalidatePath(`/workspaces/${workspaceId}/chat`);
+  redirect(`/workspaces/${workspaceId}/files?file=${file.isPinned ? "unpinned" : "pinned"}`);
 }
 
 function sanitizeFileName(fileName: string) {

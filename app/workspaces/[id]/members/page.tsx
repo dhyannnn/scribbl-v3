@@ -93,7 +93,7 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
               <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d7f70]">
                 workspace members
               </p>
-              <h1 className="mt-2 text-4xl font-semibold tracking-normal text-[#171713]">
+              <h1 className="mt-2 text-2xl font-semibold tracking-normal text-[#171713] sm:text-3xl lg:text-4xl">
                 Members
               </h1>
               <p className="mt-3 text-base leading-7 text-[#62645c]">
@@ -110,7 +110,19 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
         {canManageMembers ? (
           <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
             <h2 className="text-xl font-semibold">Invite Member</h2>
-            {getInviteStatusMessage(inviteStatus) ? (
+            {inviteStatus === "plan-limit" ? (
+              <div className="mt-3 rounded-md border border-[#e2d8c8] bg-[#fffaf5] px-4 py-3">
+                <p className="text-sm font-medium text-[#7a5a1f]">
+                  Member limit reached — Free plan allows 5 members.
+                </p>
+                <Link
+                  href={`/workspaces/${workspace.id}/billing`}
+                  className="mt-2 inline-block text-sm font-medium text-[#2f604b] underline hover:no-underline"
+                >
+                  Upgrade to Pro for unlimited members →
+                </Link>
+              </div>
+            ) : getInviteStatusMessage(inviteStatus) ? (
               <p className="mt-3 rounded-md border border-[#d8d8ce] bg-[#fbfbf8] px-3 py-2 text-sm text-[#4d4f47]">
                 {getInviteStatusMessage(inviteStatus)}
               </p>
@@ -135,8 +147,6 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
                   className="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#2f604b] focus:bg-white"
                 >
                   <option value="MEMBER">Member</option>
-                  <option value="TUTOR">Tutor</option>
-                  <option value="PROFESSOR">Professor</option>
                   <option value="ADMIN">Admin</option>
                 </select>
               </label>
@@ -159,6 +169,11 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
               <p className="text-sm text-[#66685f]">Only the workspace owner can manage members.</p>
             ) : null}
           </div>
+          {workspace.members.length === 1 && canManageMembers ? (
+            <p className="mt-5 rounded-md border border-dashed border-[#c8c8bd] bg-[#fbfbf8] p-5 text-sm text-[#66685f]">
+              You&apos;re the only member right now. Use the invite form above to bring in your teammates or colleagues.
+            </p>
+          ) : null}
           <div className="mt-5 grid gap-3">
             {workspace.members.map((member) => (
               <div
@@ -180,8 +195,6 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
                         className="min-h-8 rounded-md border border-[#c8c8bd] bg-white px-2 text-xs font-medium text-[#2f604b] outline-none transition focus:border-[#2f604b]"
                       >
                         <option value="MEMBER">Member</option>
-                        <option value="TUTOR">Tutor</option>
-                        <option value="PROFESSOR">Professor</option>
                         <option value="ADMIN">Admin</option>
                       </select>
                       <PendingSubmitButton
@@ -318,6 +331,8 @@ function getInviteStatusMessage(status?: string) {
       return "Enter a valid email address and role.";
     case "unauthorized":
       return "Only the workspace owner can invite members.";
+    case "plan-limit":
+      return "This workspace is on the Free plan (max 5 members). Upgrade to Pro to invite more members.";
     case "already-member":
       return "That email is already an active member of this workspace.";
     case "member-removed":

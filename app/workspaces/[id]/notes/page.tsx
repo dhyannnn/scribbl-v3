@@ -99,7 +99,7 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
             <Link href={`/workspaces/${workspace.id}`} className="text-sm font-medium text-[#2f604b]">
               Back to {workspace.name}
             </Link>
-            <h1 className="mt-4 text-4xl font-semibold">Notes</h1>
+            <h1 className="mt-4 text-2xl font-semibold sm:text-3xl lg:text-4xl">Notes</h1>
             <p className="mt-3 text-base leading-7 text-[#62645c]">
               Course notes, whiteboards, and saved study materials live here.
             </p>

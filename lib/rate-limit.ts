@@ -40,4 +40,10 @@ export const RateLimits = {
   passwordUpdate:    (userId: string) => checkRateLimit(`password-update:${userId}`,  5, 60 * 60_000),
   meetingSchedule:   (userId: string) => checkRateLimit(`meeting-schedule:${userId}`,10, 60_000),
   handRaise:         (userId: string) => checkRateLimit(`hand-raise:${userId}`,      5, 60_000),
+  channelCreate:     (userId: string) => checkRateLimit(`channel-create:${userId}`,  5, 60_000),
+  channelDelete:     (userId: string) => checkRateLimit(`channel-delete:${userId}`,  5, 60_000),
+  groupCreate:       (userId: string) => checkRateLimit(`group-create:${userId}`,   10, 60_000),
+  groupDelete:       (userId: string) => checkRateLimit(`group-delete:${userId}`,   10, 60_000),
+  groupMemberAdd:    (userId: string) => checkRateLimit(`group-member-add:${userId}`,30, 60_000),
+  groupMemberRemove: (userId: string) => checkRateLimit(`group-member-remove:${userId}`,30, 60_000),
 };

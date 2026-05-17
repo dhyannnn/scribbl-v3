@@ -9,13 +9,13 @@ import { getCurrentUser } from "@/lib/current-user";
 import { sendWorkspaceInviteEmail } from "@/lib/email/workspace-invites";
 import { prisma } from "@/lib/prisma";
 
-const memberRoles = ["ADMIN", "MEMBER", "TUTOR", "PROFESSOR"] as const;
-const workspaceTypes = ["COURSE", "STUDY_GROUP", "TUTORING_GROUP"] as const;
+const memberRoles = ["ADMIN", "MEMBER"] as const;
+const workspaceTypes = ["TEAM", "PROJECT", "CLASS"] as const;
 
 export async function updateWorkspaceDetails(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
-  const typeValue = String(formData.get("type") ?? "STUDY_GROUP");
+  const typeValue = String(formData.get("type") ?? "TEAM");
   const description = String(formData.get("description") ?? "").trim();
 
   if (!workspaceId || !name || !workspaceTypes.includes(typeValue as (typeof workspaceTypes)[number])) {
@@ -109,6 +109,15 @@ export async function addWorkspaceMember(formData: FormData) {
 
   if (currentMembership?.role !== "OWNER" || currentMembership.status !== "ACTIVE") {
     redirect(`/workspaces/${workspace.id}/members?invite=unauthorized`);
+  }
+
+  // Plan check before rate limit — block free workspaces at member limit
+  const [workspacePlan, activeMemberCount] = await Promise.all([
+    prisma.workspace.findUnique({ where: { id: workspace.id }, select: { plan: true } }),
+    prisma.workspaceMember.count({ where: { workspaceId: workspace.id, status: "ACTIVE" } }),
+  ]);
+  if (workspacePlan?.plan === "FREE" && activeMemberCount >= 5) {
+    redirect(`/workspaces/${workspace.id}/members?invite=plan-limit`);
   }
 
   if (!RateLimits.inviteCreate(currentUser.id)) {

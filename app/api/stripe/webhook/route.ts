@@ -1,0 +1,208 @@
+import { headers } from "next/headers";
+import type { NextRequest } from "next/server";
+import { writeAuditLog } from "@/lib/audit-log";
+import { prisma } from "@/lib/prisma";
+import { stripe } from "@/lib/stripe";
+import type Stripe from "stripe";
+
+export const runtime = "nodejs";
+
+// Stripe requires the raw body to verify webhook signatures.
+export async function POST(request: NextRequest) {
+  const body = await request.text();
+  const headersList = await headers();
+  const signature = headersList.get("stripe-signature");
+
+  if (!signature) {
+    return new Response("Missing stripe-signature header", { status: 400 });
+  }
+
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    return new Response("Webhook secret not configured", { status: 500 });
+  }
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(
+      body,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET,
+    );
+  } catch {
+    return new Response("Invalid webhook signature", { status: 400 });
+  }
+
+  try {
+    switch (event.type) {
+      case "customer.subscription.created":
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as Stripe.Subscription;
+        await syncSubscription(subscription, null);
+        break;
+      }
+
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as Stripe.Subscription;
+        await cancelSubscription(subscription);
+        break;
+      }
+
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as Stripe.Invoice;
+        // In Stripe API v2026-04-22 (dahlia), subscription ID lives in parent.subscription_details.subscription
+        const parent = invoice.parent as (Stripe.Invoice.Parent & { subscription_details?: { subscription?: string | Stripe.Subscription } }) | null;
+        const subscriptionId = parent?.subscription_details?.subscription;
+        if (subscriptionId) {
+          const sid = typeof subscriptionId === "string" ? subscriptionId : subscriptionId.id;
+          const subscription = await stripe.subscriptions.retrieve(sid);
+          // invoice.period_end is the current period end in the new API
+          await syncSubscription(subscription, invoice.period_end ?? null);
+        }
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const parent = invoice.parent as (Stripe.Invoice.Parent & { subscription_details?: { subscription?: string | Stripe.Subscription } }) | null;
+        const subscriptionId = parent?.subscription_details?.subscription;
+        if (subscriptionId) {
+          const sid = typeof subscriptionId === "string" ? subscriptionId : subscriptionId.id;
+          const sub = await prisma.subscription.findFirst({
+            where: { stripeSubscriptionId: sid },
+            select: { workspaceId: true },
+          });
+          await prisma.subscription.updateMany({
+            where: { stripeSubscriptionId: sid },
+            data: { status: "PAST_DUE" },
+          });
+          await writeAuditLog({
+            action: "BILLING_PAYMENT_FAILED",
+            workspaceId: sub?.workspaceId,
+            targetId: sid,
+            metadata: { stripeSubscriptionId: sid },
+          });
+        }
+        break;
+      }
+    }
+  } catch (err) {
+    console.error("[stripe webhook]", event.type, err);
+    return new Response("Webhook handler error", { status: 500 });
+  }
+
+  return new Response("ok", { status: 200 });
+}
+
+async function syncSubscription(subscription: Stripe.Subscription, periodEnd: number | null) {
+  const customerId = subscription.customer as string;
+  const priceId = subscription.items.data[0]?.price.id;
+  const plan = getPlanFromPriceId(priceId);
+  const status = mapStripeStatus(subscription.status);
+  const currentPeriodEnd = periodEnd ? new Date(periodEnd * 1000) : null;
+
+  const existing = await prisma.subscription.findFirst({
+    where: { stripeCustomerId: customerId },
+  });
+
+  if (!existing) return;
+
+  const oldPlan = existing.plan;
+
+  await prisma.subscription.update({
+    where: { id: existing.id },
+    data: {
+      stripeSubscriptionId: subscription.id,
+      stripePriceId: priceId,
+      plan,
+      status,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      ...(currentPeriodEnd ? { currentPeriodEnd } : {}),
+    },
+  });
+
+  // Sync plan down to Workspace
+  if (existing.workspaceId) {
+    await prisma.workspace.update({
+      where: { id: existing.workspaceId },
+      data: { plan },
+    });
+  }
+
+  // Sync plan down to Organization and all its workspaces
+  if (existing.organizationId) {
+    await prisma.organization.update({
+      where: { id: existing.organizationId },
+      data: { plan, ...(currentPeriodEnd ? { currentPeriodEnd } : {}) },
+    });
+    await prisma.workspace.updateMany({
+      where: { organizationId: existing.organizationId },
+      data: { plan },
+    });
+  }
+
+  // Write audit log when plan actually changes
+  if (oldPlan !== plan) {
+    await writeAuditLog({
+      action: "BILLING_UPGRADED",
+      workspaceId: existing.workspaceId,
+      targetId: subscription.id,
+      metadata: { oldPlan, newPlan: plan, stripeSubscriptionId: subscription.id },
+    });
+  }
+}
+
+async function cancelSubscription(subscription: Stripe.Subscription) {
+  const customerId = subscription.customer as string;
+
+  const existing = await prisma.subscription.findFirst({
+    where: { stripeCustomerId: customerId },
+  });
+
+  if (!existing) return;
+
+  await prisma.subscription.update({
+    where: { id: existing.id },
+    data: { plan: "FREE", status: "CANCELED" },
+  });
+
+  if (existing.workspaceId) {
+    await prisma.workspace.update({
+      where: { id: existing.workspaceId },
+      data: { plan: "FREE" },
+    });
+  }
+
+  if (existing.organizationId) {
+    await prisma.organization.update({
+      where: { id: existing.organizationId },
+      data: { plan: "FREE", currentPeriodEnd: null },
+    });
+    await prisma.workspace.updateMany({
+      where: { organizationId: existing.organizationId },
+      data: { plan: "FREE" },
+    });
+  }
+
+  await writeAuditLog({
+    action: "BILLING_CANCELED",
+    workspaceId: existing.workspaceId,
+    targetId: subscription.id,
+    metadata: { stripeSubscriptionId: subscription.id, previousPlan: existing.plan },
+  });
+}
+
+function getPlanFromPriceId(priceId: string | undefined) {
+  if (priceId === process.env.STRIPE_INSTITUTION_PRICE_ID) return "INSTITUTION" as const;
+  if (priceId === process.env.STRIPE_PRO_PRICE_ID) return "PRO" as const;
+  return "FREE" as const;
+}
+
+function mapStripeStatus(status: Stripe.Subscription.Status) {
+  switch (status) {
+    case "active":   return "ACTIVE" as const;
+    case "trialing": return "TRIALING" as const;
+    case "past_due": return "PAST_DUE" as const;
+    case "canceled": return "CANCELED" as const;
+    default:         return "INCOMPLETE" as const;
+  }
+}

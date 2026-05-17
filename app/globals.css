@@ -1,48 +1,86 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ── Design tokens ───────────────────────────────────────────────────── */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: Arial, Helvetica, sans-serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  /* Fonts — mapped from next/font CSS variables */
+  --font-display: var(--font-hanken);
+  --font-sans:    var(--font-inter);
+  --font-mono:    var(--font-jetbrains);
+
+  /* Surfaces */
+  --color-bg:               #f9f9ff;
+  --color-surface:          #ffffff;
+  --color-surface-low:      #eff4ff;
+  --color-surface-mid:      #ededf4;
+  --color-surface-high:     #e8e7ee;
+  --color-surface-highest:  #e2e2e9;
+
+  /* Text */
+  --color-text:             #1a1b20;
+  --color-muted:            #45464d;
+  --color-subtle:           #7e7576;
+
+  /* Borders */
+  --color-border:           #c6c6cd;
+  --color-border-strong:    #9e9ea6;
+
+  /* Primary (black) */
+  --color-primary:          #000000;
+  --color-on-primary:       #ffffff;
+
+  /* Secondary / brand blue */
+  --color-secondary:        #085ac0;
+  --color-secondary-hover:  #2170e4;
+  --color-secondary-dim:    #d8e2ff;
+  --color-on-secondary:     #ffffff;
+
+  /* Live / hero card */
+  --color-live:             #131b2e;
+  --color-on-live:          #ffffff;
+
+  /* Danger */
+  --color-danger:           #ba1a1a;
+  --color-danger-dim:       #ffdad6;
+  --color-on-danger:        #ffffff;
+
+  /* Success */
+  --color-success:          #1a6b3c;
+  --color-success-dim:      #d3f0e3;
+
+  /* Warning */
+  --color-warning:          #7a5200;
+  --color-warning-dim:      #fdefc3;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* ── Base styles ─────────────────────────────────────────────────────── */
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 
 #liveblocks-badge {
   display: none !important;
 }
 
+/* ── Animations ──────────────────────────────────────────────────────── */
+
 @keyframes chat-typing-dot {
-  0%,
-  60%,
-  100% {
-    opacity: 0.4;
-    transform: translateY(0);
-  }
-  30% {
-    opacity: 1;
-    transform: translateY(-4px);
-  }
+  0%, 60%, 100% { opacity: 0.4; transform: translateY(0); }
+  30%            { opacity: 1;   transform: translateY(-4px); }
 }
 
-/* ── TipTap / ProseMirror editor styles ─────────────────────────────── */
+@keyframes emoji-float {
+  0%   { opacity: 0; transform: translateY(0)     scale(0.5); }
+  12%  { opacity: 1; transform: translateY(-18px)  scale(1.15); }
+  25%  { opacity: 1; transform: translateY(-38px)  scale(1); }
+  80%  { opacity: 1; transform: translateY(-110px) scale(1); }
+  100% { opacity: 0; transform: translateY(-140px) scale(0.85); }
+}
+
+/* ── TipTap / ProseMirror ────────────────────────────────────────────── */
 
 .ProseMirror {
   outline: none;
@@ -50,19 +88,19 @@ body {
   padding: 1.25rem 1.5rem;
   font-size: 1rem;
   line-height: 1.75;
-  color: #20201d;
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--color-text);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 
 .ProseMirror p { margin: 0 0 0.75em; }
 .ProseMirror p:last-child { margin-bottom: 0; }
 
-.ProseMirror h1 { font-size: 2rem;   font-weight: 700; margin: 1.25em 0 0.5em; }
-.ProseMirror h2 { font-size: 1.6rem; font-weight: 700; margin: 1.1em 0 0.45em; }
-.ProseMirror h3 { font-size: 1.3rem; font-weight: 600; margin: 1em 0 0.4em; }
+.ProseMirror h1 { font-size: 2rem;   font-weight: 700; margin: 1.25em 0 0.5em;  font-family: var(--font-display, sans-serif); }
+.ProseMirror h2 { font-size: 1.6rem; font-weight: 700; margin: 1.1em 0 0.45em;  font-family: var(--font-display, sans-serif); }
+.ProseMirror h3 { font-size: 1.3rem; font-weight: 600; margin: 1em 0 0.4em;     font-family: var(--font-display, sans-serif); }
 .ProseMirror h4 { font-size: 1.1rem; font-weight: 600; margin: 0.9em 0 0.35em; }
 .ProseMirror h5 { font-size: 1rem;   font-weight: 600; margin: 0.85em 0 0.3em; }
-.ProseMirror h6 { font-size: 0.9rem; font-weight: 600; margin: 0.8em 0 0.3em; color: #62645c; }
+.ProseMirror h6 { font-size: 0.9rem; font-weight: 600; margin: 0.8em 0 0.3em; color: var(--color-muted); }
 
 .ProseMirror ul { list-style: disc;    padding-left: 1.5em; margin: 0.5em 0 0.75em; }
 .ProseMirror ol { list-style: decimal; padding-left: 1.5em; margin: 0.5em 0 0.75em; }
@@ -72,21 +110,21 @@ body {
 .ProseMirror ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5em; }
 .ProseMirror ul[data-type="taskList"] li > label { flex-shrink: 0; margin-top: 0.25em; }
 .ProseMirror ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
-.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div { text-decoration: line-through; color: #8a8c82; }
+.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div { text-decoration: line-through; color: var(--color-subtle); }
 
 .ProseMirror blockquote {
-  border-left: 4px solid #2f604b;
+  border-left: 4px solid var(--color-secondary);
   padding-left: 1em;
   margin: 0.75em 0;
-  color: #4d4f47;
+  color: var(--color-muted);
   font-style: italic;
 }
 
 .ProseMirror code {
-  background: #f0f0eb;
+  background: var(--color-surface-mid);
   border-radius: 0.25em;
   padding: 0.1em 0.35em;
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: var(--font-mono, monospace);
   font-size: 0.875em;
 }
 
@@ -102,14 +140,14 @@ body {
 
 .ProseMirror hr {
   border: none;
-  border-top: 2px solid #e4e4dc;
+  border-top: 2px solid var(--color-border);
   margin: 1.5em 0;
 }
 
-.ProseMirror a { color: #2f604b; text-decoration: underline; }
-.ProseMirror a:hover { color: #244b3a; }
+.ProseMirror a { color: var(--color-secondary); text-decoration: underline; }
+.ProseMirror a:hover { color: var(--color-secondary-hover); }
 
-.ProseMirror sub { vertical-align: sub; font-size: 0.8em; }
+.ProseMirror sub { vertical-align: sub;   font-size: 0.8em; }
 .ProseMirror sup { vertical-align: super; font-size: 0.8em; }
 
 /* Table */
@@ -118,67 +156,52 @@ body {
   border-radius: 0.375em;
   margin: 0.75em 0;
 }
-.ProseMirror table {
-  border-collapse: collapse;
-  width: 100%;
-}
+.ProseMirror table { border-collapse: collapse; width: 100%; }
 .ProseMirror table td,
 .ProseMirror table th {
-  border: 1px solid #d8d8ce;
+  border: 1px solid var(--color-border);
   padding: 0.5em 0.75em;
   min-width: 80px;
   vertical-align: top;
   position: relative;
 }
-.ProseMirror table th {
-  background: #f5f5f0;
-  font-weight: 600;
-}
-.ProseMirror table .selectedCell { background: #e8f0ea; }
+.ProseMirror table th { background: var(--color-surface-low); font-weight: 600; }
+.ProseMirror table .selectedCell { background: var(--color-secondary-dim); }
 .ProseMirror table .column-resize-handle {
   position: absolute;
-  right: -2px;
-  top: 0;
-  bottom: 0;
+  right: -2px; top: 0; bottom: 0;
   width: 4px;
-  background: #2f604b;
+  background: var(--color-secondary);
   pointer-events: none;
   z-index: 10;
   opacity: 0;
   transition: opacity 0.15s;
 }
 .ProseMirror table td:hover .column-resize-handle,
-.ProseMirror table th:hover .column-resize-handle {
-  opacity: 1;
-}
-.resize-cursor,
-.resize-cursor * {
-  cursor: col-resize !important;
-}
+.ProseMirror table th:hover .column-resize-handle { opacity: 1; }
+.resize-cursor, .resize-cursor * { cursor: col-resize !important; }
 
 /* Placeholder */
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
-  color: #9a9c92;
+  color: var(--color-subtle);
   pointer-events: none;
   float: left;
   height: 0;
 }
 
+/* Document editor */
 .scribbl-document-editor .ProseMirror {
   background: #ffffff;
-  border: 1px solid #d8d8ce;
-  box-shadow: 0 1px 2px rgba(32, 32, 29, 0.08);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 1px 3px rgba(26, 27, 32, 0.08);
   margin: 2rem auto;
   max-width: calc(100vw - 2rem);
   min-height: 1056px;
   padding: 72px;
   width: 816px;
 }
-
-.scribbl-document-editor .ProseMirror-focused {
-  outline: none;
-}
+.scribbl-document-editor .ProseMirror-focused { outline: none; }
 
 @media (max-width: 720px) {
   .scribbl-document-editor .ProseMirror {
@@ -215,9 +238,9 @@ body {
   pointer-events: none;
 }
 
-body.scribbl-video-split-active {
-  overflow-x: hidden;
-}
+/* ── Video split layout ───────────────────────────────────────────────── */
+
+body.scribbl-video-split-active { overflow-x: hidden; }
 
 .scribbl-full-video-room,
 .scribbl-full-video-room.lk-room-container,
@@ -228,13 +251,8 @@ body.scribbl-video-split-active {
   min-height: 0 !important;
 }
 
-.scribbl-full-video-room.lk-room-container {
-  display: block !important;
-}
-
-.scribbl-full-video-room .lk-video-conference-inner {
-  min-height: 0 !important;
-}
+.scribbl-full-video-room.lk-room-container { display: block !important; }
+.scribbl-full-video-room .lk-video-conference-inner { min-height: 0 !important; }
 
 body.scribbl-video-split-active [data-split-stack] {
   grid-template-columns: minmax(0, 1fr) !important;
@@ -250,14 +268,12 @@ body.scribbl-video-split-active [data-split-stack] {
     width: calc(100vw - var(--scribbl-video-split-width));
     min-width: 0;
   }
-
   body.scribbl-video-split-active [data-meeting-hub-shell] {
     margin-left: auto;
     margin-right: auto;
     max-width: min(960px, 100%);
     width: 100%;
   }
-
   .scribbl-video-split-panel {
     bottom: 0;
     min-height: 0;
@@ -270,17 +286,5 @@ body.scribbl-video-split-active [data-split-stack] {
 }
 
 @media (max-width: 1100px) {
-  body.scribbl-video-split-active [data-meeting-hub-main] {
-    width: 100vw;
-  }
-}
-
-/* ── Emoji reaction float animation ─────────────────────────────────── */
-
-@keyframes emoji-float {
-  0%   { opacity: 0; transform: translateY(0)     scale(0.5); }
-  12%  { opacity: 1; transform: translateY(-18px)  scale(1.15); }
-  25%  { opacity: 1; transform: translateY(-38px)  scale(1); }
-  80%  { opacity: 1; transform: translateY(-110px) scale(1); }
-  100% { opacity: 0; transform: translateY(-140px) scale(0.85); }
+  body.scribbl-video-split-active [data-meeting-hub-main] { width: 100vw; }
 }

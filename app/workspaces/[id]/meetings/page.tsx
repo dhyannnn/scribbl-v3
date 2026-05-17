@@ -16,13 +16,14 @@ type MeetingView = "upcoming" | "past" | "canceled" | "all";
 
 type PageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ meeting?: string; view?: string }>;
+  searchParams: Promise<{ meeting?: string; view?: string; groups?: string }>;
 };
 
 export default async function MeetingsPage({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const { meeting: meetingStatus, view } = await searchParams;
+  const { meeting: meetingStatus, view, groups: groupsFilter } = await searchParams;
   const activeView = getMeetingView(view);
+  const showAllGroups = groupsFilter === "all";
   const now = new Date();
   const currentUser = await getCurrentUser();
 
@@ -32,14 +33,24 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
 
   const workspace = await prisma.workspace.findUnique({
     where: { id },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      plan: true,
       members: {
-        where: {
-          status: "ACTIVE",
-        },
+        where: { status: "ACTIVE" },
+        select: { userId: true, role: true },
+      },
+      groups: {
         select: {
-          userId: true,
+          id: true,
+          name: true,
+          members: {
+            where: { userId: currentUser.id },
+            select: { userId: true },
+          },
         },
+        orderBy: { createdAt: "asc" },
       },
       meetings: {
         select: {
@@ -49,28 +60,17 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
           startsAt: true,
           endsAt: true,
           canceledAt: true,
+          groupId: true,
           provider: true,
           participants: {
-            where: {
-              user: {
-                deletedAt: null,
-              },
-            },
+            where: { user: { deletedAt: null } },
             select: { id: true },
           },
           artifacts: {
             where: {
               OR: [
-                {
-                  note: {
-                    deletedAt: null,
-                  },
-                },
-                {
-                  fileId: {
-                    not: null,
-                  },
-                },
+                { note: { deletedAt: null } },
+                { fileId: { not: null } },
               ],
             },
             select: { id: true },
@@ -85,7 +85,9 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
     notFound();
   }
 
-  if (!workspace.members.some((member) => member.userId === currentUser.id)) {
+  const currentMembership = workspace.members.find((m) => m.userId === currentUser.id);
+
+  if (!currentMembership) {
     return (
       <ProtectedPageMessage
         title="You do not have access"
@@ -94,19 +96,33 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
     );
   }
 
+  const canManage = currentMembership.role === "OWNER" || currentMembership.role === "ADMIN";
+  const isPro = workspace.plan !== "FREE";
+
+  // Groups this user belongs to (for filtering)
+  const myGroupIds = new Set(
+    workspace.groups.filter((g) => g.members.length > 0).map((g) => g.id),
+  );
+
+  // Owners/admins see everything by default; they can opt into "my groups" view.
+  // Members always see only their groups + ungrouped meetings.
+  const filterToMyGroups = !canManage || groupsFilter === "mine";
+
   const visibleMeetings = workspace.meetings.filter((meeting) => {
     const lifecycle = getMeetingLifecycle(meeting, now);
 
-    if (activeView === "all") {
-      return true;
-    }
+    if (activeView === "canceled" && lifecycle !== "canceled") return false;
+    if (activeView === "past" && lifecycle !== "ended") return false;
+    if (activeView === "upcoming" && (lifecycle === "canceled" || lifecycle === "ended")) return false;
 
-    if (activeView === "canceled") {
-      return lifecycle === "canceled";
-    }
+    if (filterToMyGroups && meeting.groupId !== null && !myGroupIds.has(meeting.groupId)) return false;
 
-    return activeView === "past" ? lifecycle === "ended" : lifecycle !== "canceled" && lifecycle !== "ended";
+    return true;
   });
+
+  const groupsForDropdown = isPro ? workspace.groups : [];
+  // Build a name map for the group badge on each meeting card
+  const groupNameMap = new Map(workspace.groups.map((g) => [g.id, g.name]));
 
   return (
     <main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
@@ -116,9 +132,9 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
             <Link href={`/workspaces/${workspace.id}`} className="text-sm font-medium text-[#2f604b]">
               Back to {workspace.name}
             </Link>
-            <h1 className="mt-4 text-4xl font-semibold">Meetings</h1>
+            <h1 className="mt-4 text-2xl font-semibold sm:text-3xl lg:text-4xl">Meetings</h1>
             <p className="mt-3 text-base leading-7 text-[#62645c]">
-              Scheduled tutoring sessions, online classes, and saved call artifacts.
+              Scheduled sessions, meetings, and saved call artifacts.
             </p>
           </div>
         </header>
@@ -138,7 +154,7 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
               <input
                 name="title"
                 required
-                placeholder="Chapter review, tutoring session, online class..."
+                placeholder="Team sync, project review, planning session..."
                 className="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#2f604b] focus:bg-white"
               />
             </label>
@@ -176,33 +192,69 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
                 className="resize-y rounded-md border border-[#c8c8bd] bg-[#fbfbf8] p-3 text-sm leading-6 outline-none transition focus:border-[#2f604b] focus:bg-white"
               />
             </label>
+            {groupsForDropdown.length > 0 ? (
+              <label className="grid gap-2 lg:col-span-4">
+                <span className="text-sm font-medium text-[#4d4f47]">
+                  Scope to group{" "}
+                  <span className="font-normal text-[#66685f]">— only that group gets notified (optional)</span>
+                </span>
+                <select
+                  name="groupId"
+                  defaultValue=""
+                  className="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#2f604b] focus:bg-white lg:max-w-sm"
+                >
+                  <option value="">Whole workspace</option>
+                  {groupsForDropdown.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </form>
         </section>
 
-        <nav className="flex flex-wrap gap-2">
-          {[
-            ["upcoming", "Upcoming"],
-            ["past", "Past"],
-            ["canceled", "Canceled"],
-            ["all", "All"],
-          ].map(([value, label]) => (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <nav className="flex flex-wrap gap-2">
+            {[
+              ["upcoming", "Upcoming"],
+              ["past", "Past"],
+              ["canceled", "Canceled"],
+              ["all", "All"],
+            ].map(([value, label]) => (
+              <Link
+                key={value}
+                href={`/workspaces/${workspace.id}/meetings?view=${value}${filterToMyGroups && canManage ? "&groups=mine" : ""}`}
+                className={`rounded-md px-4 py-2 text-sm font-medium transition ${
+                  activeView === value
+                    ? "bg-[#2f604b] text-white"
+                    : "border border-[#c8c8bd] bg-white text-[#2f604b] hover:bg-[#eef5ef]"
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+          {canManage && isPro && workspace.groups.length > 0 ? (
             <Link
-              key={value}
-              href={`/workspaces/${workspace.id}/meetings?view=${value}`}
-              className={`rounded-md px-4 py-2 text-sm font-medium transition ${
-                activeView === value
-                  ? "bg-[#2f604b] text-white"
-                  : "border border-[#c8c8bd] bg-white text-[#2f604b] hover:bg-[#eef5ef]"
-              }`}
+              href={`/workspaces/${workspace.id}/meetings?view=${activeView}${filterToMyGroups ? "" : "&groups=mine"}`}
+              className="shrink-0 rounded-md border border-[#c8c8bd] bg-white px-4 py-2 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef]"
             >
-              {label}
+              {filterToMyGroups ? "Show all groups" : "My groups only"}
             </Link>
-          ))}
-        </nav>
+          ) : null}
+        </div>
 
         <section className="grid gap-4">
           {visibleMeetings.map((meeting) => (
-            <MeetingCard key={meeting.id} workspaceId={workspace.id} meeting={meeting} now={now} />
+            <MeetingCard
+              key={meeting.id}
+              workspaceId={workspace.id}
+              meeting={meeting}
+              now={now}
+              groupName={meeting.groupId ? (groupNameMap.get(meeting.groupId) ?? null) : null}
+            />
           ))}
           {visibleMeetings.length === 0 ? (
             <div className="rounded-md border border-dashed border-[#c8c8bd] bg-white p-8 text-center text-sm text-[#66685f]">
@@ -219,9 +271,11 @@ function MeetingCard({
   workspaceId,
   meeting,
   now,
+  groupName,
 }: {
   workspaceId: string;
   now: Date;
+  groupName: string | null;
   meeting: {
     id: string;
     title: string;
@@ -244,31 +298,38 @@ function MeetingCard({
     >
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-                  <p className="text-sm font-medium text-[#2f604b]">
-                    {meeting.startsAt.toLocaleString("en-US", {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                  <h2 className="mt-2 text-xl font-semibold">{meeting.title}</h2>
-                  <span className={`mt-2 inline-flex rounded-md px-3 py-1 text-xs font-medium ${getMeetingBadgeClassName(lifecycle)}`}>
-                    {formatMeetingLifecycleLabel(lifecycle)}
-                  </span>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-[#66685f]">{meeting.description}</p>
-                </div>
-                <div className="grid gap-2 rounded-md bg-[#fbfbf8] p-4 text-sm text-[#4d4f47] sm:min-w-[260px]">
-                  <p>{meeting.participants.length} participant{meeting.participants.length === 1 ? "" : "s"}</p>
-                  <p>{meeting.artifacts.length} saved artifact{meeting.artifacts.length === 1 ? "" : "s"}</p>
-                  <p>{meeting.provider ?? "No provider yet"}</p>
-                  <span className="mt-2 inline-flex justify-center rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white">
-                    {actionLabel}
-                  </span>
-                </div>
-              </div>
-            </Link>
+          <p className="text-sm font-medium text-[#2f604b]">
+            {meeting.startsAt.toLocaleString("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-semibold">{meeting.title}</h2>
+            {groupName ? (
+              <span className="rounded-md bg-[#eef3f8] px-2 py-0.5 text-xs font-medium text-[#2f4f66]">
+                {groupName}
+              </span>
+            ) : null}
+          </div>
+          <span className={`mt-2 inline-flex rounded-md px-3 py-1 text-xs font-medium ${getMeetingBadgeClassName(lifecycle)}`}>
+            {formatMeetingLifecycleLabel(lifecycle)}
+          </span>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#66685f]">{meeting.description}</p>
+        </div>
+        <div className="grid gap-2 rounded-md bg-[#fbfbf8] p-4 text-sm text-[#4d4f47] sm:min-w-[260px]">
+          <p>{meeting.participants.length} participant{meeting.participants.length === 1 ? "" : "s"}</p>
+          <p>{meeting.artifacts.length} saved artifact{meeting.artifacts.length === 1 ? "" : "s"}</p>
+          <p>{meeting.provider ?? "No provider yet"}</p>
+          <span className="mt-2 inline-flex justify-center rounded-md bg-[#2f604b] px-4 py-2 text-sm font-medium text-white">
+            {actionLabel}
+          </span>
+        </div>
+      </div>
+    </Link>
   );
 }
 
