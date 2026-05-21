@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/current-user";
 import { getWorkspaceActivity } from "@/lib/activity";
 import { getMeetingLifecycle, canJoinMeeting } from "@/lib/meeting-lifecycle";
 import { prisma } from "@/lib/prisma";
+import { getGradient, getInitials } from "@/lib/color-hash";
 import { createWorkspace } from "./actions";
 import { acceptWorkspaceInvite } from "./invites/actions";
 import { signOut } from "./auth/actions";
@@ -125,7 +126,7 @@ export default async function Home({
           take: 5,
         })
       : [],
-    getWorkspaceActivity(workspaceIds, 15),
+    getWorkspaceActivity(workspaceIds, 8),
     workspaceIds.length > 0
       ? prisma.meeting.findMany({
           where: {
@@ -142,17 +143,17 @@ export default async function Home({
   const datesWithMeetings = new Set(
     calendarMeetings.map((m) => m.startsAt.toISOString().slice(0, 10))
   );
+  const continueActivity = activity[0] ?? null;
   const heroLifecycle = liveOrNext ? getMeetingLifecycle(liveOrNext, now) : null;
   const isHeroLive = heroLifecycle ? canJoinMeeting(heroLifecycle) : false;
 
   const today = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-
   return (
     <div className="flex min-h-screen bg-[var(--color-bg)]">
       <AppSidebar activePath="/" />
 
-      <main className="flex-1 pl-64 min-w-0">
-        <div className="mx-auto max-w-[1200px] px-8 py-8">
+      <main className="min-w-0 flex-1 pb-24 pt-16 lg:pb-0 lg:pt-0 lg:pl-64">
+        <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
 
           {/* Welcome header */}
           <div className="mb-8 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
@@ -167,7 +168,7 @@ export default async function Home({
             <div className="mt-4 flex items-center gap-3 sm:mt-0">
               {workspaces.length > 0 ? (
                 <Link
-                  href={`/workspaces/${workspaces[0].id}/meetings`}
+                  href="/new/session"
                   className="flex items-center gap-2 rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-80"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -212,11 +213,15 @@ export default async function Home({
             </section>
           ) : null}
 
-          {/* Plan limit warning */}
+          {/* Workspace status banners */}
           {workspaceStatus === "plan-limit" ? (
             <div className="mb-8 rounded-xl border border-[var(--color-warning-dim)] bg-[var(--color-warning-dim)] px-5 py-4 text-sm text-[var(--color-warning)]">
-              Free plan allows up to 3 workspaces.{" "}
+              Free plan allows 1 workspace.{" "}
               <Link href="/pricing" className="font-semibold underline">Upgrade to Pro</Link> for unlimited workspaces.
+            </div>
+          ) : workspaceStatus === "deleted" ? (
+            <div className="mb-8 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-4 text-sm text-[var(--color-muted)]">
+              Workspace deleted successfully.
             </div>
           ) : null}
 
@@ -285,21 +290,38 @@ export default async function Home({
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {workspaces.map((workspace) => (
+                  {workspaces.map((workspace) => {
+                    const [gradFrom, gradTo] = getGradient(workspace.name);
+                    const initials = getInitials(workspace.name);
+                    return (
                     <Link
                       key={workspace.id}
                       href={`/workspaces/${workspace.id}`}
-                      className="group relative flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 transition hover:-translate-y-0.5 hover:border-[var(--color-secondary)] hover:shadow-md"
+                      className="group relative flex flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] transition hover:-translate-y-0.5 hover:border-[var(--color-secondary)] hover:shadow-md"
                     >
+                      {/* Gradient header with initials */}
+                      <div
+                        className="flex h-16 w-full items-end px-5 pb-3"
+                        style={{ background: `linear-gradient(135deg, ${gradFrom}, ${gradTo})` }}
+                      >
+                        <div
+                          className="flex size-10 items-center justify-center rounded-xl border-2 border-white/30 text-sm font-bold text-white"
+                          style={{ background: "rgba(255,255,255,0.18)" }}
+                        >
+                          {initials}
+                        </div>
+                      </div>
+                      {/* Card content */}
+                      <div className="flex flex-col p-5">
                       {workspace.plan !== "FREE" ? (
-                        <span className="absolute right-4 top-4 rounded-full bg-[var(--color-secondary-dim)] px-2.5 py-0.5 font-mono text-xs font-semibold text-[var(--color-secondary)]">
+                        <span className="absolute right-4 top-4 rounded-full bg-white/25 px-2.5 py-0.5 font-mono text-xs font-semibold text-white">
                           {workspace.plan === "INSTITUTION" ? "Institution" : "Pro"}
                         </span>
                       ) : null}
                       <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">
                         {workspace.type.replace("_", " ").toLowerCase()}
                       </p>
-                      <h3 className="mt-2 font-display text-lg font-semibold text-[var(--color-text)]">{workspace.name}</h3>
+                      <h3 className="mt-1 font-display text-lg font-semibold text-[var(--color-text)]">{workspace.name}</h3>
                       {workspace.description ? (
                         <p className="mt-1.5 line-clamp-2 text-sm leading-6 text-[var(--color-muted)]">
                           {workspace.description}
@@ -316,8 +338,10 @@ export default async function Home({
                           {workspace._count.members} member{workspace._count.members !== 1 ? "s" : ""}
                         </span>
                       </div>
+                      </div>{/* end card content */}
                     </Link>
-                  ))}
+                    );
+                  })}
 
                   {/* Create workspace card */}
                   <details className="group rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]">
@@ -369,6 +393,28 @@ export default async function Home({
                   </details>
                 </div>
               </section>
+
+              {workspaces.length > 0 ? (
+                <section aria-label="Quick actions" className="overflow-x-auto pb-1">
+                  <div className="flex min-w-max gap-3">
+                    <QuickActionLink
+                      href="/new/note"
+                      icon="note"
+                      label="New Note"
+                    />
+                    <QuickActionLink
+                      href={continueActivity?.href ?? "/notifications"}
+                      icon={continueActivity?.icon ?? "activity"}
+                      label="Continue"
+                    />
+                    <QuickActionLink
+                      href="/new/file"
+                      icon="file"
+                      label="Upload File"
+                    />
+                  </div>
+                </section>
+              ) : null}
             </div>
 
             {/* Right column — activity feed */}
@@ -414,7 +460,12 @@ export default async function Home({
 
               {/* Activity feed */}
               <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
-                <h2 className="mb-4 font-display text-base font-semibold text-[var(--color-text)]">Recent Activity</h2>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h2 className="font-display text-base font-semibold text-[var(--color-text)]">Recent Activity</h2>
+                  <Link href="/" className="shrink-0 font-mono text-xs font-semibold text-[var(--color-secondary)] hover:underline">
+                    View all
+                  </Link>
+                </div>
                 {activity.length > 0 ? (
                   <div className="flex flex-col gap-4">
                     {activity.map((item) => (
@@ -447,6 +498,86 @@ export default async function Home({
       </main>
     </div>
   );
+}
+
+function QuickActionLink({
+  href,
+  icon,
+  label,
+}: {
+  href: string;
+  icon: "activity" | "billing" | "file" | "group" | "meeting" | "member" | "note" | "recording";
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 text-sm font-semibold text-[var(--color-text)] shadow-sm transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
+    >
+      <QuickActionIcon icon={icon} />
+      <span>{label}</span>
+    </Link>
+  );
+}
+
+function QuickActionIcon({ icon }: { icon: "activity" | "billing" | "file" | "group" | "meeting" | "member" | "note" | "recording" }) {
+  const cls = "shrink-0";
+  switch (icon) {
+    case "activity":
+      return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+        </svg>
+      );
+    case "billing":
+      return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+          <rect x="2" y="5" width="20" height="14" rx="2" />
+          <line x1="2" y1="10" x2="22" y2="10" />
+        </svg>
+      );
+    case "meeting":
+      return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+          <polygon points="23 7 16 12 23 17 23 7" />
+          <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+        </svg>
+      );
+    case "file":
+      return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+      );
+    case "group":
+    case "member":
+      return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="8.5" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      );
+    case "recording":
+      return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      );
+    default:
+      return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+      );
+  }
 }
 
 function MiniCalendar({

@@ -5,13 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { acceptWorkspaceInvite } from "../actions";
 
 type InvitePageProps = {
-  params: Promise<{
-    token: string;
-  }>;
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ error?: string }>;
 };
 
-export default async function InvitePage({ params }: InvitePageProps) {
+export default async function InvitePage({ params, searchParams }: InvitePageProps) {
   const { token } = await params;
+  const { error } = await searchParams;
   const [currentUser, invite] = await Promise.all([
     getCurrentUser(),
     prisma.workspaceInvite.findUnique({
@@ -47,14 +47,10 @@ export default async function InvitePage({ params }: InvitePageProps) {
           {invite.invitedBy.displayName} invited {invite.email} as {invite.role.toLowerCase()}.
         </p>
 
-        <div className="mt-6 rounded-md bg-[#fbfbf8] p-4 text-sm leading-6 text-[#4d4f47]">
-          {getInviteMessage({
-            currentUserEmail: currentUser?.email,
-            emailMatches,
-            isExpired,
-            isPending,
-            status: invite.status,
-          })}
+        <div className={`mt-6 rounded-md p-4 text-sm leading-6 ${error === "limit-reached" ? "bg-[#fdefc3] text-[#7a5200]" : "bg-[#fbfbf8] text-[#4d4f47]"}`}>
+          {error === "limit-reached"
+            ? "This workspace has reached its Free plan member limit (3 members). Ask the workspace owner to upgrade to Pro to add more members."
+            : getInviteMessage({ currentUserEmail: currentUser?.email, emailMatches, isExpired, isPending, status: invite.status })}
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3">

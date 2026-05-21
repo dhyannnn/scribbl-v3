@@ -4,10 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { writeAuditLog } from "@/lib/audit-log";
 import { createAppUrl } from "@/lib/app-url";
+import { FREE_MEMBER_LIMIT } from "@/lib/billing";
 import { RateLimits } from "@/lib/rate-limit";
 import { getCurrentUser } from "@/lib/current-user";
 import { sendWorkspaceInviteEmail } from "@/lib/email/workspace-invites";
 import { prisma } from "@/lib/prisma";
+import { stripe } from "@/lib/stripe";
+import { createAdminClient, getStorageBucketName } from "@/lib/supabase/admin";
 
 const memberRoles = ["ADMIN", "MEMBER"] as const;
 const workspaceTypes = ["TEAM", "PROJECT", "CLASS"] as const;
@@ -111,12 +114,16 @@ export async function addWorkspaceMember(formData: FormData) {
     redirect(`/workspaces/${workspace.id}/members?invite=unauthorized`);
   }
 
-  // Plan check before rate limit — block free workspaces at member limit
-  const [workspacePlan, activeMemberCount] = await Promise.all([
+  // Plan check before rate limit — Free workspaces have a hard member cap; paid plans bill overages.
+  // Count both ACTIVE and INVITED members so pending invites are included in the cap —
+  // otherwise multiple invites can be sent against the same slot and all bounce at acceptance.
+  const [workspacePlan, effectiveMemberCount] = await Promise.all([
     prisma.workspace.findUnique({ where: { id: workspace.id }, select: { plan: true } }),
-    prisma.workspaceMember.count({ where: { workspaceId: workspace.id, status: "ACTIVE" } }),
+    prisma.workspaceMember.count({
+      where: { workspaceId: workspace.id, status: { in: ["ACTIVE", "INVITED"] } },
+    }),
   ]);
-  if (workspacePlan?.plan === "FREE" && activeMemberCount >= 5) {
+  if (workspacePlan?.plan === "FREE" && effectiveMemberCount >= FREE_MEMBER_LIMIT) {
     redirect(`/workspaces/${workspace.id}/members?invite=plan-limit`);
   }
 
@@ -648,4 +655,94 @@ async function sendInviteEmail({
 
 async function createInviteUrl(token: string) {
   return createAppUrl(`/invites/${token}`);
+}
+
+export async function deleteWorkspace(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const confirmName = String(formData.get("confirmName") ?? "").trim();
+
+  if (!workspaceId) return;
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) redirect("/login");
+
+  const [workspace, membership] = await Promise.all([
+    prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: {
+        id: true,
+        name: true,
+        subscription: {
+          select: { stripeSubscriptionId: true },
+        },
+      },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { role: true, status: true },
+    }),
+  ]);
+
+  if (!workspace || membership?.role !== "OWNER" || membership.status !== "ACTIVE") {
+    redirect(`/workspaces/${workspaceId}?workspace=delete-unauthorized`);
+  }
+
+  // Require the owner to type the workspace name to confirm
+  if (confirmName !== workspace.name) {
+    redirect(`/workspaces/${workspaceId}?workspace=delete-name-mismatch`);
+  }
+
+  // Cancel active Stripe subscription so billing stops immediately
+  if (workspace.subscription?.stripeSubscriptionId) {
+    try {
+      await stripe.subscriptions.cancel(workspace.subscription.stripeSubscriptionId);
+    } catch {
+      console.error("[deleteWorkspace] failed to cancel Stripe subscription for", workspaceId);
+    }
+  }
+
+  // Delete all storage objects before deleting the workspace record.
+  // Files have onDelete:SetNull so they'd become orphaned otherwise.
+  const files = await prisma.file.findMany({
+    where: { workspaceId },
+    select: { storageKey: true, storageBucket: true },
+  });
+
+  if (files.length > 0) {
+    const supabase = createAdminClient();
+    const defaultBucket = getStorageBucketName();
+    const recordingsBucket = process.env.RECORDINGS_S3_BUCKET;
+
+    // Partition: Supabase Storage files can be deleted via the admin client.
+    // Recording files live in an external S3 bucket and need a separate S3 client
+    // (AWS SDK not installed). Their DB records are deleted below but the S3
+    // objects are left — a background cleanup job is needed to handle those.
+    const supabaseKeys = new Map<string, string[]>();
+    for (const file of files) {
+      const bucket = file.storageBucket ?? defaultBucket;
+      if (recordingsBucket && bucket === recordingsBucket) continue;
+      const keys = supabaseKeys.get(bucket) ?? [];
+      keys.push(file.storageKey);
+      supabaseKeys.set(bucket, keys);
+    }
+
+    await Promise.all(
+      [...supabaseKeys.entries()].map(([bucket, keys]) =>
+        supabase.storage.from(bucket).remove(keys)
+      )
+    );
+
+    await prisma.file.deleteMany({ where: { workspaceId } });
+  }
+
+  await prisma.workspace.delete({ where: { id: workspaceId } });
+
+  void writeAuditLog({
+    action: "ACCOUNT_DELETED",
+    actorUserId: currentUser.id,
+    metadata: { workspaceId, workspaceName: workspace.name, type: "workspace" },
+  });
+
+  revalidatePath("/");
+  redirect("/?workspace=deleted");
 }

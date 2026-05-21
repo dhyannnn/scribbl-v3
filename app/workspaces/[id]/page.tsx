@@ -13,6 +13,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { isUuid } from "@/lib/uuid";
 import { updateWorkspaceDetails } from "./actions";
+import { DeleteWorkspaceForm } from "./DeleteWorkspaceForm";
 
 type WorkspacePageProps = {
   params: Promise<{ id: string }>;
@@ -232,7 +233,7 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
             <summary className="flex cursor-pointer list-none items-center justify-between px-6 py-4">
               <span className="font-display text-base font-semibold text-[var(--color-text)]">Workspace Settings</span>
               <div className="flex items-center gap-2">
-                {workspace.plan === "INSTITUTION" ? (
+                {workspace.plan === "INSTITUTION" || workspace.plan === "ENTERPRISE" ? (
                   <Link
                     href={`/workspaces/${id}/audit-log`}
                     className="rounded-full border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
@@ -293,6 +294,11 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
                   />
                 </label>
               </form>
+
+              <div className="mt-6 border-t border-[var(--color-border)] pt-6">
+                <p className="mb-3 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">Danger zone</p>
+                <DeleteWorkspaceForm workspaceId={workspace.id} workspaceName={workspace.name} />
+              </div>
             </div>
           </details>
         ) : null}
@@ -524,6 +530,8 @@ function getWorkspaceStatusMessage(status?: string) {
     case "invite-accepted": return "Invite accepted.";
     case "invite-accepted-email-not-configured": return "Invite accepted. Add RESEND_API_KEY to notify owners.";
     case "invite-accepted-email-failed": return "Invite accepted, but owners could not be notified.";
+    case "delete-name-mismatch": return "Workspace name didn't match. Please try again.";
+    case "delete-unauthorized": return "Only the workspace owner can delete this workspace.";
     default: return null;
   }
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { writeAuditLog } from "@/lib/audit-log";
 import { createAppUrl } from "@/lib/app-url";
+import { FREE_MEMBER_LIMIT } from "@/lib/billing";
 import { getCurrentUser } from "@/lib/current-user";
 import { sendWorkspaceInviteAcceptedEmail } from "@/lib/email/invite-accepted";
 import { prisma } from "@/lib/prisma";
@@ -35,6 +36,7 @@ export async function acceptWorkspaceInvite(formData: FormData) {
       workspace: {
         select: {
           name: true,
+          plan: true,
           members: {
             where: {
               status: "ACTIVE",
@@ -78,6 +80,27 @@ export async function acceptWorkspaceInvite(formData: FormData) {
 
   if (invite.email !== currentUser.email.toLowerCase()) {
     return;
+  }
+
+  // On Free workspaces, enforce the member limit at acceptance time.
+  // The invite-creation check isn't sufficient because multiple invites can be
+  // sent and accepted simultaneously, each passing the check individually.
+  if (invite.workspace.plan === "FREE") {
+    const [activeMemberCount, existingMembership] = await Promise.all([
+      prisma.workspaceMember.count({
+        where: { workspaceId: invite.workspaceId, status: "ACTIVE" },
+      }),
+      prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId: invite.workspaceId, userId: currentUser.id } },
+        select: { status: true },
+      }),
+    ]);
+    // Only block if this acceptance would add a net-new active member.
+    // If the user is already active (re-accepting), the count doesn't change.
+    const isAlreadyActive = existingMembership?.status === "ACTIVE";
+    if (!isAlreadyActive && activeMemberCount >= FREE_MEMBER_LIMIT) {
+      redirect(`/invites/${token}?error=limit-reached`);
+    }
   }
 
   let meetingIds: string[] = [];

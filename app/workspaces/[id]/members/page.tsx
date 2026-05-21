@@ -5,6 +5,10 @@ import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import {
+  getIncludedMemberLimit,
+  getMemberOverageRateCad,
+} from "@/lib/billing";
+import {
   addWorkspaceMember,
   removeWorkspaceMember,
   resendWorkspaceInvite,
@@ -55,6 +59,12 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
   }
 
   const canManageMembers = currentMembership.role === "OWNER";
+  const activeMemberCount = workspace.members.length;
+  const includedMemberLimit = getIncludedMemberLimit(workspace.plan);
+  const overageMemberCount = workspace.plan !== "FREE" && isFinite(includedMemberLimit)
+    ? Math.max(0, activeMemberCount - includedMemberLimit)
+    : 0;
+  const overageRateCAD = getMemberOverageRateCad(workspace.plan);
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
@@ -84,6 +94,19 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
           </div>
         </header>
 
+        {/* Overage info for paid plans */}
+        {overageMemberCount > 0 && canManageMembers ? (
+          <div className="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] px-5 py-4 text-sm text-[var(--color-muted)]">
+            <span className="font-semibold text-[var(--color-text)]">
+              {overageMemberCount} member{overageMemberCount > 1 ? "s" : ""} on overage
+            </span>
+            {" "}· {activeMemberCount} total, {includedMemberLimit} included on your plan ·{" "}
+            <span className="font-medium text-[var(--color-text)]">
+              ~${(overageMemberCount * overageRateCAD).toFixed(2)} CAD extra on next invoice
+            </span>
+          </div>
+        ) : null}
+
         <div className="flex flex-col gap-6">
           {/* Invite form */}
           {canManageMembers ? (
@@ -93,7 +116,7 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
               {inviteStatus === "plan-limit" ? (
                 <div className="mt-3 rounded-xl bg-[var(--color-warning-dim)] px-4 py-3">
                   <p className="text-sm font-medium text-[var(--color-warning)]">
-                    Member limit reached — Free plan allows 5 members.{" "}
+                    Member limit reached — Free plan allows 3 members.{" "}
                     <Link href={`/workspaces/${workspace.id}/billing`} className="underline hover:no-underline">
                       Upgrade to Pro →
                     </Link>
@@ -338,7 +361,7 @@ function getInviteStatusMessage(status?: string) {
     case "unauthorized":
       return "Only the workspace owner can invite members.";
     case "plan-limit":
-      return "This workspace is on the Free plan (max 5 members). Upgrade to Pro to invite more.";
+      return "This workspace is on the Free plan (max 3 members). Upgrade to Pro to invite more.";
     case "already-member":
       return "That email is already an active member of this workspace.";
     case "member-removed":

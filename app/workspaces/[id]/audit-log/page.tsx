@@ -48,7 +48,7 @@ export default async function AuditLogPage({ params }: PageProps) {
     );
   }
 
-  if (workspace.plan !== "INSTITUTION") {
+  if (workspace.plan !== "INSTITUTION" && workspace.plan !== "ENTERPRISE") {
     return (
       <div className="min-h-screen bg-[var(--color-bg)]">
         <div className="mx-auto max-w-[800px] px-8 py-8">

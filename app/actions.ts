@@ -21,7 +21,7 @@ export async function createWorkspace(formData: FormData) {
     return;
   }
 
-  // Free users can own up to 3 workspaces. A paid workspace unlocks unlimited creation.
+  // Free users can own 1 workspace. A paid workspace unlocks unlimited creation.
   const [ownedCount, hasPaid] = await Promise.all([
     getOwnedWorkspaceCount(currentUser.id),
     userHasPaidWorkspace(currentUser.id),

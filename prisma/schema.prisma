@@ -40,6 +40,7 @@ enum AuditAction {
   BILLING_UPGRADED
   BILLING_CANCELED
   BILLING_PAYMENT_FAILED
+  BILLING_OVERAGE_CHARGED
 
   // Groups
   GROUP_CREATED
@@ -185,6 +186,7 @@ enum SubscriptionPlan {
   FREE
   PRO
   INSTITUTION
+  ENTERPRISE
 }
 
 enum SubscriptionStatus {
@@ -553,6 +555,7 @@ model MeetingRecording {
   startedAt       DateTime               @default(now())
   stoppedAt       DateTime?
   completedAt     DateTime?
+  durationSeconds Int?
   errorMessage    String?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
@@ -677,6 +680,7 @@ model Subscription {
   stripePriceId        String?
   plan                 SubscriptionPlan   @default(FREE)
   status               SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart   DateTime?
   currentPeriodEnd     DateTime?
   cancelAtPeriodEnd    Boolean            @default(false)
   createdAt            DateTime           @default(now())

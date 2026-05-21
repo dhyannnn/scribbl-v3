@@ -115,9 +115,15 @@ export async function createWhiteboardNote(formData: FormData) {
       },
       select: {
         id: true,
+        plan: true,
       },
     }),
   ]);
+
+  // Shared whiteboards are Pro+ only; private whiteboards are available on all plans
+  if (workspace?.plan === "FREE" && visibility === "WORKSPACE_SHARED") {
+    redirect(`/workspaces/${workspaceId}/notes?note=shared-whiteboard-upgrade-required`);
+  }
 
   if (!currentUser || !workspace) {
     redirect(workspaceId ? `/workspaces/${workspaceId}/notes?note=invalid` : "/");
@@ -284,6 +290,13 @@ export async function saveWhiteboardNote(formData: FormData) {
     return;
   }
 
+  // Shared whiteboards are Pro+ only — block saves of shared boards on Free
+  // Private whiteboards are allowed on all plans
+  const workspaceForPlan = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { plan: true },
+  });
+
   const [note, membership] = await Promise.all([
     prisma.note.findFirst({
       where: {
@@ -340,6 +353,11 @@ export async function saveWhiteboardNote(formData: FormData) {
     hasLockedMeetingArtifact(note) ||
     !canEditNote(note, currentUser.id)
   ) {
+    return;
+  }
+
+  // Block saving shared whiteboards on Free — private whiteboards are allowed
+  if (workspaceForPlan?.plan === "FREE" && note.visibility === "WORKSPACE_SHARED") {
     return;
   }
 
@@ -537,6 +555,66 @@ export async function updateNoteExportAccess(formData: FormData) {
   revalidatePath(`/workspaces/${workspaceId}/notes/${noteId}`);
   revalidatePath("/");
   redirect(`/workspaces/${workspaceId}/notes?note=export-updated`);
+}
+
+export async function updateNoteVisibility(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const noteId = String(formData.get("noteId") ?? "");
+  const visibilityValue = String(formData.get("visibility") ?? "");
+
+  if (!workspaceId || !noteId || !noteVisibilities.includes(visibilityValue as (typeof noteVisibilities)[number])) {
+    redirect(workspaceId ? `/workspaces/${workspaceId}/notes?note=invalid` : "/");
+  }
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    redirect(`/login?next=${encodeURIComponent(`/workspaces/${workspaceId}/notes`)}`);
+  }
+
+  const [note, membership] = await Promise.all([
+    prisma.note.findFirst({
+      where: { id: noteId, workspaceId, deletedAt: null },
+      select: { id: true, ownerUserId: true, visibility: true, type: true, workspace: { select: { plan: true } } },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { role: true, status: true },
+    }),
+  ]);
+
+  if (!note || membership?.status !== "ACTIVE") {
+    redirect(`/workspaces/${workspaceId}/notes?note=not-found`);
+  }
+
+  const isNoteOwner = note.ownerUserId === currentUser.id;
+  const isWorkspaceOwnerOrAdmin = membership?.role === "OWNER" || membership?.role === "ADMIN";
+
+  // Shared notes: owner, workspace owner/admin can change visibility
+  // Private notes: only the note creator/owner can change
+  const canChange = note.visibility === "WORKSPACE_SHARED"
+    ? (isNoteOwner || isWorkspaceOwnerOrAdmin)
+    : isNoteOwner;
+
+  if (!canChange) {
+    redirect(`/workspaces/${workspaceId}/notes/${noteId}?note=unauthorized`);
+  }
+
+  const newVisibility = visibilityValue as (typeof noteVisibilities)[number];
+
+  // Free plan: whiteboards cannot be made shared
+  if (note.workspace?.plan === "FREE" && note.type === "WHITEBOARD" && newVisibility === "WORKSPACE_SHARED") {
+    redirect(`/workspaces/${workspaceId}/notes/${noteId}?note=plan-upgrade-required`);
+  }
+
+  await prisma.note.update({
+    where: { id: note.id },
+    data: { visibility: newVisibility },
+  });
+
+  revalidatePath(`/workspaces/${workspaceId}`);
+  revalidatePath(`/workspaces/${workspaceId}/notes`);
+  revalidatePath(`/workspaces/${workspaceId}/notes/${noteId}`);
+  revalidatePath("/");
 }
 
 function canEditNote(

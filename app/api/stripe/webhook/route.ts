@@ -84,6 +84,13 @@ export async function POST(request: NextRequest) {
         }
         break;
       }
+
+      case "invoice.created": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const { handleInvoiceCreated } = await import("@/lib/stripe-overage");
+        await handleInvoiceCreated(invoice);
+        break;
+      }
     }
   } catch (err) {
     console.error("[stripe webhook]", event.type, err);
@@ -98,6 +105,10 @@ async function syncSubscription(subscription: Stripe.Subscription, periodEnd: nu
   const priceId = subscription.items.data[0]?.price.id;
   const plan = getPlanFromPriceId(priceId);
   const status = mapStripeStatus(subscription.status);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawPeriodStart = (subscription as any).current_period_start;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawPeriodEnd = (subscription as any).current_period_end;
   const currentPeriodEnd = periodEnd ? new Date(periodEnd * 1000) : null;
 
   const existing = await prisma.subscription.findFirst({
@@ -116,7 +127,8 @@ async function syncSubscription(subscription: Stripe.Subscription, periodEnd: nu
       plan,
       status,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      ...(currentPeriodEnd ? { currentPeriodEnd } : {}),
+      ...(rawPeriodStart ? { currentPeriodStart: new Date(rawPeriodStart * 1000) } : {}),
+      ...(rawPeriodEnd ? { currentPeriodEnd: new Date(rawPeriodEnd * 1000) } : {}),
     },
   });
 
@@ -192,8 +204,8 @@ async function cancelSubscription(subscription: Stripe.Subscription) {
 }
 
 function getPlanFromPriceId(priceId: string | undefined) {
-  if (priceId === process.env.STRIPE_INSTITUTION_PRICE_ID) return "INSTITUTION" as const;
-  if (priceId === process.env.STRIPE_PRO_PRICE_ID) return "PRO" as const;
+  if (priceId === process.env.STRIPE_PRICE_INSTITUTION_BASE_CAD) return "INSTITUTION" as const;
+  if (priceId === process.env.STRIPE_PRICE_PRO_BASE_CAD) return "PRO" as const;
   return "FREE" as const;
 }
 

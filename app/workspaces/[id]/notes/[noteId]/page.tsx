@@ -90,6 +90,11 @@ export default async function NoteEditorPage({ params }: PageProps) {
   }
 
   const isTextNote = note.type === "TEXT";
+  // Shared whiteboards are view-only on Free — private whiteboards are always editable
+  const isSharedWhiteboardOnFree =
+    !isTextNote &&
+    note.visibility === "WORKSPACE_SHARED" &&
+    note.workspace?.plan === "FREE";
   const isLockedByMeeting = note.artifacts.some(
     (artifact) =>
       artifact.source === "CREATED_IN_MEETING" &&
@@ -102,7 +107,12 @@ export default async function NoteEditorPage({ params }: PageProps) {
   const canEdit =
     Boolean(currentUser) &&
     !isLockedByMeeting &&
+    !isSharedWhiteboardOnFree &&
     (note.ownerUserId === currentUser.id || note.collaboration === "COLLABORATIVE");
+  const canChangeVisibility =
+    note.visibility === "WORKSPACE_SHARED"
+      ? note.ownerUserId === currentUser.id || canManageWorkspaceNotes
+      : note.ownerUserId === currentUser.id;
   const canManageExport =
     note.visibility === "WORKSPACE_SHARED" && (note.ownerUserId === currentUser.id || canManageWorkspaceNotes);
   const canExport =
@@ -112,73 +122,86 @@ export default async function NoteEditorPage({ params }: PageProps) {
   const tldrawSnapshot = isTextNote ? null : getTldrawSnapshot(note.contentJson);
 
   return (
-    <main className="min-h-screen bg-[#f7f7f2] text-[#20201d]">
+    <main className="min-h-screen bg-[var(--color-bg)]">
       <AccessRouteRefresher />
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10">
-        <header className="border-b border-[#d8d8ce] pb-6">
-          <Link href={`/workspaces/${id}/notes`} className="text-sm font-medium text-[#2f604b]">
-            Back to notes
+      {isSharedWhiteboardOnFree ? (
+        <div className="flex items-center justify-between gap-4 bg-[var(--color-secondary-dim)] px-5 py-3 text-sm text-[var(--color-secondary)]">
+          <span>Shared whiteboards are a Pro feature. This board is view-only — upgrade to edit it.</span>
+          <Link
+            href={`/workspaces/${id}/billing#upgrade`}
+            className="shrink-0 rounded-full bg-[var(--color-secondary)] px-3 py-1 text-xs font-semibold text-white transition hover:bg-[var(--color-secondary-hover)]"
+          >
+            Upgrade to Pro
           </Link>
-          <div className="mt-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d7f70]">
+        </div>
+      ) : null}
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-5 py-6 sm:px-8 lg:px-10">
+        {/* Page header */}
+        <header className="border-b border-[var(--color-border)] pb-5">
+          <Link
+            href={`/workspaces/${id}/notes`}
+            className="font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-subtle)] transition hover:text-[var(--color-text)]"
+          >
+            ← Back to notes
+          </Link>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">
                 {note.workspace.name} / {note.type.toLowerCase()}
               </p>
-              <h1 className="mt-2 text-2xl font-semibold sm:text-3xl lg:text-4xl">Note Editor</h1>
-              <p className="mt-3 text-sm text-[#62645c]">
-                {formatEnumLabel(note.visibility, "WORKSPACE_SHARED")} /{" "}
-                {formatEnumLabel(note.collaboration, "SOLO")} / {formatEnumLabel(note.sourceDevice, "WEB")}
-              </p>
+              <h1 className="mt-1 font-display text-2xl font-semibold text-[var(--color-text)] sm:text-3xl">
+                {note.title}
+              </h1>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-[var(--color-border)] px-2.5 py-0.5 font-mono text-xs text-[var(--color-muted)]">
+                  {formatEnumLabel(note.visibility, "WORKSPACE_SHARED")}
+                </span>
+                <span className="rounded-full border border-[var(--color-border)] px-2.5 py-0.5 font-mono text-xs text-[var(--color-muted)]">
+                  {formatEnumLabel(note.collaboration, "SOLO")}
+                </span>
+                <span className="text-xs text-[var(--color-subtle)]">by {note.owner.displayName}</span>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex shrink-0 flex-wrap items-start gap-2">
               {canExport && isTextNote ? (
                 <a
                   href={`/api/notes/${note.id}/export`}
-                  className="rounded-md bg-[#2f604b] px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-[#244b3a]"
+                  className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
                 >
                   Export PDF
                 </a>
               ) : null}
-              <div className="rounded-md border border-[#d8d8ce] bg-white px-4 py-3 text-sm text-[#66685f] shadow-sm">
-                Owner: {note.owner.displayName}
-              </div>
             </div>
           </div>
-          <p className="mt-3 text-sm text-[#62645c]">
-            Export: {getExportAccessLabel(note.visibility, note.exportAccess)}
-          </p>
           {isLockedByMeeting ? (
-            <p className="mt-5 rounded-md border border-[#ead1cd] bg-[#fff7f5] px-4 py-3 text-sm text-[#7a3434]">
-              This note is attached to a locked meeting, so it is read-only.
+            <p className="mt-4 rounded-2xl border border-[var(--color-danger-dim)] bg-[var(--color-danger-dim)] px-4 py-3 text-sm text-[var(--color-danger)]">
+              This note is attached to a locked meeting and is read-only.
             </p>
           ) : null}
         </header>
 
+        {/* Export Access settings */}
         {canManageExport ? (
-          <section className="rounded-md border border-[#d8d8ce] bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-semibold">Export Access</h2>
-            <form action={updateNoteExportAccess} className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
+            <h2 className="font-display text-base font-semibold text-[var(--color-text)]">Export Access</h2>
+            <p className="mt-1 text-sm text-[var(--color-muted)]">Who can export this shared note?</p>
+            <form action={updateNoteExportAccess} className="mt-4 flex flex-wrap gap-3">
               <input type="hidden" name="workspaceId" value={id} />
               <input type="hidden" name="noteId" value={note.id} />
-              <label className="grid min-w-0 gap-2">
-                <span className="text-sm font-medium text-[#4d4f47]">Who can export this shared note?</span>
-                <select
-                  name="exportAccess"
-                  defaultValue={note.exportAccess}
-                  className="min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#2f604b] focus:bg-white"
-                >
-                  <option value="WORKSPACE_MEMBERS">All workspace members</option>
-                  <option value="OWNER_ADMIN_AND_CREATOR">Owner, admins, and creator</option>
-                </select>
-              </label>
-              <div className="flex items-end">
-                <PendingSubmitButton
-                  pendingLabel="Saving..."
-                  className="min-h-11 w-full rounded-md border border-[#2f604b] bg-white px-4 text-sm font-medium text-[#2f604b] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                >
-                  Save Access
-                </PendingSubmitButton>
-              </div>
+              <select
+                name="exportAccess"
+                defaultValue={note.exportAccess}
+                className="min-h-10 flex-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm text-[var(--color-text)] outline-none transition focus:border-[var(--color-secondary)]"
+              >
+                <option value="WORKSPACE_MEMBERS">All workspace members</option>
+                <option value="OWNER_ADMIN_AND_CREATOR">Owner, admins, and creator</option>
+              </select>
+              <PendingSubmitButton
+                pendingLabel="Saving..."
+                className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-80 disabled:opacity-50"
+              >
+                Save
+              </PendingSubmitButton>
             </form>
           </section>
         ) : null}
@@ -189,8 +212,11 @@ export default async function NoteEditorPage({ params }: PageProps) {
           noteType={note.type}
           title={note.title}
           contentJson={note.contentJson}
+          noteVisibility={note.visibility}
           canEdit={canEdit}
-          canExport={canExport}
+          canChangeVisibility={canChangeVisibility}
+          canExportPdf={note.workspace?.plan !== "FREE"}
+          canUploadAssets={note.workspace?.plan !== "FREE"}
           tldrawSnapshot={tldrawSnapshot}
         />
       </div>

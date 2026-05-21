@@ -1,42 +1,50 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
-  Video,
-  PenLine,
-  MessageSquare,
-  FileText,
-  Users,
-  Shield,
-  Lock,
-  Check,
-  X,
-  Mic,
-  BookOpen,
   ArrowRight,
+  Building2,
+  CalendarDays,
+  Check,
+  FileText,
+  GitBranch,
+  Layers,
+  MessageSquare,
+  Mic,
+  PenLine,
+  Shield,
   Sparkles,
+  Users,
+  Video,
+  X,
 } from "lucide-react";
+import { LandingFeedbackForm } from "@/components/LandingFeedbackForm";
+
+const whiteboardScreenshot = "/Screenshot 2026-05-17 at 1.11.45 PM.png";
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-[#0f172a] antialiased">
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] antialiased">
       <LandingNav />
       <Hero />
-      <Problem />
-      <Features />
-      <Comparison />
-      <Security />
+      <BeforeAfter />
+      <ScreenshotFeatures />
+      <HowItWorks />
+      <GenericComparison />
+      <AboutSection />
+      <TeamSection />
       <LandingPricing />
+      <FeedbackSection />
+      <ComingSoon />
       <CtaSection />
       <LandingFooter />
     </div>
   );
 }
 
-// ── Navigation ────────────────────────────────────────────────────────────────
-
 function LandingNav() {
   return (
-    <header className="sticky top-0 z-50 border-b border-[#e2e8f0] bg-white/90 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-[var(--color-border)] bg-[var(--color-surface)]/90 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3 sm:px-8 lg:px-10">
         <Link href="/" className="flex items-center">
           <Image
@@ -50,32 +58,35 @@ function LandingNav() {
         </Link>
 
         <nav className="hidden items-center gap-7 md:flex">
-          <a href="#features" className="text-sm font-medium text-[#64748b] transition hover:text-[#0f172a]">
+          <a href="#features" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
             Features
           </a>
-          <a href="#comparison" className="text-sm font-medium text-[#64748b] transition hover:text-[#0f172a]">
-            vs Zoom &amp; Miro
+          <a href="#how-it-works" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
+            How it works
           </a>
-          <a href="#security" className="text-sm font-medium text-[#64748b] transition hover:text-[#0f172a]">
-            Security
+          <a href="#about" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
+            About
           </a>
-          <a href="#pricing" className="text-sm font-medium text-[#64748b] transition hover:text-[#0f172a]">
+          <a href="#pricing" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
             Pricing
+          </a>
+          <a href="#feedback" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
+            Feedback
           </a>
         </nav>
 
         <div className="flex items-center gap-3">
           <Link
             href="/login"
-            className="hidden rounded-lg px-4 py-2 text-sm font-medium text-[#64748b] transition hover:bg-[#f1f5f9] hover:text-[#0f172a] sm:block"
+            className="hidden rounded-full px-4 py-2 text-sm font-semibold text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)] sm:block"
           >
             Sign in
           </Link>
           <Link
             href="/login"
-            className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+            className="inline-flex items-center gap-2 rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-80"
           >
-            Get started <ArrowRight size={14} />
+            Start free <ArrowRight size={14} />
           </Link>
         </div>
       </div>
@@ -83,181 +94,241 @@ function LandingNav() {
   );
 }
 
-// ── Hero ─────────────────────────────────────────────────────────────────────
-
 function Hero() {
   return (
-    <section className="relative overflow-hidden bg-white">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-40 -top-40 h-[600px] w-[600px] rounded-full bg-[#6366f1] opacity-[0.06] blur-3xl" />
-        <div className="absolute -right-40 top-20 h-[500px] w-[500px] rounded-full bg-[#8b5cf6] opacity-[0.06] blur-3xl" />
-      </div>
+    <section className="relative isolate min-h-[calc(100vh-65px)] overflow-hidden bg-[var(--color-live)]">
+      <Image
+        src="/screen.png"
+        alt="Collaborative Scribbl notes editor"
+        fill
+        priority
+        sizes="100vw"
+        className="absolute inset-0 -z-10 h-full w-full object-cover opacity-35"
+      />
+      <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(19,27,46,0.95)_0%,rgba(19,27,46,0.78)_48%,rgba(19,27,46,0.48)_100%)]" />
 
-      <div className="relative mx-auto flex max-w-5xl flex-col items-center px-5 pb-24 pt-20 text-center sm:px-8 sm:pt-28 lg:px-10">
-        <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#e0e7ff] bg-[#f0f0fe] px-4 py-1.5 text-sm font-medium text-[#6366f1]">
-          <Sparkles size={14} />
-          Built for teams, classes, and projects
-        </span>
-
-        <h1 className="max-w-4xl text-5xl font-bold leading-[1.1] tracking-tight text-[#0f172a] sm:text-6xl lg:text-7xl">
-          One place for every{" "}
-          <span className="bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] bg-clip-text text-transparent">
-            study session
+      <div className="mx-auto grid min-h-[calc(100vh-65px)] max-w-7xl items-center gap-12 px-5 pb-24 pt-20 sm:px-8 lg:grid-cols-[0.92fr_1.08fr] lg:px-10">
+        <div className="max-w-3xl">
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-sm font-semibold text-white">
+            <Sparkles size={14} />
+            Live sessions, notes, chat, files, and whiteboards in one place
           </span>
-        </h1>
 
-        <p className="mt-7 max-w-2xl text-lg leading-8 text-[#64748b] sm:text-xl">
-          Scribbl brings live video, collaborative whiteboards, rich notes, and course
-          chat together — so your class, team, or project group can focus
-          on the work, not switching apps.
-        </p>
+          <h1 className="mt-6 font-display text-5xl font-bold leading-[1.05] text-white sm:text-6xl lg:text-7xl">
+            One workspace for every working session.
+          </h1>
 
-        <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
-          <Link
-            href="/login"
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-indigo-200 transition hover:opacity-90"
-          >
-            Get started free <ArrowRight size={16} />
-          </Link>
-          <Link
-            href="/login"
-            className="rounded-xl border border-[#e2e8f0] px-8 py-3.5 text-base font-semibold text-[#0f172a] transition hover:border-[#6366f1] hover:text-[#6366f1]"
-          >
-            Sign in
-          </Link>
-        </div>
+          <p className="mt-7 max-w-2xl text-lg leading-8 text-white/82 sm:text-xl">
+            Scribbl keeps the conversation, canvas, notes, recordings, and shared files
+            together so teams can stay in flow from planning to recap.
+          </p>
 
-        <div className="mt-14 flex flex-wrap justify-center gap-3">
-          {[
-            { icon: <Video size={14} />, label: "Live video" },
-            { icon: <PenLine size={14} />, label: "Whiteboard" },
-            { icon: <FileText size={14} />, label: "Rich notes" },
-            { icon: <MessageSquare size={14} />, label: "Workspace chat" },
-            { icon: <Mic size={14} />, label: "Recordings" },
-            { icon: <Shield size={14} />, label: "Secure & private" },
-          ].map(({ icon, label }) => (
-            <span
-              key={label}
-              className="flex items-center gap-1.5 rounded-full border border-[#e2e8f0] bg-[#f8fafc] px-3.5 py-1.5 text-sm font-medium text-[#475569]"
+          <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+            <Link
+              href="/login"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-7 py-3.5 text-base font-bold text-[var(--color-live)] shadow-lg transition hover:bg-[var(--color-secondary-dim)]"
             >
-              <span className="text-[#6366f1]">{icon}</span>
-              {label}
-            </span>
-          ))}
+              Start free <ArrowRight size={17} />
+            </Link>
+            <Link
+              href="/pricing"
+              className="inline-flex items-center justify-center rounded-full border border-white/30 px-7 py-3.5 text-base font-bold text-white transition hover:bg-white/10"
+            >
+              View pricing
+            </Link>
+          </div>
+
+          <div className="mt-12 grid max-w-2xl grid-cols-2 gap-3 text-sm font-semibold text-white/86 sm:grid-cols-3">
+            {["Video", "Notes", "Whiteboard", "Chat", "Files", "Recordings"].map((label) => (
+              <div key={label} className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-center backdrop-blur">
+                {label}
+              </div>
+            ))}
+          </div>
         </div>
+
+        <SessionHubMockup />
       </div>
     </section>
   );
 }
 
-// ── Problem ───────────────────────────────────────────────────────────────────
-
-function Problem() {
-  const problems = [
-    {
-      icon: "🗂️",
-      title: "Too many apps",
-      body: "Switching between Zoom, Google Docs, Discord, and drawing apps kills focus and wastes session time.",
-    },
-    {
-      icon: "📄",
-      title: "Notes get lost",
-      body: "Whiteboard photos disappear. Shared documents become impossible to find after the session ends.",
-    },
-    {
-      icon: "💬",
-      title: "Chats disappear",
-      body: "Important study discussions get buried in group chats mixed with social messages and noise.",
-    },
-  ];
-
+function SessionHubMockup() {
   return (
-    <section className="bg-[#f8f9ff] py-24">
-      <div className="mx-auto max-w-6xl px-5 sm:px-8 lg:px-10">
-        <div className="text-center">
-          <p className="text-sm font-semibold uppercase tracking-widest text-[#6366f1]">The Problem</p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0f172a] sm:text-4xl lg:text-5xl">
-            Learning tools weren&apos;t built for learning
-          </h2>
+    <div className="hidden lg:block">
+      <div className="relative rounded-2xl border border-white/15 bg-white/12 p-4 shadow-2xl shadow-black/35 backdrop-blur-xl">
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div>
+            <p className="font-mono text-xs font-bold uppercase tracking-widest text-white/60">Live workspace</p>
+            <h2 className="mt-1 font-display text-xl font-bold text-white">Q2 product review</h2>
+          </div>
+          <span className="rounded-full bg-[var(--color-success-dim)] px-3 py-1 text-xs font-bold text-[var(--color-success)]">
+            Recording
+          </span>
         </div>
 
-        <div className="mt-14 grid gap-6 sm:grid-cols-3">
-          {problems.map(({ icon, title, body }) => (
-            <div key={title} className="rounded-2xl border border-[#e2e8f0] bg-white p-8 shadow-sm">
-              <span className="text-4xl">{icon}</span>
-              <h3 className="mt-5 text-lg font-bold text-[#0f172a]">{title}</h3>
-              <p className="mt-3 leading-7 text-[#64748b]">{body}</p>
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              {["AK", "MT", "JR", "SL"].map((initials, index) => (
+                <div key={initials} className={`flex aspect-video items-end rounded-2xl border border-white/10 p-3 ${index === 0 ? "bg-[#d8e2ff]" : "bg-white/14"}`}>
+                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${index === 0 ? "bg-[var(--color-live)] text-white" : "bg-white/15 text-white"}`}>
+                    {initials}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
+            <div className="rounded-2xl border border-white/10 bg-white p-4 text-[var(--color-text)]">
+              <div className="flex items-center justify-between">
+                <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-secondary)]">Shared notes</p>
+                <span className="rounded-full bg-[var(--color-success-dim)] px-2.5 py-1 text-xs font-bold text-[var(--color-success)]">Saved</span>
+              </div>
+              <div className="mt-4 space-y-2">
+                <div className="h-3 w-11/12 rounded-full bg-[var(--color-surface-high)]" />
+                <div className="h-3 w-4/5 rounded-full bg-[var(--color-surface-high)]" />
+                <div className="h-3 w-3/5 rounded-full bg-[var(--color-secondary-dim)]" />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-white/95 p-4 text-[var(--color-text)]">
+              <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-secondary)]">Whiteboard</p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="h-16 rounded-xl bg-[var(--color-secondary-dim)]" />
+                <div className="h-16 rounded-xl bg-[var(--color-warning-dim)]" />
+                <div className="col-span-2 h-12 rounded-xl bg-[var(--color-surface-mid)]" />
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/12 p-4 text-white">
+              <p className="font-mono text-xs font-bold uppercase tracking-widest text-white/60">Channel chat</p>
+              <div className="mt-4 space-y-3 text-sm">
+                <p className="rounded-2xl rounded-tl-sm bg-white/18 px-3 py-2">Decision logged in notes.</p>
+                <p className="ml-8 rounded-2xl rounded-tr-sm bg-white px-3 py-2 text-[var(--color-live)]">Uploading the deck now.</p>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[var(--color-live)]">
+              4 artifacts attached to this session
+            </div>
+          </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
-// ── Features ──────────────────────────────────────────────────────────────────
-
-function Features() {
-  const features = [
-    {
-      icon: <Video size={22} />,
-      color: "from-[#6366f1] to-[#818cf8]",
-      title: "Live Video Calls",
-      body: "HD video meetings that stay connected to your workspace. Floating PiP, split-screen, and standalone companion tab included.",
-    },
-    {
-      icon: <PenLine size={22} />,
-      color: "from-[#8b5cf6] to-[#a78bfa]",
-      title: "Collaborative Whiteboard",
-      body: "Sketch, annotate, and draw together in real time using tldraw — with multi-page support, templates, and one-click PDF export.",
-    },
-    {
-      icon: <FileText size={22} />,
-      color: "from-[#06b6d4] to-[#22d3ee]",
-      title: "Rich Text Notes",
-      body: "Real-time collaborative notes with math (LaTeX), tables, code blocks, highlighting, and instant PDF export.",
-    },
-    {
-      icon: <MessageSquare size={22} />,
-      color: "from-[#10b981] to-[#34d399]",
-      title: "Workspace Chat",
-      body: "iMessage-style channel chat organized by workspace. Typing indicators, message history, and announcement channels included.",
-    },
-    {
-      icon: <Mic size={22} />,
-      color: "from-[#f59e0b] to-[#fbbf24]",
-      title: "Session Recordings",
-      body: "Record any video session and have the MP4 automatically saved to your workspace files. Never lose a session again.",
-    },
-    {
-      icon: <BookOpen size={22} />,
-      color: "from-[#ef4444] to-[#f87171]",
-      title: "File Sharing",
-      body: "Upload slides, PDFs, and exported notes. Access everything from the workspace files tab, organized by session.",
-    },
-  ];
-
+function BeforeAfter() {
   return (
-    <section id="features" className="py-24">
-      <div className="mx-auto max-w-6xl px-5 sm:px-8 lg:px-10">
-        <div className="text-center">
-          <p className="text-sm font-semibold uppercase tracking-widest text-[#6366f1]">Features</p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0f172a] sm:text-4xl lg:text-5xl">
-            Everything you need to learn together
+    <section className="bg-[var(--color-surface)] py-24">
+      <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
+        <div className="max-w-3xl">
+          <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-secondary)]">
+            The workflow shift
+          </p>
+          <h2 className="mt-3 font-display text-3xl font-bold text-[var(--color-text)] sm:text-4xl lg:text-5xl">
+            Stop reconstructing the meeting after it ends.
           </h2>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#64748b]">
-            Six powerful tools, one workspace. No tabs. No context switching.
+          <p className="mt-5 text-lg leading-8 text-[var(--color-muted)]">
+            Scribbl keeps the moving parts of real collaboration attached to the same workspace,
+            so context does not disappear into separate tools, folders, and threads.
           </p>
         </div>
 
-        <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map(({ icon, color, title, body }) => (
-            <div key={title} className="rounded-2xl border border-[#e2e8f0] bg-white p-7 shadow-sm transition hover:shadow-md hover:-translate-y-0.5">
-              <div className={`inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${color} text-white shadow-sm`}>
+        <div className="mt-12 grid gap-6 lg:grid-cols-2">
+          <WorkflowPanel
+            eyebrow="Before"
+            title="Everything lives somewhere else"
+            tone="muted"
+            items={[
+              "Video link in one tab",
+              "Notes in a separate document",
+              "Whiteboard exported later",
+              "Files buried in a drive",
+              "Decisions lost in chat",
+            ]}
+          />
+          <WorkflowPanel
+            eyebrow="After"
+            title="One session, one source of truth"
+            tone="active"
+            items={[
+              "Meeting hub opens with the workspace",
+              "Notes, canvas, chat, and files stay linked",
+              "Recordings save back to the right place",
+              "Teams can review the full session trail",
+              "Admins keep roles, billing, and access organized",
+            ]}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WorkflowPanel({
+  eyebrow,
+  items,
+  title,
+  tone,
+}: {
+  eyebrow: string;
+  items: string[];
+  title: string;
+  tone: "active" | "muted";
+}) {
+  return (
+    <div className={`rounded-2xl border p-7 ${tone === "active" ? "border-[var(--color-secondary)] bg-[var(--color-surface-low)]" : "border-[var(--color-border)] bg-[var(--color-bg)]"}`}>
+      <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-subtle)]">{eyebrow}</p>
+      <h3 className="mt-3 font-display text-2xl font-bold text-[var(--color-text)]">{title}</h3>
+      <div className="mt-6 grid gap-3">
+        {items.map((item) => (
+          <div key={item} className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
+            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${tone === "active" ? "bg-[var(--color-secondary)] text-white" : "bg-[var(--color-surface-mid)] text-[var(--color-subtle)]"}`}>
+              {tone === "active" ? <Check size={15} /> : <X size={15} />}
+            </span>
+            <span className="text-sm font-semibold text-[var(--color-muted)]">{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ScreenshotFeatures() {
+  return (
+    <section id="features" className="-mt-14 bg-[var(--color-bg)] pb-24">
+      <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
+        <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <FeatureShowcase
+            eyebrow="Collaborative notes"
+            title="Turn every session into a living document."
+            body="Write together in real time with rich formatting, math, tables, code, comments, and PDF export close at hand."
+            image="/screen.png"
+            icon={<FileText size={20} />}
+            priority
+          />
+          <FeatureShowcase
+            eyebrow="Shared whiteboards"
+            title="Sketch the messy parts together."
+            body="Use a real multiplayer canvas for diagrams, examples, brainstorms, templates, and visual explanations."
+            image={whiteboardScreenshot}
+            icon={<PenLine size={20} />}
+          />
+        </div>
+
+        <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[
+            { icon: <Video size={19} />, title: "Live video", body: "Session rooms stay attached to the workspace." },
+            { icon: <MessageSquare size={19} />, title: "Workspace chat", body: "Channels, meeting chats, and announcements." },
+            { icon: <Layers size={19} />, title: "Shared files", body: "Decks, PDFs, exports, and recordings in one library." },
+            { icon: <Shield size={19} />, title: "Admin controls", body: "Roles, groups, billing, moderation, and audit logs." },
+          ].map(({ icon, title, body }) => (
+            <div key={title} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-secondary-dim)] text-[var(--color-secondary)]">
                 {icon}
               </div>
-              <h3 className="mt-5 text-lg font-bold text-[#0f172a]">{title}</h3>
-              <p className="mt-3 leading-7 text-[#64748b]">{body}</p>
+              <h3 className="mt-5 font-display text-lg font-bold text-[var(--color-text)]">{title}</h3>
+              <p className="mt-2 leading-7 text-[var(--color-muted)]">{body}</p>
             </div>
           ))}
         </div>
@@ -266,58 +337,147 @@ function Features() {
   );
 }
 
-// ── Comparison ────────────────────────────────────────────────────────────────
+function FeatureShowcase({
+  body,
+  eyebrow,
+  icon,
+  image,
+  priority = false,
+  title,
+}: {
+  body: string;
+  eyebrow: string;
+  icon: ReactNode;
+  image: string;
+  priority?: boolean;
+  title: string;
+}) {
+  return (
+    <article className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl shadow-black/5">
+      <div className="relative aspect-[16/10] bg-[var(--color-surface-low)]">
+        <Image
+          src={image}
+          alt={title}
+          fill
+          priority={priority}
+          sizes="(min-width: 1024px) 50vw, 100vw"
+          className="object-cover"
+        />
+      </div>
+      <div className="p-6 sm:p-8">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-live)] text-white">
+            {icon}
+          </span>
+          <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-secondary)]">
+            {eyebrow}
+          </p>
+        </div>
+        <h2 className="mt-5 font-display text-2xl font-bold text-[var(--color-text)] sm:text-3xl">
+          {title}
+        </h2>
+        <p className="mt-3 leading-8 text-[var(--color-muted)]">{body}</p>
+      </div>
+    </article>
+  );
+}
 
-function Comparison() {
-  const rows = [
-    { feature: "HD video calls", scribbl: true, zoom: true, miro: false },
-    { feature: "Collaborative whiteboard", scribbl: true, zoom: false, miro: true },
-    { feature: "Real-time rich notes", scribbl: true, zoom: false, miro: false },
-    { feature: "Course-organized chat", scribbl: true, zoom: false, miro: false },
-    { feature: "Session recordings", scribbl: true, zoom: "Paid add-on", miro: false },
-    { feature: "File sharing", scribbl: true, zoom: "Limited", miro: "Limited" },
-    { feature: "Math & LaTeX support", scribbl: true, zoom: false, miro: false },
-    { feature: "PDF export", scribbl: true, zoom: false, miro: "Paid" },
-    { feature: "All in one workspace", scribbl: true, zoom: false, miro: false },
+function HowItWorks() {
+  const steps = [
+    {
+      icon: <CalendarDays size={21} />,
+      title: "Schedule or open a workspace",
+      body: "Create a team, project, client, or department workspace, then schedule live sessions with the right people.",
+    },
+    {
+      icon: <Video size={21} />,
+      title: "Meet where the work lives",
+      body: "Join video, open the whiteboard, take notes, chat, upload files, and record without scattering context.",
+    },
+    {
+      icon: <Mic size={21} />,
+      title: "Keep the recap attached",
+      body: "Notes, files, recordings, meeting chats, and artifacts stay connected to the session and workspace.",
+    },
   ];
 
   return (
-    <section id="comparison" className="bg-[#f8f9ff] py-24">
-      <div className="mx-auto max-w-5xl px-5 sm:px-8 lg:px-10">
-        <div className="text-center">
-          <p className="text-sm font-semibold uppercase tracking-widest text-[#6366f1]">Comparison</p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0f172a] sm:text-4xl lg:text-5xl">
-            A complete replacement for Zoom + Miro
+    <section id="how-it-works" className="border-y border-[var(--color-border)] bg-[var(--color-surface)] py-24">
+      <div className="mx-auto max-w-6xl px-5 sm:px-8 lg:px-10">
+        <div className="max-w-2xl">
+          <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-secondary)]">
+            How it works
+          </p>
+          <h2 className="mt-3 font-display text-3xl font-bold text-[var(--color-text)] sm:text-4xl lg:text-5xl">
+            Less app switching. More shared context.
           </h2>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#64748b]">
-            Scribbl gives you everything both tools offer — plus notes, file sharing,
-            and recordings — in a single workspace your whole class can use.
+        </div>
+
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {steps.map(({ icon, title, body }, index) => (
+            <div key={title} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-7">
+              <div className="flex items-center justify-between gap-4">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--color-secondary)] text-white">
+                  {icon}
+                </span>
+                <span className="font-mono text-xs font-bold text-[var(--color-subtle)]">
+                  0{index + 1}
+                </span>
+              </div>
+              <h3 className="mt-6 font-display text-xl font-bold">{title}</h3>
+              <p className="mt-3 leading-7 text-[var(--color-muted)]">{body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function GenericComparison() {
+  const rows = [
+    { feature: "Live video sessions", scribbl: true, videoOnly: true, whiteboardOnly: false },
+    { feature: "Collaborative whiteboards", scribbl: true, videoOnly: "Limited", whiteboardOnly: true },
+    { feature: "Rich shared notes", scribbl: true, videoOnly: false, whiteboardOnly: "Limited" },
+    { feature: "Workspace chat", scribbl: true, videoOnly: false, whiteboardOnly: false },
+    { feature: "Files, exports, and recordings", scribbl: true, videoOnly: "Scattered", whiteboardOnly: "Scattered" },
+    { feature: "Meeting artifacts linked together", scribbl: true, videoOnly: false, whiteboardOnly: false },
+    { feature: "Groups, roles, and billing controls", scribbl: true, videoOnly: "Limited", whiteboardOnly: "Limited" },
+  ];
+
+  return (
+    <section className="bg-[var(--color-bg)] py-24">
+      <div className="mx-auto max-w-6xl px-5 sm:px-8 lg:px-10">
+        <div className="text-center">
+          <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-secondary)]">
+            Compare the workflow
+          </p>
+          <h2 className="mt-3 font-display text-3xl font-bold text-[var(--color-text)] sm:text-4xl lg:text-5xl">
+            One connected workspace instead of a tool pile.
+          </h2>
+          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[var(--color-muted)]">
+            Scribbl brings the pieces of a live working session into one place without naming,
+            borrowing from, or relying on other products.
           </p>
         </div>
 
-        <div className="mt-12 overflow-hidden rounded-2xl border border-[#e2e8f0] bg-white shadow-sm">
-          <table className="w-full text-sm">
+        <div className="mt-12 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead>
-              <tr className="border-b border-[#e2e8f0] bg-[#f8fafc]">
-                <th className="px-6 py-4 text-left font-semibold text-[#0f172a]">Feature</th>
-                <th className="px-6 py-4 text-center font-semibold text-[#6366f1]">Scribbl</th>
-                <th className="px-6 py-4 text-center font-medium text-[#94a3b8]">Zoom</th>
-                <th className="px-6 py-4 text-center font-medium text-[#94a3b8]">Miro</th>
+              <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface-low)]">
+                <th className="px-6 py-4 text-left font-bold text-[var(--color-text)]">Capability</th>
+                <th className="px-6 py-4 text-center font-bold text-[var(--color-secondary)]">Scribbl</th>
+                <th className="px-6 py-4 text-center font-semibold text-[var(--color-muted)]">Video-only tools</th>
+                <th className="px-6 py-4 text-center font-semibold text-[var(--color-muted)]">Whiteboard-only tools</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ feature, scribbl, zoom, miro }, i) => (
-                <tr key={feature} className={i < rows.length - 1 ? "border-b border-[#f1f5f9]" : ""}>
-                  <td className="px-6 py-4 font-medium text-[#475569]">{feature}</td>
-                  <td className="px-6 py-4 text-center">
-                    <ComparisonCell value={scribbl} primary />
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <ComparisonCell value={zoom} />
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <ComparisonCell value={miro} />
-                  </td>
+              {rows.map(({ feature, scribbl, videoOnly, whiteboardOnly }, i) => (
+                <tr key={feature} className={i < rows.length - 1 ? "border-b border-[var(--color-border)]" : ""}>
+                  <td className="px-6 py-4 font-semibold text-[var(--color-muted)]">{feature}</td>
+                  <td className="px-6 py-4 text-center"><ComparisonCell value={scribbl} primary /></td>
+                  <td className="px-6 py-4 text-center"><ComparisonCell value={videoOnly} /></td>
+                  <td className="px-6 py-4 text-center"><ComparisonCell value={whiteboardOnly} /></td>
                 </tr>
               ))}
             </tbody>
@@ -331,72 +491,59 @@ function Comparison() {
 function ComparisonCell({ value, primary = false }: { value: boolean | string; primary?: boolean }) {
   if (value === true) {
     return (
-      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full ${primary ? "bg-[#6366f1] text-white" : "bg-[#dcfce7] text-[#16a34a]"}`}>
-        <Check size={13} strokeWidth={3} />
+      <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${primary ? "bg-[var(--color-secondary)] text-white" : "bg-[var(--color-success-dim)] text-[var(--color-success)]"}`}>
+        <Check size={14} strokeWidth={3} />
       </span>
     );
   }
+
   if (value === false) {
     return (
-      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#f1f5f9] text-[#94a3b8]">
-        <X size={13} strokeWidth={3} />
+      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--color-surface-mid)] text-[var(--color-subtle)]">
+        <X size={14} strokeWidth={3} />
       </span>
     );
   }
-  return <span className="text-xs font-medium text-[#f59e0b]">{value}</span>;
+
+  return <span className="rounded-full bg-[var(--color-warning-dim)] px-3 py-1 text-xs font-bold text-[var(--color-warning)]">{value}</span>;
 }
 
-// ── Security ──────────────────────────────────────────────────────────────────
-
-function Security() {
-  const points = [
-    {
-      icon: <Lock size={20} />,
-      title: "Encrypted in transit and at rest",
-      body: "All sessions, notes, and files are encrypted using TLS. Data at rest is encrypted by Supabase's hosted Postgres and S3-compatible storage.",
-    },
-    {
-      icon: <Users size={20} />,
-      title: "Role-based access control",
-      body: "Every workspace has OWNER, ADMIN, and MEMBER roles. Per-session permission overrides let moderators control who can write, draw, or speak.",
-    },
-    {
-      icon: <Shield size={20} />,
-      title: "Full audit logs",
-      body: "Every key action is logged: member invites, role changes, file uploads, recording starts, and ownership transfers — visible to workspace owners.",
-    },
-    {
-      icon: <BookOpen size={20} />,
-      title: "Your data stays yours",
-      body: "We never sell or share your data with third parties. Scribbl is designed to be FERPA-friendly for educational institutions.",
-    },
-  ];
-
+function AboutSection() {
   return (
-    <section id="security" className="py-24">
-      <div className="mx-auto max-w-6xl px-5 sm:px-8 lg:px-10">
-        <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-[#0f172a] to-[#1e293b] px-8 py-16 sm:px-14 lg:px-20">
-          <div className="text-center">
-            <p className="text-sm font-semibold uppercase tracking-widest text-[#818cf8]">
-              For Institutions
-            </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
-              Built for institutions that care about data
-            </h2>
-            <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#94a3b8]">
-              Educational institutions, tutoring centres, and corporate teams trust
-              Scribbl because their data is handled with the care they demand.
-            </p>
-          </div>
+    <section id="about" className="border-y border-[var(--color-border)] bg-[var(--color-surface)] py-24">
+      <div className="mx-auto grid max-w-6xl gap-12 px-5 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-10">
+        <div>
+          <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-secondary)]">
+            About Scribbl
+          </p>
+          <h2 className="mt-3 font-display text-3xl font-bold text-[var(--color-text)] sm:text-4xl lg:text-5xl">
+            Built for groups that need the whole conversation.
+          </h2>
+        </div>
+        <div className="space-y-5 text-lg leading-8 text-[var(--color-muted)]">
+          <p>
+            Scribbl started from a simple frustration: live collaboration usually creates
+            a trail of scattered links, missing files, half-finished notes, and follow-up
+            messages that no one can find later.
+          </p>
+          <p>
+            We are building one workspace where teams can meet, draw, write, chat, share,
+            record, and return to the full context of the work. It is made for project teams,
+            operators, product groups, labs, classes, and any group that needs a shared room
+            for thinking out loud.
+          </p>
 
-          <div className="mt-14 grid gap-6 sm:grid-cols-2">
-            {points.map(({ icon, title, body }) => (
-              <div key={title} className="rounded-2xl border border-[#334155] bg-[#1e293b] p-7">
-                <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#312e81] text-[#818cf8]">
+          <div className="grid gap-4 pt-4 sm:grid-cols-3">
+            {[
+              { icon: <Users size={19} />, label: "Built for teams" },
+              { icon: <GitBranch size={19} />, label: "Context stays linked" },
+              { icon: <Building2 size={19} />, label: "Ready for organizations" },
+            ].map(({ icon, label }) => (
+              <div key={label} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-secondary-dim)] text-[var(--color-secondary)]">
                   {icon}
                 </div>
-                <h3 className="mt-5 text-base font-bold text-white">{title}</h3>
-                <p className="mt-2 leading-7 text-[#94a3b8]">{body}</p>
+                <p className="mt-4 text-sm font-bold text-[var(--color-text)]">{label}</p>
               </div>
             ))}
           </div>
@@ -406,9 +553,47 @@ function Security() {
   );
 }
 
-// ── CTA ───────────────────────────────────────────────────────────────────────
+function TeamSection() {
+  const team = [
+    { name: "Team member", role: "Co-founder", initials: "TM" },
+    { name: "Team member", role: "Product and engineering", initials: "PE" },
+    { name: "Team member", role: "Design and research", initials: "DR" },
+    { name: "Team member", role: "Engineering", initials: "EN" },
+  ];
 
-// ── Pricing ───────────────────────────────────────────────────────────────────
+  return (
+    <section className="bg-[var(--color-bg)] py-24">
+      <div className="mx-auto max-w-6xl px-5 sm:px-8 lg:px-10">
+        <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-3xl">
+            <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-secondary)]">
+              Meet the team
+            </p>
+            <h2 className="mt-3 font-display text-3xl font-bold text-[var(--color-text)] sm:text-4xl">
+              Four student builders making collaboration feel less scattered.
+            </h2>
+          </div>
+          <p className="max-w-md leading-7 text-[var(--color-muted)]">
+            Scribbl is built by a team of four graduate and undergraduate students. We are
+            replacing these placeholders with real photos and names as the public launch gets closer.
+          </p>
+        </div>
+
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {team.map(({ initials, name, role }) => (
+            <article key={role} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
+              <div className="flex aspect-square items-center justify-center rounded-2xl bg-[var(--color-surface-low)]">
+                <span className="font-display text-4xl font-bold text-[var(--color-secondary)]">{initials}</span>
+              </div>
+              <h3 className="mt-5 font-display text-lg font-bold text-[var(--color-text)]">{name}</h3>
+              <p className="mt-1 text-sm font-semibold text-[var(--color-muted)]">{role}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function LandingPricing() {
   const tiers = [
@@ -417,67 +602,45 @@ function LandingPricing() {
       price: "$0",
       per: "",
       description: "For small groups getting started.",
-      cta: "Get started free",
+      cta: "Start free",
       href: "/login",
       highlight: false,
-      features: [
-        "Up to 3 workspaces",
-        "Up to 5 members per workspace",
-        "Video calls, notes, whiteboards, chat",
-        "File sharing (500 MB)",
-        "PDF export",
-        "✗ Meeting recordings",
-        "✗ Groups",
-      ],
+      features: ["1 workspace · 3 members max", "Video calls and chat", "Text notes", "Private whiteboards (solo)", "500 MB shared / 200 MB private storage"],
     },
     {
       name: "Pro",
-      price: "$20",
+      price: "$25",
       per: "CAD / workspace / month",
-      description: "Everything your team needs.",
-      cta: "Get started",
+      description: "For teams that run sessions every week.",
+      cta: "Start Pro",
       href: "/login",
       highlight: true,
-      features: [
-        "Unlimited workspaces",
-        "Unlimited members",
-        "Video calls, notes, whiteboards, chat",
-        "File sharing (10 GB)",
-        "PDF export",
-        "Meeting recordings",
-        "Groups",
-      ],
+      features: ["Unlimited workspaces", "20 members included (+$1/mo extra)", "Shared + collaborative whiteboards", "Whiteboard PDF export & image uploads", "Recordings — 5 hrs/mo", "10 GB shared · 2 GB private storage"],
     },
     {
       name: "Institution",
-      price: "$299",
-      per: "CAD / month",
-      description: "For schools and companies.",
-      cta: "Contact us",
-      href: "mailto:billing@scribblapp.ca?subject=Scribbl Institution Plan",
+      price: "$65",
+      per: "CAD / workspace / month",
+      description: "For larger teams with compliance needs.",
+      cta: "Get started",
+      href: "/login",
       highlight: false,
-      features: [
-        "Unlimited workspaces (org-wide)",
-        "Unlimited members",
-        "Everything in Pro",
-        "100 GB storage",
-        "Audit logs",
-        "Priority support",
-        "Invoice billing",
-      ],
+      features: ["50 members included (+$0.50/mo extra)", "20 hrs/mo recordings", "50 GB shared · 5 GB private storage", "Audit log · Priority support"],
     },
   ];
 
   return (
-    <section id="pricing" className="bg-[#f8f9ff] py-24">
+    <section id="pricing" className="bg-[var(--color-surface)] py-24">
       <div className="mx-auto max-w-6xl px-5 sm:px-8 lg:px-10">
         <div className="text-center">
-          <p className="text-sm font-semibold uppercase tracking-widest text-[#6366f1]">Pricing</p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0f172a] sm:text-4xl lg:text-5xl">
-            Simple, transparent pricing
+          <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-secondary)]">
+            Pricing
+          </p>
+          <h2 className="mt-3 font-display text-3xl font-bold text-[var(--color-text)] sm:text-4xl lg:text-5xl">
+            Simple pricing for real collaboration.
           </h2>
-          <p className="mx-auto mt-5 max-w-xl text-lg leading-8 text-[#64748b]">
-            One workspace, one price. No per-seat fees. Cancel anytime.
+          <p className="mx-auto mt-5 max-w-xl text-lg leading-8 text-[var(--color-muted)]">
+            Per workspace, not per seat. Start free and upgrade when your team grows.
           </p>
         </div>
 
@@ -485,42 +648,40 @@ function LandingPricing() {
           {tiers.map(({ name, price, per, description, cta, href, highlight, features }) => (
             <div
               key={name}
-              className={`flex flex-col rounded-2xl p-8 ${
+              className={`relative flex flex-col rounded-2xl border bg-[var(--color-surface)] p-8 ${
                 highlight
-                  ? "border-2 border-[#6366f1] bg-white shadow-lg shadow-indigo-100"
-                  : "border border-[#e2e8f0] bg-white shadow-sm"
+                  ? "border-[var(--color-secondary)] shadow-xl shadow-blue-950/10"
+                  : "border-[var(--color-border)] shadow-sm"
               }`}
             >
               {highlight ? (
-                <span className="mb-3 w-fit rounded-full bg-[#f0f0fe] px-3 py-1 text-xs font-semibold text-[#6366f1]">
+                <span className="absolute right-5 top-5 rounded-full bg-[var(--color-secondary-dim)] px-3 py-1 text-xs font-bold text-[var(--color-secondary)]">
                   Most popular
                 </span>
               ) : null}
-              <p className="text-sm font-semibold uppercase tracking-widest text-[#64748b]">{name}</p>
-              <div className="mt-3 flex items-end gap-1">
-                <span className="text-4xl font-bold text-[#0f172a]">{price}</span>
-                {per ? <span className="mb-1 text-xs text-[#94a3b8]">{per}</span> : null}
+              <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-subtle)]">{name}</p>
+              <div className="mt-4 flex items-end gap-2">
+                <span className="font-display text-4xl font-bold text-[var(--color-text)]">{price}</span>
+                {per ? <span className="mb-1 max-w-[140px] text-xs font-semibold text-[var(--color-muted)]">{per}</span> : null}
               </div>
-              <p className="mt-2 text-sm text-[#64748b]">{description}</p>
+              <p className="mt-3 text-sm leading-6 text-[var(--color-muted)]">{description}</p>
 
               <Link
                 href={href}
-                className={`mt-7 block rounded-xl px-5 py-3 text-center text-sm font-semibold transition ${
+                className={`mt-7 block rounded-full px-5 py-3 text-center text-sm font-bold transition ${
                   highlight
-                    ? "bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white hover:opacity-90"
-                    : "border border-[#e2e8f0] text-[#0f172a] hover:border-[#6366f1] hover:text-[#6366f1]"
+                    ? "bg-[var(--color-secondary)] text-white hover:bg-[var(--color-secondary-hover)]"
+                    : "border border-[var(--color-border)] text-[var(--color-text)] hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
                 }`}
               >
                 {cta}
               </Link>
 
-              <ul className="mt-7 grid gap-2.5 text-sm text-[#475569]">
-                {features.map((f) => (
-                  <li key={f} className={`flex items-start gap-2 ${f.startsWith("✗") ? "text-[#94a3b8]" : ""}`}>
-                    <span className={`mt-0.5 shrink-0 ${f.startsWith("✗") ? "text-[#cbd5e1]" : "text-[#6366f1]"}`}>
-                      {f.startsWith("✗") ? "✗" : "✓"}
-                    </span>
-                    {f.startsWith("✗") ? f.slice(2) : f}
+              <ul className="mt-7 grid gap-3 text-sm font-medium text-[var(--color-muted)]">
+                {features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-2">
+                    <Check size={16} className="mt-0.5 shrink-0 text-[var(--color-secondary)]" />
+                    {feature}
                   </li>
                 ))}
               </ul>
@@ -528,12 +689,88 @@ function LandingPricing() {
           ))}
         </div>
 
-        <p className="mt-10 text-center text-sm text-[#94a3b8]">
-          Taxes calculated at checkout. Prices in Canadian dollars.{" "}
-          <Link href="/pricing" className="font-medium text-[#6366f1] hover:underline">
-            Full comparison →
+        <p className="mt-10 text-center text-sm text-[var(--color-muted)]">
+          Taxes calculated at checkout. Prices in Canadian dollars.
+          Need custom limits or an annual contract?{" "}
+          <a href="mailto:hello@scribblapp.ca?subject=Enterprise inquiry" className="font-bold text-[var(--color-secondary)] hover:underline">
+            Contact us about Enterprise →
+          </a>
+          <br className="hidden sm:block" />
+          <Link href="/pricing" className="mt-1 inline-block font-medium text-[var(--color-secondary)] hover:underline">
+            Full plan comparison →
           </Link>
         </p>
+      </div>
+    </section>
+  );
+}
+
+function FeedbackSection() {
+  return (
+    <section id="feedback" className="bg-[var(--color-bg)] py-24">
+      <div className="mx-auto grid max-w-6xl gap-10 px-5 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-10">
+        <div>
+          <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-secondary)]">
+            Feedback
+          </p>
+          <h2 className="mt-3 font-display text-3xl font-bold text-[var(--color-text)] sm:text-4xl">
+            Shape what comes next.
+          </h2>
+          <p className="mt-5 text-lg leading-8 text-[var(--color-muted)]">
+            Tell us what would make Scribbl more useful for your company, lab, startup,
+            department, project team, or community.
+          </p>
+        </div>
+        <LandingFeedbackForm />
+      </div>
+    </section>
+  );
+}
+
+function ComingSoon() {
+  const items = [
+    "AI meeting summaries",
+    "AI note assistant",
+    "Version history",
+    "Wiki-style note linking",
+    "Workspace analytics",
+    "Mobile app",
+    "Message threading",
+    "@mentions",
+    "Direct messages",
+    "Meeting templates",
+  ];
+
+  return (
+    <section className="border-y border-[var(--color-border)] bg-[var(--color-surface)] py-24">
+      <div className="mx-auto max-w-6xl px-5 sm:px-8 lg:px-10">
+        <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-2xl">
+            <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-secondary)]">
+              Coming in the next release
+            </p>
+            <h2 className="mt-3 font-display text-3xl font-bold text-[var(--color-text)] sm:text-4xl">
+              The roadmap is already moving.
+            </h2>
+          </div>
+          <a
+            href="#feedback"
+            className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--color-border)] px-5 py-2.5 text-sm font-bold text-[var(--color-text)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
+          >
+            Tell us what to prioritize <ArrowRight size={15} />
+          </a>
+        </div>
+
+        <div className="mt-10 flex flex-wrap gap-3">
+          {items.map((item) => (
+            <span
+              key={item}
+              className="rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2 text-sm font-bold text-[var(--color-muted)]"
+            >
+              {item}
+            </span>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -541,38 +778,36 @@ function LandingPricing() {
 
 function CtaSection() {
   return (
-    <section className="bg-[#f8f9ff] py-24">
+    <section className="bg-[var(--color-live)] py-24 text-white">
       <div className="mx-auto max-w-3xl px-5 text-center sm:px-8">
-        <h2 className="text-3xl font-bold tracking-tight text-[#0f172a] sm:text-4xl lg:text-5xl">
-          Ready to transform how your students learn?
+        <h2 className="font-display text-3xl font-bold sm:text-4xl lg:text-5xl">
+          Ready to run your next session in one place?
         </h2>
-        <p className="mx-auto mt-5 max-w-xl text-lg leading-8 text-[#64748b]">
+        <p className="mx-auto mt-5 max-w-xl text-lg leading-8 text-white/75">
           Create your first workspace in seconds. No credit card required.
         </p>
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
           <Link
             href="/login"
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-indigo-200 transition hover:opacity-90"
+            className="inline-flex items-center gap-2 rounded-full bg-white px-8 py-3.5 text-base font-bold text-[var(--color-live)] transition hover:bg-[var(--color-secondary-dim)]"
           >
-            Create your workspace <ArrowRight size={16} />
+            Start free <ArrowRight size={16} />
           </Link>
-          <a
-            href="#features"
-            className="rounded-xl border border-[#e2e8f0] bg-white px-8 py-3.5 text-base font-semibold text-[#0f172a] transition hover:border-[#6366f1] hover:text-[#6366f1]"
+          <Link
+            href="/pricing"
+            className="rounded-full border border-white/30 px-8 py-3.5 text-base font-bold text-white transition hover:bg-white/10"
           >
-            See all features
-          </a>
+            View pricing
+          </Link>
         </div>
       </div>
     </section>
   );
 }
 
-// ── Footer ────────────────────────────────────────────────────────────────────
-
 function LandingFooter() {
   return (
-    <footer className="border-t border-[#e2e8f0] bg-white">
+    <footer className="border-t border-[var(--color-border)] bg-[var(--color-surface)]">
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 px-5 py-10 sm:flex-row sm:px-8 lg:px-10">
         <Link href="/" className="flex items-center">
           <Image
@@ -584,18 +819,18 @@ function LandingFooter() {
           />
         </Link>
 
-        <p className="text-sm text-[#94a3b8]">
+        <p className="text-sm text-[var(--color-muted)]">
           © {new Date().getFullYear()} Scribbl. All rights reserved.
         </p>
 
         <nav className="flex items-center gap-6">
-          <Link href="/login" className="text-sm text-[#64748b] transition hover:text-[#0f172a]">
+          <Link href="/login" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
             Sign in
           </Link>
-          <a href="#security" className="text-sm text-[#64748b] transition hover:text-[#0f172a]">
-            Security
+          <a href="#feedback" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
+            Feedback
           </a>
-          <a href="mailto:hello@scribblapp.ca" className="text-sm text-[#64748b] transition hover:text-[#0f172a]">
+          <a href="mailto:hello@scribblapp.ca" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
             Contact
           </a>
         </nav>

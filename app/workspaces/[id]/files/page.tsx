@@ -3,7 +3,12 @@ import { notFound } from "next/navigation";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
-import { getWorkspaceStorageBytes, getStorageLimitBytes } from "@/lib/billing";
+import {
+  getWorkspaceSharedStorageBytes,
+  getSharedStorageLimitBytes,
+  getUserPrivateStorageBytes,
+  getPrivateStorageLimitPerUserBytes,
+} from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
 import { updateWorkspaceFile, uploadWorkspaceFile, togglePinFile } from "./actions";
 import { DeleteFileForm } from "./DeleteFileForm";
@@ -23,7 +28,7 @@ export default async function FilesPage({ params, searchParams }: PageProps) {
     return <ProtectedPageMessage />;
   }
 
-  const [workspace, storageUsedBytes] = await Promise.all([
+  const [workspace, sharedStorageBytes, privateStorageBytes] = await Promise.all([
     prisma.workspace.findUnique({
       where: { id },
       include: {
@@ -56,7 +61,8 @@ export default async function FilesPage({ params, searchParams }: PageProps) {
         },
       },
     }),
-    getWorkspaceStorageBytes(id),
+    getWorkspaceSharedStorageBytes(id),
+    getUserPrivateStorageBytes(currentUser.id, id),
   ]);
 
   if (!workspace) {
@@ -75,10 +81,15 @@ export default async function FilesPage({ params, searchParams }: PageProps) {
   const currentMembership = workspace.members.find((m) => m.userId === currentUser.id);
   const canManageWorkspaceFiles = currentMembership?.role === "OWNER" || currentMembership?.role === "ADMIN";
 
-  const storageLimit = getStorageLimitBytes(workspace.plan);
-  const storagePercent = Math.min(100, (storageUsedBytes / storageLimit) * 100);
-  const isStorageWarning = storagePercent >= 80;
-  const isStorageCritical = storagePercent >= 95;
+  const sharedStorageLimit = getSharedStorageLimitBytes(workspace.plan);
+  const sharedStoragePercent = Math.min(100, (sharedStorageBytes / sharedStorageLimit) * 100);
+  const isSharedWarning = sharedStoragePercent >= 80;
+  const isSharedCritical = sharedStoragePercent >= 95;
+
+  const privateStorageLimit = getPrivateStorageLimitPerUserBytes(workspace.plan);
+  const privateStoragePercent = Math.min(100, (privateStorageBytes / privateStorageLimit) * 100);
+  const isPrivateWarning = privateStoragePercent >= 80;
+  const isPrivateCritical = privateStoragePercent >= 95;
 
   const sharedFiles = workspace.files.filter((f) => f.visibility === "WORKSPACE_SHARED");
   const privateFiles = workspace.files.filter((f) => f.visibility === "PRIVATE");
@@ -103,60 +114,43 @@ export default async function FilesPage({ params, searchParams }: PageProps) {
           </p>
         </header>
 
-        {/* Storage meter */}
-        <div className="mb-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-[var(--color-text)]">Storage</span>
-            <span className={`font-mono text-xs font-semibold ${
-              isStorageCritical
-                ? "text-[var(--color-danger)]"
-                : isStorageWarning
-                ? "text-[var(--color-warning)]"
-                : "text-[var(--color-muted)]"
-            }`}>
-              {formatFileSize(storageUsedBytes)} / {formatFileSize(storageLimit)}
-            </span>
-          </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-surface-high)]">
-            <div
-              className={`h-full rounded-full transition-all ${
-                isStorageCritical
-                  ? "bg-[var(--color-danger)]"
-                  : isStorageWarning
-                  ? "bg-[var(--color-warning)]"
-                  : "bg-[var(--color-secondary)]"
-              }`}
-              style={{ width: `${storagePercent}%` }}
-            />
-          </div>
-          {isStorageCritical && workspace.plan === "FREE" ? (
-            <p className="mt-2 text-xs text-[var(--color-danger)]">
-              Storage almost full.{" "}
-              <Link href={`/workspaces/${workspace.id}/billing`} className="underline hover:no-underline">
-                Upgrade to Pro for 10 GB →
-              </Link>
-            </p>
-          ) : isStorageWarning && workspace.plan === "FREE" ? (
-            <p className="mt-2 text-xs text-[var(--color-warning)]">
-              Approaching storage limit.{" "}
-              <Link href={`/workspaces/${workspace.id}/billing`} className="underline hover:no-underline">
-                Upgrade to Pro for 10 GB →
-              </Link>
-            </p>
-          ) : null}
+        {/* Storage meters */}
+        <div className="mb-6 grid gap-4 sm:grid-cols-2">
+          <StorageMeter
+            label="Shared storage"
+            used={sharedStorageBytes}
+            limit={sharedStorageLimit}
+            percent={sharedStoragePercent}
+            isWarning={isSharedWarning}
+            isCritical={isSharedCritical}
+            upgradeHref={workspace.plan === "FREE" ? `/workspaces/${workspace.id}/billing#upgrade` : undefined}
+          />
+          <StorageMeter
+            label="Your private storage"
+            used={privateStorageBytes}
+            limit={privateStorageLimit}
+            percent={privateStoragePercent}
+            isWarning={isPrivateWarning}
+            isCritical={isPrivateCritical}
+            upgradeHref={workspace.plan === "FREE" ? `/workspaces/${workspace.id}/billing#upgrade` : undefined}
+          />
         </div>
 
         {/* Upload form */}
         <div className="mb-8 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
           <h2 className="font-display text-lg font-semibold text-[var(--color-text)]">Upload file</h2>
 
-          {fileStatus === "storage-limit" ? (
+          {fileStatus === "storage-limit" || fileStatus === "private-storage-limit" ? (
             <div className="mt-3 rounded-xl border border-[var(--color-warning-dim)] bg-[var(--color-warning-dim)] px-4 py-3">
               <p className="text-sm font-medium text-[var(--color-warning)]">
-                Storage limit reached.{" "}
-                <Link href={`/workspaces/${workspace.id}/billing`} className="underline hover:no-underline">
-                  Upgrade to Pro for 10 GB →
-                </Link>
+                {fileStatus === "private-storage-limit"
+                  ? "Your private storage limit is full. "
+                  : "Shared storage limit reached. "}
+                {workspace.plan === "FREE" ? (
+                  <Link href={`/workspaces/${workspace.id}/billing#upgrade`} className="underline hover:no-underline">
+                    Upgrade to Pro →
+                  </Link>
+                ) : null}
               </p>
             </div>
           ) : getFileStatusMessage(fileStatus) ? (
@@ -442,6 +436,51 @@ function formatFileSize(sizeBytes: number | null) {
   return `${unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`;
 }
 
+function StorageMeter({
+  label,
+  used,
+  limit,
+  percent,
+  isWarning,
+  isCritical,
+  upgradeHref,
+}: {
+  label: string;
+  used: number;
+  limit: number;
+  percent: number;
+  isWarning: boolean;
+  isCritical: boolean;
+  upgradeHref?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-medium text-[var(--color-text)]">{label}</span>
+        <span className={`font-mono text-xs font-semibold ${
+          isCritical ? "text-[var(--color-danger)]" : isWarning ? "text-[var(--color-warning)]" : "text-[var(--color-muted)]"
+        }`}>
+          {formatFileSize(used)} / {formatFileSize(limit)}
+        </span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-surface-high)]">
+        <div
+          className={`h-full rounded-full transition-all ${
+            isCritical ? "bg-[var(--color-danger)]" : isWarning ? "bg-[var(--color-warning)]" : "bg-[var(--color-secondary)]"
+          }`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      {(isCritical || isWarning) && upgradeHref ? (
+        <p className={`mt-1.5 text-xs ${isCritical ? "text-[var(--color-danger)]" : "text-[var(--color-warning)]"}`}>
+          {isCritical ? "Limit reached." : "Approaching limit."}{" "}
+          <a href={upgradeHref} className="underline hover:no-underline">Upgrade →</a>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function getFileStatusMessage(status?: string) {
   switch (status) {
     case "deleted":
@@ -461,7 +500,9 @@ function getFileStatusMessage(status?: string) {
     case "upload-too-large":
       return "Files must be 20 MB or smaller.";
     case "storage-limit":
-      return "This workspace has reached its storage limit.";
+      return "This workspace has reached its shared storage limit.";
+    case "private-storage-limit":
+      return "You have reached your private storage limit.";
     case "upload-failed":
       return "The file could not be uploaded. Try again.";
     case "delete-attached":

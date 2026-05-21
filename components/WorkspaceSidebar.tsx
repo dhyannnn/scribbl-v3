@@ -69,7 +69,7 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
   ];
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)]">
+    <aside className="flex h-full w-64 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)]">
       {/* Logo + workspace name */}
       <div className="flex h-16 items-center gap-3 border-b border-[var(--color-border)] px-5">
         <Link href="/" className="flex items-center gap-2.5 min-w-0">
@@ -228,6 +228,24 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
           </div>
         ) : null}
       </div>
+
+      {/* Billing link — owner only */}
+      {membership?.role === "OWNER" ? (
+        <div className="border-t border-[var(--color-border)] px-3 py-2">
+          <NavLink
+            href={`/workspaces/${workspaceId}/billing`}
+            exact
+            activeClassName="flex items-center gap-3 rounded-full px-4 py-2 text-sm font-medium bg-[var(--color-secondary)] text-white"
+            inactiveClassName="flex items-center gap-3 rounded-full px-4 py-2 text-sm font-medium text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)] transition"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+              <line x1="1" y1="10" x2="23" y2="10" />
+            </svg>
+            Billing
+          </NavLink>
+        </div>
+      ) : null}
 
       {/* User */}
       <div className="border-t border-[var(--color-border)] p-4">

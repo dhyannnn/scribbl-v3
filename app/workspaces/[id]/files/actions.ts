@@ -72,13 +72,30 @@ export async function uploadWorkspaceFile(formData: FormData) {
     where: { id: workspace.id },
     select: { plan: true },
   });
-  const { getWorkspaceStorageBytes, getStorageLimitBytes } = await import("@/lib/billing");
-  const [currentStorage, storageLimit] = await Promise.all([
-    getWorkspaceStorageBytes(workspace.id),
-    Promise.resolve(getStorageLimitBytes(workspaceWithPlan?.plan ?? "FREE")),
-  ]);
-  if (currentStorage + uploadedFile.size > storageLimit) {
-    redirect(`/workspaces/${workspace.id}/files?file=storage-limit`);
+  const plan = workspaceWithPlan?.plan ?? "FREE";
+  const {
+    getWorkspaceSharedStorageBytes,
+    getSharedStorageLimitBytes,
+    getUserPrivateStorageBytes,
+    getPrivateStorageLimitPerUserBytes,
+  } = await import("@/lib/billing");
+
+  if (visibility === "WORKSPACE_SHARED") {
+    const [currentShared, sharedLimit] = await Promise.all([
+      getWorkspaceSharedStorageBytes(workspace.id),
+      Promise.resolve(getSharedStorageLimitBytes(plan)),
+    ]);
+    if (currentShared + uploadedFile.size > sharedLimit) {
+      redirect(`/workspaces/${workspace.id}/files?file=storage-limit`);
+    }
+  } else {
+    const [currentPrivate, privateLimit] = await Promise.all([
+      getUserPrivateStorageBytes(currentUser.id, workspace.id),
+      Promise.resolve(getPrivateStorageLimitPerUserBytes(plan)),
+    ]);
+    if (currentPrivate + uploadedFile.size > privateLimit) {
+      redirect(`/workspaces/${workspace.id}/files?file=private-storage-limit`);
+    }
   }
 
   if (!RateLimits.fileUpload(currentUser.id)) {
@@ -196,12 +213,22 @@ export async function deleteWorkspaceFile(formData: FormData) {
 
   if (!file.storageKey.startsWith("uploads/")) {
     const supabase = createAdminClient();
+    const recordingsBucket = process.env.RECORDINGS_S3_BUCKET;
+    const isRecordingFile = recordingsBucket && file.storageBucket === recordingsBucket;
+
     const { error } = await supabase.storage
       .from(file.storageBucket ?? getStorageBucketName())
       .remove([file.storageKey]);
 
-    if (error) {
+    if (error && !isRecordingFile) {
+      // For regular Supabase Storage files, a storage error means we must abort
+      // to avoid orphaning a DB record that has no backing object.
       redirect(`/workspaces/${workspaceId}/files?file=delete-failed`);
+    }
+    // Recording files live in external S3 — the Supabase client can't reach them.
+    // If deletion fails, log but continue so the DB record (and storage quota) is freed.
+    if (error && isRecordingFile) {
+      console.error("[deleteWorkspaceFile] could not delete recording from S3, proceeding with DB cleanup", file.storageKey);
     }
   }
 

@@ -74,16 +74,17 @@ export function useTldrawYjsStore({
   useEffect(() => {
     const unsubs: (() => void)[] = [];
     const startedAt = liveblocksNow();
+    // Unique object used as the Yjs transaction origin for changes we write.
+    // Remote changes arrive with a different origin (null or the Liveblocks
+    // provider object), so we can skip re-applying our own writes.
     const localTldrawOrigin = {};
-    let applyingRemoteChanges = false;
 
     function getRemoteRecords() {
       const latestById = new Map<string, TLRecord>();
       for (const { key, val } of yStore.yarray.toJSON() as Array<{ key: string; val: TLRecord }>) {
-        if (!isSyncedDocumentRecord(val)) {
-          continue;
+        if (isSyncedDocumentRecord(val)) {
+          latestById.set(key, val);
         }
-        latestById.set(key, val);
       }
       return [...latestById.values()];
     }
@@ -93,9 +94,7 @@ export function useTldrawYjsStore({
         .filter(({ val }) => !isSyncedDocumentRecord(val))
         .map(({ key }) => key);
 
-      if (keysToDelete.length === 0) {
-        return;
-      }
+      if (keysToDelete.length === 0) return;
 
       yDoc.transact(() => {
         for (const key of keysToDelete) {
@@ -105,76 +104,30 @@ export function useTldrawYjsStore({
     }
 
     function applyRemoteRecords(records: TLRecord[]) {
-      applyingRemoteChanges = true;
-      try {
-        store.mergeRemoteChanges(() => {
-          const remoteIds = new Set(records.map((r) => r.id));
-          const toRemove = store.allRecords()
-            .filter(isSyncedDocumentRecord)
-            .map((r) => r.id)
-            .filter((id) => !remoteIds.has(id));
-          if (toRemove.length) store.remove(toRemove as TLRecord["id"][]);
-          if (records.length) store.put(records);
-        });
-      } finally {
-        applyingRemoteChanges = false;
-      }
-    }
-
-    function applyRemoteChanges(
-      changes: Map<
-        string,
-        | { action: "delete"; oldValue: TLRecord }
-        | { action: "update"; oldValue: TLRecord; newValue: TLRecord }
-        | { action: "add"; newValue: TLRecord }
-      >,
-    ) {
-      const toRemove: TLRecord["id"][] = [];
-      const toPut: TLRecord[] = [];
-
-      changes.forEach((change, id) => {
-        if (change.action === "delete") {
-          if (isSyncedDocumentRecord(change.oldValue)) {
-            toRemove.push(id as TLRecord["id"]);
-          }
-          return;
-        }
-
-        const record = yStore.get(id);
-        if (isSyncedDocumentRecord(record)) {
-          toPut.push(record);
-        }
+      store.mergeRemoteChanges(() => {
+        const remoteIds = new Set(records.map((r) => r.id));
+        const toRemove = store
+          .allRecords()
+          .filter(isSyncedDocumentRecord)
+          .map((r) => r.id)
+          .filter((id) => !remoteIds.has(id));
+        if (toRemove.length) store.remove(toRemove as TLRecord["id"][]);
+        if (records.length) store.put(records);
       });
-
-      if (toRemove.length === 0 && toPut.length === 0) {
-        return;
-      }
-
-      applyingRemoteChanges = true;
-      try {
-        store.mergeRemoteChanges(() => {
-          if (toRemove.length) store.remove(toRemove);
-          if (toPut.length) store.put(toPut);
-        });
-      } finally {
-        applyingRemoteChanges = false;
-      }
     }
 
     function handleSync() {
-      logLiveblocksClientTiming("Whiteboard Yjs sync", {
-        room: room.id,
-        alreadySynced: yProvider.synced,
-        recordCount: yStore.yarray.length,
-      }, liveblocksNow() - startedAt);
+      logLiveblocksClientTiming(
+        "Whiteboard Yjs sync",
+        { room: room.id, alreadySynced: yProvider.synced, recordCount: yStore.yarray.length },
+        liveblocksNow() - startedAt,
+      );
+
       removeLocalOnlyRecordsFromYjs();
 
-      // If Yjs already has records, load them into the tldraw store (they take
-      // precedence over the DB snapshot). Otherwise push the local store state
-      // (which may contain the DB snapshot) into Yjs.
+      // If Yjs already has records, they take precedence over the DB snapshot.
+      // Otherwise push the local store state (which may contain the DB snapshot) into Yjs.
       if (yStore.yarray.length) {
-        // mergeRemoteChanges avoids needing an editor context (unlike transact)
-        // and marks these as source:'remote' so our store listener won't re-sync them.
         applyRemoteRecords(getRemoteRecords());
       } else {
         yDoc.transact(() => {
@@ -187,13 +140,12 @@ export function useTldrawYjsStore({
       }
 
       // tldraw → Yjs
+      // source:"user" ensures we only forward user-initiated changes — remote
+      // changes applied via mergeRemoteChanges have source:"remote" and are
+      // already in Yjs, so we must not echo them back.
       unsubs.push(
         store.listen(
           ({ changes }) => {
-            if (applyingRemoteChanges) {
-              return;
-            }
-
             yDoc.transact(() => {
               Object.values(changes.added).forEach((r) => {
                 if (isSyncedDocumentRecord(r)) yStore.set(r.id, r);
@@ -206,16 +158,15 @@ export function useTldrawYjsStore({
               });
             }, localTldrawOrigin);
           },
-          { scope: "document" },
+          { source: "user", scope: "document" },
         ),
       );
 
       // Yjs → tldraw
-      // Note: we do NOT filter by transaction.local here. The @liveblocks/yjs
-      // provider marks remote updates as local transactions, so that check would
-      // silently discard all remote changes. Instead we rely on
-      // store.mergeRemoteChanges tagging incoming records as source:'remote',
-      // which our store.listen({ source:'user' }) already ignores — no loop risk.
+      // Use change.newValue directly — O(1) and guaranteed to be the value that
+      // triggered this event. Calling yStore.get(id) instead iterates the whole
+      // backing Y.Array (O(n)) and can return a stale entry during rapid updates,
+      // which is the root cause of drawings not appearing for remote users.
       const handleYjsChange = (
         changes: Map<
           string,
@@ -225,12 +176,33 @@ export function useTldrawYjsStore({
         >,
         transaction?: { origin?: unknown },
       ) => {
-        if (transaction?.origin === localTldrawOrigin) {
-          return;
-        }
+        // Skip changes we wrote ourselves.
+        if (transaction?.origin === localTldrawOrigin) return;
 
-        applyRemoteChanges(changes);
+        const toRemove: TLRecord["id"][] = [];
+        const toPut: TLRecord[] = [];
+
+        changes.forEach((change, id) => {
+          if (change.action === "delete") {
+            if (isSyncedDocumentRecord(change.oldValue)) {
+              toRemove.push(id as TLRecord["id"]);
+            }
+          } else {
+            // "add" | "update" — use newValue directly, not yStore.get(id)
+            if (isSyncedDocumentRecord(change.newValue)) {
+              toPut.push(change.newValue);
+            }
+          }
+        });
+
+        if (toRemove.length === 0 && toPut.length === 0) return;
+
+        store.mergeRemoteChanges(() => {
+          if (toRemove.length) store.remove(toRemove);
+          if (toPut.length) store.put(toPut);
+        });
       };
+
       yStore.on("change", handleYjsChange);
       unsubs.push(() => yStore.off("change", handleYjsChange));
 
@@ -319,11 +291,15 @@ export function useTldrawYjsStore({
   return storeWithStatus;
 }
 
+// Records that are shared across all collaborators via Yjs.
+// Instance-scoped records (camera, instance, instance_page_state, pointer)
+// are intentionally excluded — they are per-user and must not sync.
 function isSyncedDocumentRecord(record: TLRecord | undefined): record is TLRecord {
   return (
     record?.typeName === "document" ||
     record?.typeName === "page" ||
     record?.typeName === "shape" ||
-    record?.typeName === "asset"
+    record?.typeName === "asset" ||
+    record?.typeName === "binding" // tldraw v3: required for arrow/connector sync
   );
 }
