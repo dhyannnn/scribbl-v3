@@ -353,7 +353,7 @@ export function FloatingMeetingVideo({
   if (videoSurface === "popout" || videoSurface === "popout-closed") {
     return renderPortal(
       <aside
-        className="fixed rounded-md border border-[#2f604b]/40 bg-[#171713] text-white shadow-2xl"
+        className="fixed overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg"
         style={{
           left: panel.left,
           top: panel.top,
@@ -363,14 +363,14 @@ export function FloatingMeetingVideo({
         }}
       >
         <div
-          className="flex cursor-move items-center justify-between gap-3 rounded-md bg-[#20201d] px-3 py-2"
+          className="flex cursor-move items-center justify-between gap-3 border-b border-[var(--color-border)] px-3 py-2.5"
           onPointerDown={(event) => startInteraction(event, "drag")}
         >
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium">
+            <p className="truncate text-sm font-medium text-[var(--color-text)]">
               {videoSurface === "popout" ? "Video is open in popout" : "Video popout closed"}
             </p>
-            <p className="truncate text-xs text-white/60">
+            <p className="truncate text-xs text-[var(--color-subtle)]">
               {videoSurface === "popout" ? "The hub stays active here." : "Reconnect video in this panel."}
             </p>
           </div>
@@ -380,7 +380,7 @@ export function FloatingMeetingVideo({
                 type="button"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={focusPopout}
-                className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+                className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
               >
                 Focus
               </button>
@@ -389,7 +389,7 @@ export function FloatingMeetingVideo({
               type="button"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={bringBackVideo}
-              className="rounded-md bg-white px-2 py-1 text-xs font-medium text-[#20201d] transition hover:bg-[#eef5ef]"
+              className="rounded-full bg-[var(--color-secondary)] px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[var(--color-secondary-hover)]"
             >
               {videoSurface === "popout" ? "Bring Back" : "Reconnect"}
             </button>
@@ -409,8 +409,8 @@ export function FloatingMeetingVideo({
       ref={panelRef}
       className={
         isSplit
-          ? "scribbl-video-split-panel flex flex-col overflow-hidden border border-[#d8d8ce] bg-[#171713] text-white shadow-2xl min-[1101px]:border-y-0 min-[1101px]:border-r-0"
-          : "fixed overflow-hidden rounded-md border border-[#2f604b]/40 bg-[#171713] text-white shadow-2xl"
+          ? "scribbl-video-split-panel flex flex-col overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl min-[1101px]:border-y-0 min-[1101px]:border-r-0"
+          : "fixed overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
       }
       style={
         isSplit
@@ -446,8 +446,8 @@ export function FloatingMeetingVideo({
       <div
         className={
           isSplit
-            ? "flex items-center justify-between gap-3 border-b border-white/10 bg-[#20201d] px-4 py-3"
-            : "flex cursor-move items-center justify-between gap-3 border-b border-white/10 bg-[#20201d] px-3 py-2"
+            ? "flex items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-[var(--color-text)]"
+            : "flex cursor-move items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)]"
         }
         onPointerDown={(event) => {
           if (!isSplit) {
@@ -458,12 +458,12 @@ export function FloatingMeetingVideo({
         <div className="flex min-w-0 items-center gap-1.5">
           <p className="truncate text-sm font-medium">{isSplit ? "Split video" : "Video"}</p>
           {raisedHandCount > 0 ? (
-            <span className="shrink-0 rounded-full bg-[#fff7df] px-2 py-0.5 text-xs font-semibold text-[#7a5a15]">
+            <span className="shrink-0 rounded-full bg-[var(--color-warning-dim)] px-2 py-0.5 text-xs font-semibold text-[var(--color-warning)]">
               ✋ {raisedHandCount}
             </span>
           ) : null}
           {pendingRequestCount > 0 ? (
-            <span className="shrink-0 rounded-full bg-[#fff7df] px-2 py-0.5 text-xs font-semibold text-[#7a5a15]">
+            <span className="shrink-0 rounded-full bg-[var(--color-warning-dim)] px-2 py-0.5 text-xs font-semibold text-[var(--color-warning)]">
               📝 {pendingRequestCount}
             </span>
           ) : null}
@@ -475,7 +475,7 @@ export function FloatingMeetingVideo({
                 type="button"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => focusHubSection("#meeting-overview")}
-                className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+                className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
               >
                 Hub
               </button>
@@ -483,7 +483,7 @@ export function FloatingMeetingVideo({
                 type="button"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => focusHubSection("#meeting-notes")}
-                className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+                className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
               >
                 Open notes
               </button>
@@ -491,7 +491,7 @@ export function FloatingMeetingVideo({
                 type="button"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => focusHubSection("#meeting-chat")}
-                className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+                className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
               >
                 Open chat
               </button>
@@ -499,7 +499,7 @@ export function FloatingMeetingVideo({
                 type="button"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={openFullVideo}
-                className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+                className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
               >
                 Full
               </button>
@@ -507,7 +507,7 @@ export function FloatingMeetingVideo({
                 type="button"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={bringBackVideo}
-                className="rounded-md bg-white px-2 py-1 text-xs font-medium text-[#20201d] transition hover:bg-[#eef5ef]"
+                className="rounded-full bg-[var(--color-secondary)] px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[var(--color-secondary-hover)]"
               >
                 Float
               </button>
@@ -517,7 +517,7 @@ export function FloatingMeetingVideo({
               type="button"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={openSplitView}
-              className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+              className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
             >
               Split View
             </button>
@@ -527,7 +527,7 @@ export function FloatingMeetingVideo({
               type="button"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={openFullVideo}
-              className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+              className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
             >
               Full
             </button>
@@ -537,7 +537,7 @@ export function FloatingMeetingVideo({
               type="button"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={toggleMinimized}
-              className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+              className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
             >
               {isMinimized ? "Show" : "Hide"}
             </button>

@@ -1,4 +1,5 @@
 import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
+import { WorkspaceSidebarShell } from "@/components/WorkspaceSidebarShell";
 
 type WorkspaceLayoutProps = {
   children: React.ReactNode;
@@ -9,11 +10,8 @@ export default async function WorkspaceLayout({ children, params }: WorkspaceLay
   const { id } = await params;
 
   return (
-    <div className="flex min-h-screen bg-[var(--color-bg)]">
-      <WorkspaceSidebar workspaceId={id} />
-      <main className="flex-1 pl-64 min-w-0">
-        {children}
-      </main>
-    </div>
+    <WorkspaceSidebarShell sidebar={<WorkspaceSidebar workspaceId={id} />}>
+      {children}
+    </WorkspaceSidebarShell>
   );
 }

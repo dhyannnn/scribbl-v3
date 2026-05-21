@@ -4,6 +4,7 @@ import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
+import { getGradient } from "@/lib/color-hash";
 import { createTextNote, createWhiteboardNote, updateNoteExportAccess } from "./actions";
 import { DeleteNoteForm } from "./DeleteNoteForm";
 
@@ -88,6 +89,7 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
 
   const currentMembership = workspace.members.find((member) => member.userId === currentUser.id);
   const canManageWorkspaceNotes = currentMembership?.role === "OWNER" || currentMembership?.role === "ADMIN";
+  const canUseWhiteboard = workspace.plan !== "FREE";
   const privateNotes = workspace.notes.filter((note) => note.visibility === "PRIVATE");
   const sharedNotes = workspace.notes.filter((note) => note.visibility === "WORKSPACE_SHARED");
 
@@ -127,18 +129,29 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
                   New Note
                 </PendingSubmitButton>
               </form>
-              <form action={createWhiteboardNote}>
-                <input type="hidden" name="workspaceId" value={workspace.id} />
-                <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
-                <input type="hidden" name="collaboration" value="COLLABORATIVE" />
-                <PendingSubmitButton
-                  pendingLabel="Creating..."
-                  className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-semibold text-[var(--color-text)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
+              {canUseWhiteboard ? (
+                <form action={createWhiteboardNote}>
+                  <input type="hidden" name="workspaceId" value={workspace.id} />
+                  <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
+                  <input type="hidden" name="collaboration" value="COLLABORATIVE" />
+                  <PendingSubmitButton
+                    pendingLabel="Creating..."
+                    className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-semibold text-[var(--color-text)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
+                    New Whiteboard
+                  </PendingSubmitButton>
+                </form>
+              ) : (
+                <Link
+                  href={`/workspaces/${workspace.id}/billing#upgrade`}
+                  className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-semibold text-[var(--color-text)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
                   New Whiteboard
-                </PendingSubmitButton>
-              </form>
+                  <span className="rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--color-secondary)]">Pro</span>
+                </Link>
+              )}
 
               {/* Advanced options */}
               <details className="group relative">
@@ -172,14 +185,21 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
                       Shared Text (View-only)
                     </PendingSubmitButton>
                   </form>
-                  <form action={createWhiteboardNote}>
-                    <input type="hidden" name="workspaceId" value={workspace.id} />
-                    <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
-                    <input type="hidden" name="collaboration" value="SOLO" />
-                    <PendingSubmitButton pendingLabel="Creating..." className="w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
+                  {canUseWhiteboard ? (
+                    <form action={createWhiteboardNote}>
+                      <input type="hidden" name="workspaceId" value={workspace.id} />
+                      <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
+                      <input type="hidden" name="collaboration" value="SOLO" />
+                      <PendingSubmitButton pendingLabel="Creating..." className="w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
+                        Shared Board (View-only)
+                      </PendingSubmitButton>
+                    </form>
+                  ) : (
+                    <Link href={`/workspaces/${workspace.id}/billing#upgrade`} className="flex items-center justify-between rounded-xl px-3 py-2 text-sm text-[var(--color-muted)] transition hover:bg-[var(--color-surface-low)]">
                       Shared Board (View-only)
-                    </PendingSubmitButton>
-                  </form>
+                      <span className="rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--color-secondary)]">Pro</span>
+                    </Link>
+                  )}
                 </div>
               </details>
             </div>
@@ -274,27 +294,33 @@ function NoteSection({
                 ? note.ownerUserId === currentUserId
                 : note.exportAccess === "WORKSPACE_MEMBERS" || canManageExport;
 
+            const [gradFrom, gradTo] = getGradient(note.title);
             return (
               <article
                 key={note.id}
-                className="flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm transition hover:border-[var(--color-secondary)] hover:shadow-md"
+                className="flex flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm transition hover:border-[var(--color-secondary)] hover:shadow-md"
               >
-                {/* Type icon + label */}
-                <div className="mb-3 flex items-center gap-2">
+                {/* Gradient thumbnail */}
+                <div
+                  className="relative flex h-[88px] w-full items-center justify-center"
+                  style={{ background: `linear-gradient(135deg, ${gradFrom}, ${gradTo})` }}
+                >
                   {note.type === "WHITEBOARD" ? (
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--color-surface-low)]">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
-                    </span>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
+                      <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" />
+                    </svg>
                   ) : (
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--color-surface-low)]">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
-                    </span>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
                   )}
-                  <span className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-secondary)]">
+                  <span className="absolute bottom-2 right-3 font-mono text-[10px] font-bold uppercase tracking-widest text-white/70">
                     {note.type.toLowerCase()}
                   </span>
                 </div>
 
+                {/* Card content */}
+                <div className="flex flex-col p-5">
                 {/* Title */}
                 <h3 className="font-display text-base font-semibold text-[var(--color-text)] leading-snug">
                   {note.title}
@@ -368,6 +394,7 @@ function NoteSection({
                     />
                   ) : null}
                 </div>
+                </div>{/* end card content */}
               </article>
             );
           })}
@@ -400,6 +427,9 @@ function getNoteStatusMessage(status?: string) {
   switch (status) {
     case "deleted":
       return "Note deleted.";
+    case "plan-upgrade-required":
+    case "shared-whiteboard-upgrade-required":
+      return "Shared whiteboards are a Pro feature. You can still create private whiteboards.";
     case "invalid":
       return "Choose a valid note type and visibility.";
     case "unauthorized":

@@ -772,8 +772,8 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                   pendingRequests={pendingRequests}
                 />
               ) : null}
-              <div className="mt-4 min-h-0 max-h-[40vh] overflow-y-auto rounded-xl border border-[var(--color-border)] sm:max-h-[560px]">
-                <div className="sticky top-0 z-10 hidden grid-cols-[minmax(0,1fr)_110px_220px] gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)] lg:grid">
+              <div className="mt-4 min-h-0 max-h-[40vh] overflow-x-hidden overflow-y-auto rounded-xl border border-[var(--color-border)] sm:max-h-[560px]">
+                <div className="sticky top-0 z-10 hidden grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)] gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)] lg:grid">
                   <span>Participant</span>
                   <span>Status</span>
                   <span>Moderation</span>
@@ -781,7 +781,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 {meeting.participants.map((participant) => (
                   <div
                     key={participant.id}
-                    className="grid gap-2 border-b border-[var(--color-border)] px-3 py-3 last:border-0 lg:grid-cols-[minmax(0,1fr)_110px_220px] lg:items-start"
+                    className="grid gap-2 border-b border-[var(--color-border)] px-3 py-3 last:border-0 lg:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)] lg:items-start"
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium text-[var(--color-text)]">{participant.user.displayName}</p>
@@ -919,6 +919,9 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           workspaceId={id}
           meetingId={meeting.id}
           canEditNotes={canEditNotes}
+          canUseSharedWhiteboard={meeting.workspace.plan !== "FREE"}
+          canExportPdf={meeting.workspace.plan !== "FREE"}
+          canUploadAssets={meeting.workspace.plan !== "FREE"}
           shared={{
             selected: selectedSharedData,
             contentJson: selectedSharedContentJson,
@@ -1187,13 +1190,13 @@ function ParticipantPermissionControls({
           {requestedCount > 0 ? `${requestedCount} requested` : blockedCount > 0 ? `${blockedCount} blocked` : "All allowed"}
         </span>
       </summary>
-      <div className="mt-2 grid gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] p-1.5">
+      <div className="mt-1.5 grid gap-0.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] p-1">
         {permissionRows.map((row) => (
           <div
             key={row.key}
-            className="flex items-center gap-2 px-1.5 py-1"
+            className="flex items-center gap-1.5 px-1.5 py-1"
           >
-            <span className="w-[90px] shrink-0 text-xs font-medium text-[var(--color-text)]">{row.label}</span>
+            <span className="w-20 shrink-0 text-[11px] font-medium text-[var(--color-text)]">{row.label}</span>
             <span className={`min-w-0 flex-1 truncate text-[10px] ${getPermissionBadgeClassName(row.status.allowed, row.status.source)}`}>
               {row.status.label}
             </span>
@@ -1572,6 +1575,8 @@ function getMeetingStatusMessage(status?: string) {
       return "This meeting is read-only now.";
     case "permission-denied":
       return "You do not have permission for that meeting action yet.";
+    case "whiteboard-upgrade-required":
+      return "Whiteboards are a Pro feature. Upgrade to create whiteboards in meetings.";
     default:
       return null;
   }

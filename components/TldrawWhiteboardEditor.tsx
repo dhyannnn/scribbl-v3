@@ -4,14 +4,23 @@ import "tldraw/tldraw.css";
 import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
+  ArrowToolbarItem,
   DefaultMainMenu,
   DefaultToolbarContent,
+  DrawToolbarItem,
   EditSubmenu,
+  EraserToolbarItem,
   ExtrasGroup,
+  HandToolbarItem,
+  HighlightToolbarItem,
+  LaserToolbarItem,
   MobileStylePanel,
+  NoteToolbarItem,
   OverflowingToolbar,
   PORTRAIT_BREAKPOINT,
   PreferencesGroup,
+  SelectToolbarItem,
+  TextToolbarItem,
   TldrawUiMenuGroup,
   TldrawUiMenuItem,
   TldrawUiMenuSubmenu,
@@ -29,7 +38,8 @@ import {
   type TLUiMainMenuProps,
 } from "tldraw";
 import { getYjsProviderForRoom } from "@liveblocks/yjs";
-import { useRoom } from "@liveblocks/react/suspense";
+import { useOthers, useRoom } from "@liveblocks/react/suspense";
+import { VisibilityDropdown } from "@/components/VisibilityDropdown";
 import { exportWhiteboardPdf } from "@/lib/tldraw/export-pdf";
 import { noteTitleMaxLength } from "@/lib/note-title";
 import { useTldrawYjsStore } from "@/components/tldraw-yjs-store";
@@ -50,8 +60,8 @@ type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 const SHAPE_UTILS = [PageBackgroundShapeUtil];
 
-// Context that passes the current title into the tldraw component tree for export.
-const ExportCtx = createContext({ title: "" });
+// Context that passes per-session flags into the tldraw component tree.
+const ExportCtx = createContext({ title: "", canExportPdf: true, canUploadAssets: true });
 
 // ── Custom main menu / export submenu — all formats export ALL pages, JSON is removed
 
@@ -70,7 +80,7 @@ function CustomMainMenu(props: TLUiMainMenuProps) {
 function CustomExportMenu() {
   const editor = useEditor();
   const exportAs = useExportAs();
-  const { title } = useContext(ExportCtx);
+  const { title, canExportPdf } = useContext(ExportCtx);
   const [busySvg, setBusySvg] = useState(false);
   const [busyPng, setBusyPng] = useState(false);
   const [busyPdf, setBusyPdf] = useState(false);
@@ -120,13 +130,15 @@ function CustomExportMenu() {
           disabled={busyPng}
           onSelect={() => handleAllPages("png", setBusyPng)}
         />
-        <TldrawUiMenuItem
-          id="scribbl-export-all-as-pdf"
-          label={busyPdf ? "Exporting PDF..." : "PDF"}
-          readonlyOk
-          disabled={busyPdf}
-          onSelect={handlePdf}
-        />
+        {canExportPdf ? (
+          <TldrawUiMenuItem
+            id="scribbl-export-all-as-pdf"
+            label={busyPdf ? "Exporting PDF..." : "PDF"}
+            readonlyOk
+            disabled={busyPdf}
+            onSelect={handlePdf}
+          />
+        ) : null}
       </TldrawUiMenuGroup>
     </TldrawUiMenuSubmenu>
   );
@@ -173,13 +185,29 @@ function ScribblMenuPanel() {
 function ScribblToolbar() {
   const breakpoint = useBreakpoint();
   const isReadonlyMode = useReadonly();
+  const { canUploadAssets } = useContext(ExportCtx);
 
   return (
     <div className="tlui-toolbar">
       <div className="tlui-toolbar__inner">
         <div className="tlui-toolbar__left">
           <OverflowingToolbar>
-            <DefaultToolbarContent />
+            {canUploadAssets ? (
+              <DefaultToolbarContent />
+            ) : (
+              <>
+                <SelectToolbarItem />
+                <HandToolbarItem />
+                <DrawToolbarItem />
+                <HighlightToolbarItem />
+                <EraserToolbarItem />
+                <LaserToolbarItem />
+                <ArrowToolbarItem />
+                <TextToolbarItem />
+                <NoteToolbarItem />
+                {/* AssetToolbarItem intentionally omitted — image uploads gated to Pro */}
+              </>
+            )}
           </OverflowingToolbar>
         </div>
         {breakpoint < PORTRAIT_BREAKPOINT.TABLET_SM && !isReadonlyMode ? (
@@ -344,8 +372,13 @@ export function TldrawWhiteboardEditor({
   initialSnapshot,
   saveAction,
   canEdit = true,
+  canExportPdf = true,
+  canUploadAssets = true,
   canvasHeight = 600,
   variant = "card",
+  onCollapse,
+  noteVisibility,
+  canChangeVisibility = false,
 }: {
   workspaceId: string;
   meetingId?: string;
@@ -354,8 +387,13 @@ export function TldrawWhiteboardEditor({
   initialSnapshot: unknown;
   saveAction: (formData: FormData) => void | Promise<void>;
   canEdit?: boolean;
+  canExportPdf?: boolean;
+  canUploadAssets?: boolean;
   canvasHeight?: number | string;
   variant?: "card" | "goodnotes";
+  onCollapse?: () => void;
+  noteVisibility?: string;
+  canChangeVisibility?: boolean;
 }) {
   const room = useRoom();
   const storeWithStatus = useTldrawYjsStore({
@@ -392,6 +430,11 @@ export function TldrawWhiteboardEditor({
   }, [yMeta]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [isPending, startTransition] = useTransition();
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [zoomPct, setZoomPct] = useState(100);
+  const others = useOthers();
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const zoomUpdateRef = useRef(setZoomPct);
   const editorRef = useRef<Editor | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestSaveIdRef = useRef(0);
@@ -399,6 +442,7 @@ export function TldrawWhiteboardEditor({
   const titleValueRef = useRef(titleValue);
   // Refs so that the one-time onMount closure always calls the latest versions.
   const canEditRef = useRef(canEdit);
+  const canUploadAssetsRef = useRef(canUploadAssets);
   const queueAutosaveRef = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -408,6 +452,10 @@ export function TldrawWhiteboardEditor({
   useEffect(() => {
     canEditRef.current = canEdit;
   }, [canEdit]);
+
+  useEffect(() => {
+    canUploadAssetsRef.current = canUploadAssets;
+  }, [canUploadAssets]);
 
   const buildFormData = useCallback(() => {
     if (!editorRef.current) return null;
@@ -533,6 +581,13 @@ export function TldrawWhiteboardEditor({
         editor.updateInstanceState({ isReadonly: true });
       }
 
+      // Block image/file uploads for plans that don't support asset uploads.
+      // Overriding the external content handlers stops both drag-and-drop
+      // and clipboard paste of images/blobs.
+      if (!canUploadAssetsRef.current) {
+        editor.registerExternalContentHandler("files", () => {});
+      }
+
       const unsubStore = editor.store.listen(
         () => {
           queueAutosaveRef.current();
@@ -540,11 +595,19 @@ export function TldrawWhiteboardEditor({
         { source: "user", scope: "document" },
       );
 
+      const unsubZoom = editor.store.listen(
+        () => {
+          zoomUpdateRef.current(Math.round(editor.getZoomLevel() * 100));
+        },
+        { source: "all" },
+      );
+
       return () => {
         unsubPage();
         unsubDelete();
         unsubChange();
         unsubStore();
+        unsubZoom();
       };
     },
     [],
@@ -554,61 +617,206 @@ export function TldrawWhiteboardEditor({
     editorRef.current?.updateInstanceState({ isReadonly: !canEdit });
   }, [canEdit]);
 
+  function handleShare() {
+    void navigator.clipboard.writeText(window.location.href).then(() => {
+      setLinkCopied(true);
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = setTimeout(() => setLinkCopied(false), 2000);
+    });
+  }
+
+  const canvas = (
+    <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets }}>
+      <TldrawCanvas
+        key={`${noteId}:${variant}`}
+        store={storeWithStatus}
+        shapeUtils={SHAPE_UTILS}
+        onMount={handleMount}
+        components={TLDRAW_COMPONENTS}
+      />
+    </ExportCtx.Provider>
+  );
+
+  // ── Goodnotes / fullscreen variant ────────────────────────────────────────
+  if (variant === "goodnotes") {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        {/* Header */}
+        <div className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5">
+          {/* Pencil icon */}
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-secondary)]">
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+          </div>
+          {/* Title + autosave status */}
+          <div className="min-w-0 flex-1">
+            {canEdit ? (
+              <input
+                value={titleValue}
+                maxLength={noteTitleMaxLength}
+                onChange={(e) => { setTitleValue(e.target.value); yMeta.set("title", e.target.value); queueAutosave(); }}
+                className="w-full border-0 bg-transparent text-sm font-semibold text-[var(--color-text)] outline-none"
+              />
+            ) : (
+              <p className="truncate text-sm font-semibold text-[var(--color-text)]">{titleValue}</p>
+            )}
+            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--color-subtle)]">
+              {getStatusText(isPending ? "saving" : saveState)}
+            </p>
+          </div>
+          {/* Visibility control */}
+          {canChangeVisibility && noteVisibility && (
+            <VisibilityDropdown workspaceId={workspaceId} noteId={noteId} current={noteVisibility} />
+          )}
+          {/* Presence avatars */}
+          {others.length > 0 && (
+            <div className="flex -space-x-1.5">
+              {others.slice(0, 4).map((other) => {
+                type OtherInfo = { name?: string; color?: string };
+                const info = other.info as OtherInfo | undefined;
+                const name = info?.name ?? "?";
+                const color = info?.color ?? "#085ac0";
+                return (
+                  <div
+                    key={other.connectionId}
+                    title={name}
+                    className="flex size-7 items-center justify-center rounded-full border-2 border-[var(--color-surface)] text-[10px] font-bold text-white"
+                    style={{ background: color }}
+                  >
+                    {name[0]?.toUpperCase()}
+                  </div>
+                );
+              })}
+              {others.length > 4 && (
+                <div className="flex size-7 items-center justify-center rounded-full border-2 border-[var(--color-surface)] bg-[var(--color-surface-high)] text-[10px] font-bold text-[var(--color-muted)]">
+                  +{others.length - 4}
+                </div>
+              )}
+            </div>
+          )}
+          {/* Export PDF */}
+          {canExportPdf && (
+            <a
+              href={`/api/notes/${noteId}/export`}
+              className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
+            >
+              Export PDF
+            </a>
+          )}
+          {/* Share */}
+          <button
+            type="button"
+            onClick={handleShare}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+              linkCopied
+                ? "bg-[var(--color-success)] text-white"
+                : "bg-[var(--color-secondary)] text-white hover:bg-[var(--color-secondary-hover)]"
+            }`}
+          >
+            {linkCopied ? "Copied!" : "Share"}
+          </button>
+          {/* Collapse — icon only, matches text editor */}
+          {onCollapse && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              title="Collapse"
+              className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] p-1.5 text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
+            >
+              <svg width={14} height={14} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                <path d="M13 5H9V1M1 9h4v4M9 1l-5 5M5 13l5-5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Canvas */}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {canvas}
+        </div>
+
+        {/* View-only banner */}
+        {!canEdit && (
+          <div className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface-low)] px-5 py-2 text-xs text-[var(--color-muted)]">
+            View-only — only the owner or collaborative editors can make changes.
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex h-10 shrink-0 items-center justify-between border-t border-[var(--color-border)] bg-[var(--color-surface)] px-5">
+          {/* Left: save status */}
+          <div className="flex items-center gap-1.5 font-mono text-xs text-[var(--color-subtle)]">
+            <span className={`size-1.5 rounded-full ${
+              (isPending ? "saving" : saveState) === "saved" || (isPending ? "saving" : saveState) === "idle"
+                ? "bg-[var(--color-success)]"
+                : (isPending ? "saving" : saveState) === "error"
+                ? "bg-[var(--color-danger)]"
+                : "bg-[var(--color-warning)]"
+            }`} />
+            {getStatusText(isPending ? "saving" : saveState)}
+          </div>
+          {/* Right: zoom + save */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-0.5 font-mono text-xs text-[var(--color-subtle)]">
+              <button
+                type="button"
+                onClick={() => editorRef.current?.zoomOut()}
+                title="Zoom out"
+                className="flex size-5 items-center justify-center rounded hover:bg-[var(--color-surface-mid)]"
+              >−</button>
+              <span className="w-10 text-center">{zoomPct}%</span>
+              <button
+                type="button"
+                onClick={() => editorRef.current?.zoomIn()}
+                title="Zoom in"
+                className="flex size-5 items-center justify-center rounded hover:bg-[var(--color-surface-mid)]"
+              >+</button>
+            </div>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={saveNow}
+                disabled={isPending}
+                className="rounded-full bg-[var(--color-primary)] px-3 py-1 text-xs font-medium text-white transition hover:opacity-80 disabled:opacity-40"
+              >
+                Save Whiteboard
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Card variant (unchanged) ──────────────────────────────────────────────
   return (
-    <div className={variant === "goodnotes" ? "flex h-full min-h-0 flex-col" : "mt-5 grid gap-3"}>
-      <div
-        className={
-          variant === "goodnotes"
-            ? "flex flex-col gap-2 border-b border-[#d8d8ce] bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-6"
-            : "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-        }
-      >
+    <div className="grid gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         {canEdit ? (
-          <label className={variant === "goodnotes" ? "grid min-w-0 flex-1" : "grid flex-1 gap-2"}>
-            <span className={variant === "goodnotes" ? "sr-only" : "text-sm font-medium text-[#4d4f47]"}>Title</span>
+          <label className="grid flex-1 gap-1.5">
+            <span className="text-sm font-medium text-[var(--color-muted)]">Title</span>
             <input
               value={titleValue}
               maxLength={noteTitleMaxLength}
-              onChange={(e) => {
-                setTitleValue(e.target.value);
-                yMeta.set("title", e.target.value);
-                queueAutosave();
-              }}
-              className={
-                variant === "goodnotes"
-                  ? "min-h-10 min-w-0 border-0 bg-transparent text-base font-semibold outline-none"
-                  : "min-h-11 rounded-md border border-[#c8c8bd] bg-[#fbfbf8] px-3 text-sm font-semibold outline-none transition focus:border-[#2f604b] focus:bg-white"
-              }
+              onChange={(e) => { setTitleValue(e.target.value); yMeta.set("title", e.target.value); queueAutosave(); }}
+              className="min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 text-sm font-semibold text-[var(--color-text)] outline-none transition focus:border-[var(--color-secondary)]"
             />
           </label>
         ) : (
-          <h3 className="font-semibold">{title}</h3>
+          <h3 className="font-semibold text-[var(--color-text)]">{title}</h3>
         )}
-        <p className="text-xs text-[#777970] sm:self-end sm:pb-1">
+        <p className="font-mono text-xs text-[var(--color-subtle)] sm:self-end sm:pb-1">
           {getStatusText(isPending ? "saving" : saveState)}
         </p>
       </div>
-      <div
-        className={
-          variant === "goodnotes"
-            ? "min-h-0 flex-1 overflow-hidden bg-[#dfe5eb]"
-            : "overflow-hidden rounded-md border border-[#c8c8bd] shadow-sm"
-        }
-        style={variant === "goodnotes" ? { minHeight: 0 } : { height: canvasHeight }}
-      >
-        <ExportCtx.Provider value={{ title: titleValue }}>
-          <TldrawCanvas
-            key={`${noteId}:${variant}`}
-            store={storeWithStatus}
-            shapeUtils={SHAPE_UTILS}
-            onMount={handleMount}
-            components={TLDRAW_COMPONENTS}
-          />
-        </ExportCtx.Provider>
+      <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-sm" style={{ height: canvasHeight }}>
+        {canvas}
       </div>
       {!canEdit && (
-        <p className="text-xs text-[#777970]">
-          View-only board. Only the owner or collaborative editors can change it.
+        <p className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm text-[var(--color-muted)]">
+          View-only — only the owner or collaborative editors can make changes.
         </p>
       )}
     </div>

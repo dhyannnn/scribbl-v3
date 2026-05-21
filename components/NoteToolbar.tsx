@@ -78,11 +78,11 @@ function ColorPicker({
 }) {
   return (
     <div
-      className="absolute left-0 top-full z-50 mt-1 w-44 rounded-lg border border-[#d8d8ce] bg-white p-3 shadow-xl"
+      className="absolute left-0 top-full z-50 mt-1 w-44 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-xl"
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#9a9c92]">{label}</p>
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-subtle)]">{label}</p>
       <div className="grid grid-cols-4 gap-1.5">
         {colors.map((color) => (
           <button
@@ -90,10 +90,10 @@ function ColorPicker({
             type="button"
             title={color}
             onMouseDown={(e) => { e.preventDefault(); onSelect(color); }}
-            className={`size-7 rounded transition hover:scale-110 ${
+            className={`size-7 rounded-full transition hover:scale-110 ${
               activeColor === color
-                ? "ring-2 ring-[#2f604b] ring-offset-1"
-                : "border border-[#d8d8ce]"
+                ? "ring-2 ring-[var(--color-secondary)] ring-offset-1"
+                : "border border-[var(--color-border)]"
             }`}
             style={{ background: color }}
           />
@@ -102,7 +102,7 @@ function ColorPicker({
       <button
         type="button"
         onMouseDown={(e) => { e.preventDefault(); onClear(); }}
-        className="mt-2.5 w-full rounded-md border border-[#d8d8ce] bg-[#f7f7f2] py-1.5 text-xs font-medium text-[#4d4f47] hover:bg-[#efefea]"
+        className="mt-2.5 w-full rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] py-1.5 text-xs font-medium text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)]"
       >
         Clear
       </button>
@@ -112,7 +112,7 @@ function ColorPicker({
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function NoteToolbar({ editor }: { editor: Editor }) {
+export function NoteToolbar({ editor, flat = false }: { editor: Editor; flat?: boolean }) {
   const [showTextColors, setShowTextColors] = useState(false);
   const [showHighlightColors, setShowHighlightColors] = useState(false);
   const [showCellColors, setShowCellColors] = useState(false);
@@ -156,20 +156,20 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
       type="button"
       title={title}
       onMouseDown={(e) => { e.preventDefault(); onClick(); }}
-      className={`flex h-7 min-w-7 items-center justify-center rounded px-1 transition ${
+      className={`flex h-7 min-w-7 items-center justify-center rounded-full px-1 transition ${
         active
-          ? "bg-[#2f604b] text-white"
-          : "text-[#4d4f47] hover:bg-[#efefea] hover:text-[#20201d]"
+          ? "bg-[var(--color-secondary)] text-white"
+          : "text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)]"
       }`}
     >
       {children}
     </button>
   );
 
-  const sep = () => <div className="mx-0.5 h-5 w-px bg-[#d8d8ce]" />;
-  const tsep = () => <div className="mx-1 h-5 w-px bg-[#d8d8ce]" />;
+  const sep = () => <div className="mx-0.5 h-5 w-px bg-[var(--color-border)]" />;
+  const tsep = () => <div className="mx-1 h-5 w-px bg-[var(--color-border)]" />;
 
-  const selectCls = "h-7 rounded border border-[#d8d8ce] bg-white px-1.5 text-xs text-[#4d4f47] outline-none focus:border-[#2f604b]";
+  const selectCls = "h-7 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 text-xs text-[var(--color-muted)] outline-none focus:border-[var(--color-secondary)]";
 
   const activeColor = editor.getAttributes("textStyle").color as string | undefined;
   const activeHighlight = editor.getAttributes("highlight").color as string | undefined;
@@ -177,7 +177,10 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
   const inTable = editor.isActive("table");
 
   return (
-    <div className="rounded-t-md border border-b-0 border-[#d8d8ce] bg-[#f7f7f2]">
+    <div className={flat
+      ? "border-b border-[var(--color-border)] bg-[var(--color-surface-low)]"
+      : "rounded-t-md border border-b-0 border-[var(--color-border)] bg-[var(--color-surface-low)]"
+    }>
 
       {/* ── Main toolbar row ─────────────────────────────────────── */}
       <div className="flex items-center gap-0.5 overflow-x-auto px-2 py-1.5 sm:flex-wrap">
@@ -263,10 +266,10 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
             type="button"
             title="Text color"
             onMouseDown={(e) => { e.preventDefault(); setShowTextColors((v) => !v); setShowHighlightColors(false); setShowCellColors(false); }}
-            className="flex h-7 w-7 flex-col items-center justify-center gap-0.5 rounded hover:bg-[#efefea]"
+            className="flex h-7 w-7 flex-col items-center justify-center gap-0.5 rounded-full hover:bg-[var(--color-surface-mid)]"
           >
-            <span className="text-sm font-bold leading-none" style={{ color: activeColor ?? "#20201d" }}>A</span>
-            <span className="h-1 w-5 rounded-sm" style={{ background: activeColor ?? "#20201d" }} />
+            <span className="text-sm font-bold leading-none" style={{ color: activeColor ?? "var(--color-text)" }}>A</span>
+            <span className="h-1 w-5 rounded-sm" style={{ background: activeColor ?? "var(--color-text)" }} />
           </button>
           {showTextColors && (
             <ColorPicker
@@ -285,7 +288,7 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
             type="button"
             title="Highlight color"
             onMouseDown={(e) => { e.preventDefault(); setShowHighlightColors((v) => !v); setShowTextColors(false); setShowCellColors(false); }}
-            className="flex h-7 w-7 flex-col items-center justify-center gap-0.5 rounded text-[#4d4f47] hover:bg-[#efefea]"
+            className="flex h-7 w-7 flex-col items-center justify-center gap-0.5 rounded-full text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)]"
           >
             <Highlighter size={13} />
             <span className="h-1 w-5 rounded-sm" style={{ background: activeHighlight ?? "#fff176" }} />
@@ -346,7 +349,7 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
           type="button"
           title="Insert image"
           onMouseDown={(e) => { e.preventDefault(); imageInputRef.current?.click(); }}
-          className="flex h-7 min-w-7 items-center justify-center rounded px-1 text-[#4d4f47] transition hover:bg-[#efefea]"
+          className="flex h-7 min-w-7 items-center justify-center rounded-full px-1 text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)]"
         >
           <ImageIcon size={14} />
         </button>
@@ -368,17 +371,17 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
         {sep()}
 
         {/* Character count */}
-        <span className="ml-auto text-xs text-[#9a9c92]">
+        <span className="ml-auto font-mono text-xs text-[var(--color-subtle)]">
           {editor.storage.characterCount?.characters?.() ?? 0} chars
         </span>
       </div>
 
       {/* ── Table toolbar row (visible only when cursor is inside a table) ── */}
       {inTable && (
-        <div className="flex items-center gap-0.5 overflow-x-auto border-t border-[#d8d8ce] px-2 py-1 sm:flex-wrap">
+        <div className="flex items-center gap-0.5 overflow-x-auto border-t border-[var(--color-border)] px-2 py-1 sm:flex-wrap">
 
           {/* Rows */}
-          <span className="mr-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#9a9c92]">Rows</span>
+          <span className="mr-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-subtle)]">Rows</span>
           {btn(false, "Add row above", () => editor.chain().focus().addRowBefore().run(), <ArrowUpToLine size={13} />)}
           {btn(false, "Add row below", () => editor.chain().focus().addRowAfter().run(),  <ArrowDownToLine size={13} />)}
           {btn(false, "Delete row",    () => editor.chain().focus().deleteRow().run(),
@@ -387,7 +390,7 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
           {tsep()}
 
           {/* Columns */}
-          <span className="mr-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#9a9c92]">Cols</span>
+          <span className="mr-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-subtle)]">Cols</span>
           {btn(false, "Add column before (left)",  () => editor.chain().focus().addColumnBefore().run(), <ArrowLeftToLine size={13} />)}
           {btn(false, "Add column after (right)",  () => editor.chain().focus().addColumnAfter().run(),  <ArrowRightToLine size={13} />)}
           {btn(false, "Delete column",             () => editor.chain().focus().deleteColumn().run(),
@@ -396,14 +399,14 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
           {tsep()}
 
           {/* Cells */}
-          <span className="mr-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#9a9c92]">Cells</span>
+          <span className="mr-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-subtle)]">Cells</span>
           {btn(false, "Merge selected cells",  () => editor.chain().focus().mergeCells().run(),  <TableCellsMerge size={13} />)}
           {btn(false, "Split merged cell",     () => editor.chain().focus().splitCell().run(),   <TableCellsSplit size={13} />)}
 
           {tsep()}
 
           {/* Design */}
-          <span className="mr-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#9a9c92]">Design</span>
+          <span className="mr-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-subtle)]">Design</span>
           {btn(
             editor.isActive("tableHeader") || editor.isActive({ isHeader: true }),
             "Toggle header row",
@@ -423,18 +426,18 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
               type="button"
               title="Cell background color"
               onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setShowCellColors((v) => !v); }}
-              className="flex h-7 items-center gap-1 rounded border border-[#d8d8ce] bg-white px-2 text-[10px] font-medium text-[#4d4f47] hover:bg-[#efefea]"
+              className="flex h-7 items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-[10px] font-medium text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)]"
             >
-              <span className="size-3 rounded-sm border border-[#c8c8bd]" style={{ background: "#e8f5e9" }} />
+              <span className="size-3 rounded-sm border border-[var(--color-border)]" style={{ background: "#e8f5e9" }} />
               Cell color
             </button>
             {showCellColors && (
               <div
-                className="absolute left-0 top-full z-50 mt-1 w-52 rounded-lg border border-[#d8d8ce] bg-white p-3 shadow-xl"
+                className="absolute left-0 top-full z-50 mt-1 w-52 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-xl"
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
               >
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#9a9c92]">Cell background</p>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-subtle)]">Cell background</p>
                 <div className="grid grid-cols-4 gap-1.5">
                   {CELL_BG_COLORS.map(({ label, value }) => (
                     <button
@@ -446,10 +449,10 @@ export function NoteToolbar({ editor }: { editor: Editor }) {
                         editor.chain().focus().setCellAttribute("backgroundColor", value || null).run();
                         setShowCellColors(false);
                       }}
-                      className="flex h-8 flex-col items-center justify-center gap-0.5 rounded border border-[#d8d8ce] transition hover:border-[#2f604b]"
+                      className="flex h-8 flex-col items-center justify-center gap-0.5 rounded border border-[var(--color-border)] transition hover:border-[var(--color-secondary)]"
                       style={{ background: value || "#fff" }}
                     >
-                      <span className="text-[9px] text-[#4d4f47] drop-shadow-sm">{label}</span>
+                      <span className="text-[9px] text-[var(--color-muted)] drop-shadow-sm">{label}</span>
                     </button>
                   ))}
                 </div>

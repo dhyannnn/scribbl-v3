@@ -216,33 +216,33 @@ export function VideoPopoutShell({
   }, [channelName, closeToHub, meetingId, router]);
 
   return (
-    <main className="min-h-screen bg-[#171713] text-white">
+    <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-5 sm:px-8 lg:px-10">
-        <header className="flex flex-col gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <header className="flex flex-col gap-4 border-b border-[var(--color-border)] pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <button
               type="button"
               onClick={() => closeToHub()}
-              className="text-sm font-medium text-[#b7c8ba] transition hover:text-white"
+              className="font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-subtle)] transition hover:text-[var(--color-text)]"
             >
-              {wasOpenedByHub ? "Bring video back" : "Back to meeting hub"}
+              ← {wasOpenedByHub ? "Bring video back" : "Back to meeting hub"}
             </button>
-            <p className="mt-5 text-sm font-medium uppercase tracking-[0.18em] text-[#b7c8ba]">
+            <p className="mt-4 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">
               {workspaceName} / {lifecycleLabel}
             </p>
-            <h1 className="mt-2 text-4xl font-semibold tracking-normal">{meetingTitle}</h1>
+            <h1 className="mt-1.5 font-display text-3xl font-semibold text-[var(--color-text)]">{meetingTitle}</h1>
           </div>
           {!wasOpenedByHub ? (
             <div className="flex flex-wrap gap-2 text-sm">
               <Link
                 href={`${hubHref}#meeting-notes`}
-                className="rounded-md border border-white/15 bg-white/10 px-4 py-2 font-medium text-white transition hover:bg-white/20"
+                className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
               >
                 Open Notes
               </Link>
               <Link
                 href={`${hubHref}#meeting-chat`}
-                className="rounded-md border border-white/15 bg-white/10 px-4 py-2 font-medium text-white transition hover:bg-white/20"
+                className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
               >
                 Open Chat
               </Link>
@@ -257,32 +257,36 @@ export function VideoPopoutShell({
         ) : null}
 
         {recordingStatusMessage ? (
-          <p className="rounded-md border border-white/10 bg-white/10 px-4 py-3 text-sm text-white/80">
+          <p className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-muted)]">
             {recordingStatusMessage}
           </p>
         ) : null}
 
         {isReturning ? (
-          <div className="flex min-h-[420px] items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-6 text-center">
-            <p className="text-sm font-medium text-white/70">Returning video to the meeting hub...</p>
+          <div className="flex min-h-[420px] items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] p-6 text-center">
+            <p className="text-sm font-medium text-[var(--color-muted)]">Returning video to the meeting hub…</p>
           </div>
         ) : (
-          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
-            <div className="min-w-0">
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+            {/* Video section — fills most of the viewport */}
+            <div className="flex min-h-0 flex-col" style={{ minHeight: "calc(100vh - 200px)" }}>
               <VideoRoomStatusStrip
                 recording={recording}
                 participants={participants}
                 accessRequestCount={accessRequests.length}
               />
-              <MeetingVideoRoom
-                workspaceId={workspaceId}
-                meetingId={meetingId}
-                autoJoin={shouldAutoJoin}
-                disabled={disabled}
-                recording={recording}
-                canRecord={canRecord}
-                permissions={permissions}
-              />
+              <div className="min-h-0 flex-1 overflow-hidden rounded-xl">
+                <MeetingVideoRoom
+                  workspaceId={workspaceId}
+                  meetingId={meetingId}
+                  autoJoin={shouldAutoJoin}
+                  disabled={disabled}
+                  recording={recording}
+                  canRecord={canRecord}
+                  permissions={permissions}
+                  onAfterLeave={() => closeToHub()}
+                />
+              </div>
             </div>
             <aside className="min-w-0 xl:sticky xl:top-5">
               <FullVideoSidePanel
@@ -347,15 +351,15 @@ function StatusPill({
 }) {
   const toneClassName =
     tone === "live"
-      ? "border-[#5f7f67] bg-[#233526] text-[#dff4e5]"
+      ? "border-[var(--color-success-dim)] bg-[var(--color-success-dim)] text-[var(--color-success)]"
       : tone === "warn"
-        ? "border-[#9a7c39] bg-[#372d18] text-[#ffe8ad]"
-        : "border-white/10 bg-white/10 text-white/80";
+        ? "border-[var(--color-warning-dim)] bg-[var(--color-warning-dim)] text-[var(--color-warning)]"
+        : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)]";
 
   return (
-    <div className={`rounded-md border px-3 py-2 ${toneClassName}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-70">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold">{value}</p>
+    <div className={`rounded-xl border px-3 py-2.5 ${toneClassName}`}>
+      <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-[var(--color-subtle)]">{label}</p>
+      <p className="mt-0.5 truncate text-sm font-semibold">{value}</p>
     </div>
   );
 }
@@ -386,20 +390,20 @@ function FullVideoSidePanel({
   const activeParticipantCount = participants.filter((participant) => participant.joinedAt && !participant.leftAt).length;
   const tabButtonClassName = (tab: VideoPanelTab) =>
     activeTab === tab
-      ? "min-h-10 rounded-md bg-white px-3 text-sm font-semibold text-[#20201d] shadow-sm"
-      : "min-h-10 rounded-md px-3 text-sm font-semibold text-white/65 transition hover:bg-white/10 hover:text-white";
+      ? "min-h-9 rounded-full bg-[var(--color-primary)] px-3 text-sm font-semibold text-white shadow-sm"
+      : "min-h-9 rounded-full px-3 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)]";
 
   return (
-    <section className="overflow-hidden rounded-md border border-white/10 bg-[#20201d]">
-      <div className="border-b border-white/10 p-2">
-        <div className="grid grid-cols-3 gap-1 rounded-md bg-[#171713] p-1">
+    <section className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <div className="border-b border-[var(--color-border)] p-2">
+        <div className="flex gap-1 rounded-full bg-[var(--color-surface-low)] p-1">
           <button type="button" onClick={() => onTabChange("chat")} className={tabButtonClassName("chat")}>
             Chat
           </button>
           <button type="button" onClick={() => onTabChange("people")} className={tabButtonClassName("people")}>
             People
             {accessRequests.length > 0 ? (
-              <span className="ml-1 rounded-full bg-[#fff7df] px-1.5 py-0.5 text-[10px] font-bold text-[#7a5a15]">
+              <span className="ml-1 rounded-full bg-[var(--color-warning-dim)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--color-warning)]">
                 {accessRequests.length}
               </span>
             ) : null}
@@ -458,29 +462,29 @@ function RecordingMiniPanel({ recording }: { recording: MeetingVideoRecordingPro
   const latestRecording = recording.activeRecording ?? recording.latestRecording;
 
   return (
-    <section className="rounded-md border border-white/10 bg-[#20201d] p-4">
+    <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#b7c8ba]">Recording</p>
-          <h2 className="mt-1 text-base font-semibold text-white">{getRecordingLabel(latestRecording?.status)}</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-subtle)]">Recording</p>
+          <h2 className="mt-1 text-base font-semibold text-[var(--color-text)]">{getRecordingLabel(latestRecording?.status)}</h2>
         </div>
         {recording.activeRecording ? (
-          <span className="rounded-md bg-[#dff4e5] px-2 py-1 text-xs font-semibold text-[#1d6a3b]">Live</span>
+          <span className="rounded-md bg-[var(--color-success-dim)] px-2 py-1 text-xs font-semibold text-[var(--color-success)]">Live</span>
         ) : null}
       </div>
       {latestRecording ? (
-        <p className="mt-3 text-sm leading-6 text-white/70">
+        <p className="mt-3 text-sm leading-6 text-[var(--color-muted)]">
           Started by {latestRecording.startedBy.displayName} / {formatShortDateTime(latestRecording.startedAt)}
           {latestRecording.file?.sizeBytes ? ` / ${formatFileSize(latestRecording.file.sizeBytes)}` : ""}
         </p>
       ) : (
-        <p className="mt-3 text-sm leading-6 text-white/65">No recording has been saved for this meeting yet.</p>
+        <p className="mt-3 text-sm leading-6 text-[var(--color-muted)]">No recording has been saved for this meeting yet.</p>
       )}
       {latestRecording?.file ? (
         <Link
           href={`/api/files/${latestRecording.file.id}`}
           target="_blank"
-          className="mt-3 inline-flex min-h-9 items-center rounded-md border border-white/15 bg-white/10 px-3 text-sm font-medium text-white transition hover:bg-white/20"
+          className="mt-3 inline-flex min-h-9 items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
         >
           Open recording
         </Link>
@@ -499,20 +503,20 @@ function AccessRequestsMiniPanel({
   workspaceId: string;
 }) {
   return (
-    <section className="rounded-md border border-[#9a7c39] bg-[#372d18] p-4 text-[#ffe8ad]">
+    <section className="rounded-2xl border border-[var(--color-warning-dim)] bg-[var(--color-warning-dim)] p-4 text-[var(--color-warning)]">
       <p className="text-xs font-semibold uppercase tracking-[0.14em]">Edit access</p>
-      <h2 className="mt-1 text-base font-semibold text-white">
+      <h2 className="mt-1 text-base font-semibold text-[var(--color-text)]">
         {accessRequests.length} pending {accessRequests.length === 1 ? "request" : "requests"}
       </h2>
       <div className="mt-3 grid gap-2">
         {accessRequests.map((request) => (
           <div
             key={request.id}
-            className="grid gap-2 rounded-md border border-[#80672f] bg-[#2a2317] px-3 py-2.5"
+            className="grid gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 py-2.5"
           >
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">{request.user.displayName}</p>
-              <p className="truncate text-xs text-[#ffe8ad]/80">
+              <p className="truncate text-sm font-semibold text-[var(--color-text)]">{request.user.displayName}</p>
+              <p className="truncate text-xs text-[var(--color-warning)]">
                 {getPermissionTargetLabel(request.targetType)}
                 {request.artifactTitle ? ` / ${request.artifactTitle}` : ""}
               </p>
@@ -557,29 +561,29 @@ function ParticipantsMiniPanel({ participants }: { participants: VideoMeetingPar
   });
 
   return (
-    <section className="rounded-md border border-white/10 bg-[#20201d] p-4">
+    <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#b7c8ba]">Participants</p>
-          <h2 className="mt-1 text-base font-semibold text-white">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-subtle)]">Participants</p>
+          <h2 className="mt-1 text-base font-semibold text-[var(--color-text)]">
             {activeParticipants.length} in session
           </h2>
         </div>
-        <p className="text-sm text-white/60">{participants.length} total</p>
+        <p className="text-sm text-[var(--color-subtle)]">{participants.length} total</p>
       </div>
-      <div className="mt-3 max-h-56 overflow-y-auto rounded-md border border-white/10">
+      <div className="mt-3 max-h-56 overflow-y-auto rounded-xl border border-[var(--color-border)]">
         {sortedParticipants.map((participant) => (
           <div
             key={participant.id}
-            className="flex items-center gap-3 border-b border-white/10 px-3 py-2.5 last:border-b-0"
+            className="flex items-center gap-3 border-b border-[var(--color-border)] px-3 py-2.5 last:border-b-0"
           >
             <ParticipantAvatar participant={participant} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-white">{participant.user.displayName}</p>
-              <p className="truncate text-xs text-white/55">{formatParticipantStatus(participant)}</p>
+              <p className="truncate text-sm font-medium text-[var(--color-text)]">{participant.user.displayName}</p>
+              <p className="truncate text-xs text-[var(--color-subtle)]">{formatParticipantStatus(participant)}</p>
             </div>
             {participant.handRaised ? (
-              <span className="rounded-md bg-[#fff7df] px-2 py-1 text-xs font-semibold text-[#7a5a15]">
+              <span className="rounded-md bg-[var(--color-warning-dim)] px-2 py-1 text-xs font-semibold text-[var(--color-warning)]">
                 Hand
               </span>
             ) : null}
@@ -603,7 +607,7 @@ function ParticipantAvatar({ participant }: { participant: VideoMeetingParticipa
   }
 
   return (
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#dfe9df] text-sm font-semibold text-[#2f604b]">
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-secondary-dim)] text-sm font-semibold text-[var(--color-secondary)]">
       {getInitials(participant.user.displayName)}
     </div>
   );
@@ -617,21 +621,21 @@ function MeetingContextMiniPanel({
   onReturnToHub: () => void;
 }) {
   return (
-    <section className="rounded-md border border-white/10 bg-[#20201d] p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#b7c8ba]">Meeting</p>
-      <p className="mt-2 text-sm leading-6 text-white/70">
+    <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-subtle)]">Meeting</p>
+      <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">
         {formatShortDateTime(context.startsAt)}
         {context.endsAt ? ` to ${formatTime(context.endsAt)}` : ""}
       </p>
       {context.description ? (
-        <p className="mt-3 line-clamp-3 text-sm leading-6 text-white/70">{context.description}</p>
+        <p className="mt-3 line-clamp-3 text-sm leading-6 text-[var(--color-muted)]">{context.description}</p>
       ) : null}
       <div className="mt-4 flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-white">Artifacts</h2>
+        <h2 className="text-base font-semibold text-[var(--color-text)]">Artifacts</h2>
         <button
           type="button"
           onClick={onReturnToHub}
-          className="text-sm font-medium text-[#b7c8ba] transition hover:text-white"
+          className="text-sm font-medium text-[var(--color-subtle)] transition hover:text-[var(--color-text)]"
         >
           View hub
         </button>
@@ -639,11 +643,11 @@ function MeetingContextMiniPanel({
       {context.artifacts.length > 0 ? (
         <div className="mt-3 grid gap-2">
           {context.artifacts.slice(0, 5).map((artifact) => (
-            <div key={artifact.id} className="rounded-md border border-white/10 bg-white/5 px-3 py-2.5">
+            <div key={artifact.id} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 py-2.5">
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-white">{artifact.title}</p>
-                  <p className="mt-1 truncate text-xs text-white/55">
+                  <p className="truncate text-sm font-medium text-[var(--color-text)]">{artifact.title}</p>
+                  <p className="mt-1 truncate text-xs text-[var(--color-subtle)]">
                     {formatArtifactType(artifact)} / {artifact.detail}
                   </p>
                 </div>
@@ -651,7 +655,7 @@ function MeetingContextMiniPanel({
                   <Link
                     href={`/api/files/${artifact.fileId}`}
                     target="_blank"
-                    className="shrink-0 text-xs font-semibold text-[#b7c8ba] hover:text-white"
+                    className="shrink-0 text-xs font-semibold text-[var(--color-subtle)] hover:text-[var(--color-text)]"
                   >
                     Open
                   </Link>
@@ -661,7 +665,7 @@ function MeetingContextMiniPanel({
           ))}
         </div>
       ) : (
-        <p className="mt-3 rounded-md border border-dashed border-white/10 px-3 py-2 text-sm text-white/55">
+        <p className="mt-3 rounded-md border border-dashed border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-subtle)]">
           Notes, whiteboards, files, and recordings saved from this meeting will appear here.
         </p>
       )}

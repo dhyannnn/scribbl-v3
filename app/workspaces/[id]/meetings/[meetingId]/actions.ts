@@ -369,6 +369,26 @@ export async function startMeetingRecording(formData: FormData) {
     return finishRecordingAction(formData, workspaceId, meetingId, "plan-limit");
   }
 
+  // Recording hour hard-block: reject at 3× the included hours to prevent runaway costs.
+  // Use workspacePlan.plan (authoritative) not subscription.plan (may lag behind billing sync).
+  const subscription = await prisma.subscription.findUnique({
+    where: { workspaceId },
+    select: { currentPeriodStart: true, currentPeriodEnd: true },
+  });
+  if (subscription) {
+    const periodStart =
+      subscription.currentPeriodStart ??
+      new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const { getWorkspaceRecordingSecondsThisPeriod, getIncludedRecordingHours } = await import("@/lib/billing");
+    const usedSeconds = await getWorkspaceRecordingSecondsThisPeriod(workspaceId, periodStart);
+    // Use workspace plan (already confirmed non-FREE above) so a stale subscription.plan
+    // can never incorrectly block a legitimately-paid workspace.
+    const includedHours = getIncludedRecordingHours(workspacePlan!.plan);
+    if (usedSeconds / 3600 >= includedHours * 3) {
+      return finishRecordingAction(formData, workspaceId, meetingId, "plan-limit");
+    }
+  }
+
   if (!RateLimits.recordingStart(currentUser.id)) {
     return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
   }
@@ -457,6 +477,8 @@ export async function stopMeetingRecording(formData: FormData) {
         storageKey: true,
         fileId: true,
         startedByUserId: true,
+        startedAt: true,
+        stoppedAt: true,
         meeting: {
           select: {
             id: true,
@@ -569,6 +591,8 @@ export async function refreshMeetingRecordingStatus(formData: FormData) {
         storageKey: true,
         fileId: true,
         startedByUserId: true,
+        startedAt: true,
+        stoppedAt: true,
         meeting: {
           select: {
             id: true,
@@ -660,6 +684,8 @@ export async function syncMeetingRecordingStatus({
         storageKey: true,
         fileId: true,
         startedByUserId: true,
+        startedAt: true,
+        stoppedAt: true,
         meeting: {
           select: {
             id: true,
@@ -1155,6 +1181,17 @@ export async function createMeetingNote(formData: FormData) {
     return;
   }
 
+  // Shared whiteboards are Pro+ only — private whiteboards are allowed on Free
+  if (type === "WHITEBOARD" && scope === "SHARED") {
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { plan: true },
+    });
+    if (workspace?.plan === "FREE") {
+      redirect(`/workspaces/${workspaceId}/meetings/${meetingId}?meeting=whiteboard-upgrade-required`);
+    }
+  }
+
   if (!canEditMeetingNotes(getMeetingLifecycle(meeting))) {
     redirect(`/workspaces/${workspaceId}/meetings/${meetingId}?meeting=read-only`);
   }
@@ -1458,6 +1495,14 @@ export async function saveMeetingWhiteboard(formData: FormData) {
     return;
   }
 
+  // Shared whiteboards are Pro+ only — block saves of shared boards on Free
+  // Private meeting whiteboards are allowed on all plans
+  const workspaceForPlan = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { plan: true },
+  });
+  if (workspaceForPlan?.plan === "FREE" && artifact.note?.visibility === "WORKSPACE_SHARED") return;
+
   let snapshot: unknown;
   try {
     snapshot = JSON.parse(snapshotJson);
@@ -1639,6 +1684,8 @@ type PersistableRecording = {
   storageKey: string;
   fileId: string | null;
   startedByUserId: string;
+  startedAt: Date;
+  stoppedAt: Date | null;
   meeting: {
     id: string;
     title: string;
@@ -1694,6 +1741,14 @@ async function persistRecordingEgressResult({
       });
     }
 
+    // Use the existing stoppedAt if the user already clicked stop; fall back to
+    // now only if this is the first time we're learning the recording ended.
+    const endTime = recording.stoppedAt ?? new Date();
+    const durationSeconds =
+      status === "COMPLETED" && recording.startedAt
+        ? Math.round((endTime.getTime() - recording.startedAt.getTime()) / 1000)
+        : undefined;
+
     await tx.meetingRecording.update({
       where: {
         id: recording.id,
@@ -1704,6 +1759,7 @@ async function persistRecordingEgressResult({
         stoppedByUserId,
         stoppedAt: stoppedByUserId ? new Date() : undefined,
         completedAt,
+        durationSeconds,
         errorMessage: info.error || null,
       },
     });

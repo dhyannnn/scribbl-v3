@@ -19,6 +19,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  ChevronDown, ChevronRight,
+  LayoutGrid, Crosshair,
+  Maximize2, Minimize2,
+  Circle, Square,
+} from "lucide-react";
 
 // ── Emoji reactions ───────────────────────────────────────────────────────────
 
@@ -78,6 +84,7 @@ type MeetingVideoRoomProps = {
   recording?: MeetingVideoRecordingProps;
   recordingReturnTo?: "current" | "hub" | "video";
   permissions: MeetingVideoPermissionsProps;
+  onAfterLeave?: () => void;
 };
 
 type TokenResponse = {
@@ -97,6 +104,7 @@ export function MeetingVideoRoom({
   permissions,
   recording,
   recordingReturnTo = "video",
+  onAfterLeave,
 }: MeetingVideoRoomProps) {
   const [connection, setConnection] = useState<TokenResponse | null>(null);
   const [error, setError] = useState("");
@@ -136,7 +144,8 @@ export function MeetingVideoRoom({
     markLeft();
     clientSessionIdRef.current = "";
     setConnection(null);
-  }, [markLeft]);
+    onAfterLeave?.();
+  }, [markLeft, onAfterLeave]);
 
   useEffect(() => {
     return () => {
@@ -244,7 +253,7 @@ export function MeetingVideoRoom({
       onDisconnected={leaveRoom}
       data-lk-theme="default"
       className={`${getRoomClassName(mode)} ${mode === "full" ? "scribbl-full-video-room" : ""}`}
-      style={mode === "full" ? { height: "fit-content", minHeight: 0 } : undefined}
+      style={mode === "full" ? { height: "100%" } : undefined}
     >
       <ConferenceSurface
         workspaceId={workspaceId}
@@ -307,6 +316,24 @@ function ConferenceSurface({
   workspaceId: string;
 }) {
   const [showLocalPreview, setShowLocalPreview] = useState(false);
+  const [viewMode, setViewMode] = useState<"gallery" | "spotlight">("gallery");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  function toggleFullscreen() {
+    if (isFullscreen) {
+      void document.exitFullscreen();
+    } else if (containerRef.current) {
+      void containerRef.current.requestFullscreen();
+    }
+  }
   const { reactions, sendReaction } = useEmojiReactions();
   const livekitPermissions = useLocalParticipantPermissions();
   const localParticipant = useLocalParticipant();
@@ -319,10 +346,10 @@ function ConferenceSurface({
   });
   const speakingParticipants = useSpeakingParticipants();
   const displayTracks = useMemo(
-    () => getDisplayTracks(tracks, speakingParticipants, mode, showLocalPreview),
-    [mode, showLocalPreview, speakingParticipants, tracks],
+    () => getDisplayTracks(tracks, speakingParticipants, mode, showLocalPreview, viewMode),
+    [mode, showLocalPreview, speakingParticipants, tracks, viewMode],
   );
-  const gridClassName = getVideoGridClassName(displayTracks.length, mode);
+  const gridClassName = getVideoGridClassName(displayTracks.length, mode, viewMode);
 
   useEffect(() => {
     if (!effectivePermissions.canUseMic && localParticipant.isMicrophoneEnabled) {
@@ -346,8 +373,23 @@ function ConferenceSurface({
     localParticipant.localParticipant,
   ]);
 
+  const tileClassName = mode === "floating"
+    ? "h-full min-h-[150px] overflow-hidden rounded-xl bg-[#0f1929]"
+    : "h-full min-h-[200px] overflow-hidden rounded-xl bg-[#0f1929]";
+
+  const emptyClassName = mode === "floating"
+    ? "col-span-full flex min-h-[150px] items-center justify-center rounded-xl border border-white/10 bg-[#0f1929] p-4 text-center"
+    : "col-span-full flex min-h-[300px] items-center justify-center rounded-xl border border-white/10 bg-[#0f1929] p-6 text-center";
+
   return (
-    <div className={mode === "floating" ? "relative flex h-full min-h-0 flex-col bg-[#11110f]" : "relative flex flex-col bg-[#11110f]"}>
+    <div
+      ref={containerRef}
+      className={mode === "floating"
+        ? "relative flex h-full min-h-0 flex-col bg-[var(--color-live)]"
+        : "relative flex h-full min-h-0 flex-col bg-[var(--color-live)]"
+      }
+    >
+      {/* Video grid */}
       <div className={gridClassName}>
         {displayTracks.length > 0 ? (
           displayTracks.map((trackRef) => (
@@ -358,25 +400,25 @@ function ConferenceSurface({
                 trackRef.publication?.trackSid ?? "pending",
               ].join(":")}
               trackRef={trackRef}
-              className={mode === "floating" ? "h-full min-h-[150px] overflow-hidden rounded-md bg-[#20201d]" : "aspect-video min-h-[220px] max-h-[70vh] overflow-hidden rounded-md bg-[#20201d]"}
+              className={tileClassName}
             />
           ))
         ) : (
-          <div className={mode === "floating" ? "col-span-full flex min-h-[150px] items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-4 text-center" : "col-span-full flex min-h-[260px] items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-6 text-center"}>
+          <div className={emptyClassName}>
             <div>
-              <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#b7c8ba]">
-                {mode === "floating" ? "Waiting For Speaker" : "Connected"}
+              <p className="text-sm font-medium uppercase tracking-[0.18em] text-white/50">
+                {mode === "floating" ? "Waiting for speaker" : "Connected"}
               </p>
-              <p className="mt-3 text-sm leading-6 text-white/70">
+              <p className="mt-3 text-sm leading-6 text-white/40">
                 {mode === "floating"
-                  ? "Remote video will appear here when someone joins or shares."
+                  ? "Remote video will appear here when someone joins."
                   : "Turn on your camera or wait for someone else to join."}
               </p>
               {mode === "floating" && tracks.some((trackRef) => trackRef.participant.isLocal) ? (
                 <button
                   type="button"
                   onClick={() => setShowLocalPreview(true)}
-                  className="mt-4 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/20"
+                  className="mt-4 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/20"
                 >
                   Show Preview
                 </button>
@@ -385,68 +427,94 @@ function ConferenceSurface({
           </div>
         )}
       </div>
+
       <EmojiOverlay reactions={reactions} />
-      <div className={mode === "floating" ? "flex flex-wrap items-center justify-center gap-2 border-t border-white/10 bg-[#171713] p-2" : "flex flex-wrap items-center justify-center gap-2 border-t border-white/10 bg-[#171713] p-3"}>
-        {recording ? (
-          <RecordingControls
-            workspaceId={workspaceId}
-            meetingId={meetingId}
-            recording={recording}
-            canRecord={canRecord}
-            hasJoinedVideo={hasJoinedVideo}
-            mode={mode}
-            recordingReturnTo={recordingReturnTo}
-          />
-        ) : null}
-        <StartMediaButton
-          className={getControlClassName(mode, effectivePermissions.canUseMic || effectivePermissions.canUseCamera)}
-          disabled={!effectivePermissions.canUseMic && !effectivePermissions.canUseCamera}
-        >
-          Start Media
-        </StartMediaButton>
-        <PermissionTrackToggle
-          enabled={effectivePermissions.canUseMic}
-          mode={mode}
-          source={Track.Source.Microphone}
-        >
-          Mic
-        </PermissionTrackToggle>
-        <PermissionTrackToggle
-          enabled={effectivePermissions.canUseCamera}
-          mode={mode}
-          source={Track.Source.Camera}
-        >
-          Camera
-        </PermissionTrackToggle>
-        <PermissionTrackToggle
-          enabled={effectivePermissions.canShareScreen}
-          mode={mode}
-          source={Track.Source.ScreenShare}
-        >
-          Share
-        </PermissionTrackToggle>
-        {(permissions.canRaiseHand || permissions.handRaised) ? (
-          <HandRaiseButton
-            workspaceId={workspaceId}
-            meetingId={meetingId}
-            handRaised={permissions.handRaised}
-            mode={mode}
-          />
-        ) : null}
-        {mode === "floating" ? (
+
+      {/* Floating controls bar */}
+      {mode === "floating" ? (
+        <div className="flex flex-wrap items-center justify-center gap-1 border-t border-white/10 bg-black/40 p-1.5 backdrop-blur-sm">
+          <StartMediaButton className={getControlClassName(mode, effectivePermissions.canUseMic || effectivePermissions.canUseCamera)} disabled={!effectivePermissions.canUseMic && !effectivePermissions.canUseCamera}>
+            Start
+          </StartMediaButton>
+          <PermissionTrackToggle enabled={effectivePermissions.canUseMic} mode={mode} source={Track.Source.Microphone}>Mic</PermissionTrackToggle>
+          <PermissionTrackToggle enabled={effectivePermissions.canUseCamera} mode={mode} source={Track.Source.Camera}>Cam</PermissionTrackToggle>
+          {(permissions.canRaiseHand || permissions.handRaised) ? (
+            <HandRaiseButton workspaceId={workspaceId} meetingId={meetingId} handRaised={permissions.handRaised} mode={mode} />
+          ) : null}
+          <button type="button" onClick={() => setShowLocalPreview((v) => !v)} className={getControlClassName(mode)}>
+            {showLocalPreview ? "Hide" : "Self"}
+          </button>
+          <EmojiPickerButton sendReaction={sendReaction} mode={mode} />
+          <DisconnectButton className={getLeaveClassName(mode)}>Leave</DisconnectButton>
+        </div>
+      ) : (
+        <div className="absolute bottom-5 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/15 bg-black/60 px-2 py-1.5 shadow-2xl backdrop-blur-md">
+          {/* Collapse / expand toggle — always visible */}
           <button
             type="button"
-            onClick={() => setShowLocalPreview((value) => !value)}
+            onClick={() => setShowControls((v) => !v)}
             className={getControlClassName(mode)}
+            title={showControls ? "Hide controls" : "Show controls"}
           >
-            {showLocalPreview ? "Hide Self" : "Self"}
+            {showControls
+              ? <ChevronDown size={13} />
+              : <ChevronRight size={13} />
+            }
           </button>
-        ) : null}
-        <EmojiPickerButton sendReaction={sendReaction} mode={mode} />
-        <DisconnectButton className={getLeaveClassName(mode)}>
-          Leave
-        </DisconnectButton>
-      </div>
+
+          {/* All main controls — hidden when collapsed */}
+          {showControls && (
+            <>
+              <div className="mx-0.5 h-4 w-px bg-white/20" />
+              <button
+                type="button"
+                onClick={() => setViewMode((v) => v === "gallery" ? "spotlight" : "gallery")}
+                className={getControlClassName(mode)}
+                title={viewMode === "gallery" ? "Spotlight view" : "Gallery view"}
+              >
+                {viewMode === "gallery" ? <LayoutGrid size={13} /> : <Crosshair size={13} />}
+              </button>
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className={getControlClassName(mode)}
+                title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              >
+                {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+              </button>
+              <div className="mx-0.5 h-4 w-px bg-white/20" />
+              {recording ? (
+                <RecordingControls
+                  workspaceId={workspaceId}
+                  meetingId={meetingId}
+                  recording={recording}
+                  canRecord={canRecord}
+                  hasJoinedVideo={hasJoinedVideo}
+                  mode={mode}
+                  recordingReturnTo={recordingReturnTo}
+                />
+              ) : null}
+              <StartMediaButton
+                className={getControlClassName(mode, effectivePermissions.canUseMic || effectivePermissions.canUseCamera)}
+                disabled={!effectivePermissions.canUseMic && !effectivePermissions.canUseCamera}
+              >
+                Start
+              </StartMediaButton>
+              <PermissionTrackToggle enabled={effectivePermissions.canUseMic} mode={mode} source={Track.Source.Microphone}>Mic</PermissionTrackToggle>
+              <PermissionTrackToggle enabled={effectivePermissions.canUseCamera} mode={mode} source={Track.Source.Camera}>Cam</PermissionTrackToggle>
+              <PermissionTrackToggle enabled={effectivePermissions.canShareScreen} mode={mode} source={Track.Source.ScreenShare}>Share</PermissionTrackToggle>
+              {(permissions.canRaiseHand || permissions.handRaised) ? (
+                <HandRaiseButton workspaceId={workspaceId} meetingId={meetingId} handRaised={permissions.handRaised} mode={mode} />
+              ) : null}
+              <EmojiPickerButton sendReaction={sendReaction} mode={mode} />
+              <div className="mx-0.5 h-4 w-px bg-white/20" />
+            </>
+          )}
+
+          {/* Leave — always visible */}
+          <DisconnectButton className={getLeaveClassName(mode)}>Leave</DisconnectButton>
+        </div>
+      )}
     </div>
   );
 }
@@ -606,65 +674,59 @@ function RecordingControls({
     return null;
   }
 
+  // Compact inline recording controls — no card/panel, just buttons in the pill
   return (
-    <div className={getRecordingControlsClassName(mode)}>
-      <div>
-        <p className={mode === "floating" ? "text-xs font-medium text-white" : "font-medium text-white"}>
-          {getRecordingTitle(latestRecording)}
-        </p>
-        <p className={mode === "floating" ? "mt-1 text-xs" : "mt-1"}>
-          {getRecordingDetail({
-            hasJoinedVideo,
-            latestRecording,
-            canManage: recording.canManage,
-          })}
-        </p>
-        {latestRecording?.errorMessage ? (
-          <p className="mt-1 text-[#f1c7c2]">{latestRecording.errorMessage}</p>
-        ) : null}
-      </div>
+    <>
+      {/* Active recording pulse indicator */}
+      {activeRecording && (
+        <span
+          className={`${getControlClassName(mode)} flex items-center gap-1`}
+          title={activeRecording.status === "ACTIVE" ? "Recording live" : activeRecording.status === "STOPPING" ? "Finalizing…" : "Recording starting"}
+        >
+          <span className="size-1.5 animate-pulse rounded-full bg-[var(--color-danger)]" />
+          REC
+        </span>
+      )}
 
-      <div className={mode === "floating" ? "flex shrink-0 flex-wrap gap-2" : "flex flex-wrap gap-2"}>
-        {recording.canManage && !activeRecording && !canRecord ? (
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-white/60">Recording requires a Pro workspace.</p>
-            <a href={`/workspaces/${workspaceId}/billing`} className="text-xs font-medium text-[#818cf8] hover:underline">Upgrade →</a>
-          </div>
-        ) : null}
-        {recording.canManage && !activeRecording && canRecord ? (
-          <form action={submitStartRecording}>
-            <input type="hidden" name="workspaceId" value={workspaceId} />
-            <input type="hidden" name="meetingId" value={meetingId} />
-            <input type="hidden" name="recordingReturnTo" value={recordingReturnTo} />
-            <RecordingSubmitButton disabled={!canStartRecording} mode={mode} variant="start">
-              Start Recording
-            </RecordingSubmitButton>
-          </form>
-        ) : null}
+      {/* Upgrade prompt — non-manager on free plan */}
+      {recording.canManage && !activeRecording && !canRecord ? (
+        <a href={`/workspaces/${workspaceId}/billing`} className={getControlClassName(mode)}>
+          Upgrade
+        </a>
+      ) : null}
 
-        {recording.canManage && activeRecording ? (
-          <form action={submitStopRecording}>
-            <input type="hidden" name="workspaceId" value={workspaceId} />
-            <input type="hidden" name="meetingId" value={meetingId} />
-            <input type="hidden" name="recordingId" value={activeRecording.id} />
-            <input type="hidden" name="recordingReturnTo" value={recordingReturnTo} />
-            <RecordingSubmitButton disabled={activeRecording.status === "STOPPING"} mode={mode} variant="stop">
-              Stop Recording
-            </RecordingSubmitButton>
-          </form>
-        ) : null}
+      {/* Start recording */}
+      {recording.canManage && !activeRecording && canRecord ? (
+        <form action={submitStartRecording} className="inline-flex">
+          <input type="hidden" name="workspaceId" value={workspaceId} />
+          <input type="hidden" name="meetingId" value={meetingId} />
+          <input type="hidden" name="recordingReturnTo" value={recordingReturnTo} />
+          <RecordingSubmitButton disabled={!canStartRecording} mode={mode} variant="start">
+            <span className="flex items-center gap-1"><Circle size={8} className="fill-current" /> Rec</span>
+          </RecordingSubmitButton>
+        </form>
+      ) : null}
 
-        {latestRecording?.file ? (
-          <Link
-            href={`/api/files/${latestRecording.file.id}`}
-            target="_blank"
-            className={getRecordingLinkClassName(mode)}
-          >
-            Open Recording
-          </Link>
-        ) : null}
-      </div>
-    </div>
+      {/* Stop recording */}
+      {recording.canManage && activeRecording ? (
+        <form action={submitStopRecording} className="inline-flex">
+          <input type="hidden" name="workspaceId" value={workspaceId} />
+          <input type="hidden" name="meetingId" value={meetingId} />
+          <input type="hidden" name="recordingId" value={activeRecording.id} />
+          <input type="hidden" name="recordingReturnTo" value={recordingReturnTo} />
+          <RecordingSubmitButton disabled={activeRecording.status === "STOPPING"} mode={mode} variant="stop">
+            <span className="flex items-center gap-1"><Square size={8} className="fill-current" /> Stop</span>
+          </RecordingSubmitButton>
+        </form>
+      ) : null}
+
+      {/* Link to completed recording */}
+      {latestRecording?.file ? (
+        <Link href={`/api/files/${latestRecording.file.id}`} target="_blank" className={getRecordingLinkClassName(mode)}>
+          View Rec
+        </Link>
+      ) : null}
+    </>
   );
 }
 
@@ -688,79 +750,21 @@ function RecordingSubmitButton({
   );
 }
 
-function getRecordingControlsClassName(mode: "full" | "floating") {
-  if (mode === "floating") {
-    return "flex w-full flex-col gap-2 rounded-md border border-white/10 bg-white/5 p-2 text-xs text-white/75 sm:flex-row sm:items-center sm:justify-between";
-  }
-
-  return "flex w-full flex-col gap-2 rounded-md border border-white/10 bg-white/5 p-3 text-sm text-white/75 md:flex-row md:items-center md:justify-between";
-}
-
-function getRecordingButtonClassName(mode: "full" | "floating", variant: "start" | "stop") {
-  const sizeClassName = mode === "floating" ? "min-h-8 px-3 text-xs" : "min-h-10 px-4 text-sm";
+function getRecordingButtonClassName(_mode: "full" | "floating", variant: "start" | "stop") {
+  const sizeClassName = "px-2.5 py-1 text-xs";
 
   if (variant === "stop") {
-    return `${sizeClassName} rounded-md border border-[#f1c7c2] bg-[#fff7f5] font-medium text-[#7a3434] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60`;
+    return `${sizeClassName} rounded-full bg-[var(--color-danger)] font-semibold text-white transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50`;
   }
 
-  return `${sizeClassName} rounded-md bg-white font-medium text-[#20201d] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60`;
+  return `${sizeClassName} rounded-full border border-white/15 bg-white/10 font-medium text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50`;
 }
 
 function getRecordingLinkClassName(mode: "full" | "floating") {
   if (mode === "floating") {
-    return "inline-flex min-h-8 items-center rounded-md bg-white px-3 text-xs font-medium text-[#20201d] transition hover:bg-[#eef5ef]";
+    return "inline-flex min-h-7 items-center rounded-full border border-white/15 bg-white/10 px-2.5 text-xs font-medium text-white transition hover:bg-white/20";
   }
-
-  return "inline-flex min-h-10 items-center rounded-md bg-white px-4 text-sm font-medium text-[#20201d] transition hover:bg-[#eef5ef]";
-}
-
-function getRecordingTitle(recording?: MeetingVideoRecordingProps["latestRecording"]) {
-  switch (recording?.status) {
-    case "STARTING":
-      return "Recording is starting";
-    case "ACTIVE":
-      return "Recording live";
-    case "STOPPING":
-      return "Finalizing recording";
-    case "COMPLETED":
-      return "Recording saved";
-    case "FAILED":
-      return "Recording failed";
-    default:
-      return "Recording";
-  }
-}
-
-function getRecordingDetail({
-  canManage,
-  hasJoinedVideo,
-  latestRecording,
-}: {
-  canManage: boolean;
-  hasJoinedVideo: boolean;
-  latestRecording?: MeetingVideoRecordingProps["latestRecording"];
-}) {
-  if (!canManage) {
-    return latestRecording ? "Recording status is visible here." : "You do not have permission to manage recording.";
-  }
-
-  if (!hasJoinedVideo) {
-    return "Join video to manage recording.";
-  }
-
-  if (latestRecording?.status === "COMPLETED") {
-    return "Saved to this meeting's artifacts and workspace Files.";
-  }
-
-  if (latestRecording?.status === "STOPPING") {
-    return "The MP4 is being finalized and will appear automatically.";
-  }
-
-  if (latestRecording?.status === "ACTIVE") {
-    return "This video room is being recorded.";
-  }
-
-  return "Start recording from this video room.";
+  return "inline-flex min-h-8 items-center rounded-full border border-white/15 bg-white/10 px-3 text-sm font-medium text-white transition hover:bg-white/20";
 }
 
 function getDisplayTracks(
@@ -768,7 +772,18 @@ function getDisplayTracks(
   speakingParticipants: { identity: string; isLocal?: boolean }[],
   mode: "full" | "floating",
   showLocalPreview: boolean,
+  viewMode: "gallery" | "spotlight" = "gallery",
 ) {
+  if (mode === "full" && viewMode === "spotlight") {
+    const screenShare = tracks.find((t) => t.source === Track.Source.ScreenShare);
+    const activeIdentities = speakingParticipants.filter((p) => !p.isLocal).map((p) => p.identity);
+    const activeCamera = tracks.find(
+      (t) => t.source === Track.Source.Camera && activeIdentities.includes(t.participant.identity),
+    );
+    const spotlight = screenShare ?? activeCamera ?? tracks.find((t) => !t.participant.isLocal) ?? tracks[0];
+    return spotlight ? [spotlight] : [];
+  }
+
   if (mode === "full") {
     return tracks;
   }
@@ -856,7 +871,7 @@ function EmojiPickerButton({
         {mode === "floating" ? "😊" : "React 😊"}
       </button>
       {open && (
-        <div className="absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 flex gap-1 rounded-xl border border-white/15 bg-[#1e1e1b] p-2 shadow-2xl">
+        <div className="absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 flex gap-1 rounded-xl border border-white/15 bg-[#0c1525] p-2 shadow-2xl">
           {REACTION_EMOJIS.map((emoji) => (
             <button
               key={emoji}
@@ -879,55 +894,42 @@ function EmojiPickerButton({
 
 function getJoinSurfaceClassName(mode: "full" | "floating") {
   if (mode === "floating") {
-    return "flex h-full min-h-[260px] flex-col items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-4 text-center text-white";
+    return "flex h-full min-h-[260px] flex-col items-center justify-center rounded-xl border border-white/10 bg-[#0f1929] p-4 text-center text-white";
   }
-
-  return "flex min-h-[320px] flex-col items-center justify-center rounded-md border border-white/10 bg-[#20201d] p-6 text-center text-white xl:min-h-[420px]";
+  return "flex h-full min-h-[400px] flex-col items-center justify-center rounded-xl border border-white/10 bg-[#0f1929] p-6 text-center text-white";
 }
 
 function getRoomClassName(mode: "full" | "floating") {
   if (mode === "floating") {
-    return "h-full min-h-0 overflow-hidden rounded-md border border-white/10 bg-[#11110f]";
+    return "h-full min-h-0 overflow-hidden rounded-xl border border-white/10 bg-[var(--color-live)]";
   }
-
-  return "overflow-hidden rounded-md border border-white/10 bg-[#11110f]";
+  return "h-full min-h-0 overflow-hidden rounded-xl border border-white/10 bg-[var(--color-live)]";
 }
 
-function getVideoGridClassName(trackCount: number, mode: "full" | "floating") {
-  const baseClassName =
-    mode === "floating"
-      ? "grid min-h-0 flex-1 gap-2 overflow-auto p-2"
-      : "grid gap-3 overflow-auto p-3";
-
-  if (trackCount <= 1) {
-    return `${baseClassName} grid-cols-1`;
+function getVideoGridClassName(trackCount: number, mode: "full" | "floating", viewMode: "gallery" | "spotlight" = "gallery") {
+  if (mode === "floating") {
+    const base = "grid min-h-0 flex-1 gap-2 overflow-auto p-2";
+    return trackCount <= 1 ? `${base} grid-cols-1` : `${base} grid-cols-1`;
   }
 
-  if (trackCount === 2) {
-    return `${baseClassName} grid-cols-1 lg:grid-cols-2`;
-  }
+  // Full mode — tiles fill available height via auto-rows-fr
+  const base = "grid min-h-0 flex-1 gap-3 p-3 pb-20 auto-rows-fr";
 
-  if (trackCount <= 4) {
-    return `${baseClassName} grid-cols-1 sm:grid-cols-2`;
-  }
-
-  return `${baseClassName} grid-cols-1 sm:grid-cols-2 xl:grid-cols-3`;
+  if (trackCount <= 1 || viewMode === "spotlight") return `${base} grid-cols-1`;
+  if (trackCount === 2) return `${base} grid-cols-2`;
+  if (trackCount <= 4) return `${base} grid-cols-2 grid-rows-2`;
+  return `${base} grid-cols-3`;
 }
 
 function getControlClassName(mode: "full" | "floating", enabled = true) {
-  const disabledClassName = enabled ? "" : " cursor-not-allowed opacity-45";
-
+  const disabled = enabled ? "" : " cursor-not-allowed opacity-40";
   if (mode === "floating") {
-    return `rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/20${disabledClassName}`;
+    return `rounded-full border border-white/15 bg-white/10 px-2 py-1 text-xs font-medium text-white transition hover:bg-white/20${disabled}`;
   }
-
-  return `rounded-md border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20${disabledClassName}`;
+  // Full mode — compact pill buttons
+  return `rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-white/20${disabled}`;
 }
 
 function getLeaveClassName(mode: "full" | "floating") {
-  if (mode === "floating") {
-    return "rounded-md border border-[#f1c7c2] bg-[#fff7f5] px-3 py-1.5 text-xs font-medium text-[#7a3434] transition hover:bg-white";
-  }
-
-  return "rounded-md border border-[#f1c7c2] bg-[#fff7f5] px-4 py-2 text-sm font-medium text-[#7a3434] transition hover:bg-white";
+  return `rounded-full bg-[var(--color-danger)] ${mode === "floating" ? "px-2 py-1 text-xs" : "px-2.5 py-1 text-xs"} font-semibold text-white transition hover:opacity-80`;
 }

@@ -63,6 +63,9 @@ export function MeetingNotesSection({
   workspaceId,
   meetingId,
   canEditNotes,
+  canUseSharedWhiteboard = true,
+  canExportPdf = true,
+  canUploadAssets = true,
   shared,
   priv,
   selectedSharedNoteId,
@@ -73,6 +76,9 @@ export function MeetingNotesSection({
   workspaceId: string;
   meetingId: string;
   canEditNotes: boolean;
+  canUseSharedWhiteboard?: boolean;
+  canExportPdf?: boolean;
+  canUploadAssets?: boolean;
   shared: NoteSlotData;
   priv: NoteSlotData;
   selectedSharedNoteId: string | undefined;
@@ -129,6 +135,7 @@ export function MeetingNotesSection({
           meetingId={meetingId}
           scope={scope}
           disabled={!canEditNotes}
+          canUseWhiteboard={isShared ? canUseSharedWhiteboard : true}
           picker={
             slot.all.length > 0 ? (
               <NotePickerForm
@@ -162,6 +169,8 @@ export function MeetingNotesSection({
             slot={slot}
             emptyText={emptyText}
             canvasHeight="100%"
+            canExportPdf={canExportPdf}
+            canUploadAssets={canUploadAssets}
             lazy={false}
             focusMode={selectedType === "WHITEBOARD" ? "whiteboard" : "document"}
           />
@@ -180,6 +189,9 @@ export function MeetingNotesSection({
         meetingId={meetingId}
         scope="SHARED"
         disabled={!canEditNotes}
+        canUseWhiteboard={canUseSharedWhiteboard}
+        canExportPdf={canExportPdf}
+        canUploadAssets={canUploadAssets}
         slot={shared}
         selectedId={selectedSharedNoteId}
         preserveName="privateNoteId"
@@ -194,6 +206,9 @@ export function MeetingNotesSection({
         meetingId={meetingId}
         scope="PRIVATE"
         disabled={!canEditNotes}
+        canUseWhiteboard={true}
+        canExportPdf={canExportPdf}
+        canUploadAssets={canUploadAssets}
         slot={priv}
         selectedId={selectedPrivateNoteId}
         preserveName="sharedNoteId"
@@ -214,6 +229,9 @@ function NoteCard({
   meetingId,
   scope,
   disabled,
+  canUseWhiteboard,
+  canExportPdf = true,
+  canUploadAssets = true,
   slot,
   selectedId,
   preserveName,
@@ -227,6 +245,9 @@ function NoteCard({
   meetingId: string;
   scope: "SHARED" | "PRIVATE";
   disabled: boolean;
+  canUseWhiteboard: boolean;
+  canExportPdf?: boolean;
+  canUploadAssets?: boolean;
   slot: NoteSlotData;
   selectedId: string | undefined;
   preserveName: string;
@@ -243,6 +264,7 @@ function NoteCard({
         meetingId={meetingId}
         scope={scope}
         disabled={disabled}
+        canUseWhiteboard={canUseWhiteboard}
         onExpand={slot.selected ? onExpand : undefined}
       />
 
@@ -264,6 +286,8 @@ function NoteCard({
         slot={slot}
         emptyText={emptyText}
         canvasHeight="min(600px, 50vh)"
+        canExportPdf={canExportPdf}
+        canUploadAssets={canUploadAssets}
         lazy
       />
     </section>
@@ -279,6 +303,7 @@ function NoteHeader({
   meetingId,
   scope,
   disabled,
+  canUseWhiteboard = true,
   onExpand,
   onCollapse,
 }: {
@@ -288,6 +313,7 @@ function NoteHeader({
   meetingId: string;
   scope: "SHARED" | "PRIVATE";
   disabled: boolean;
+  canUseWhiteboard?: boolean;
   onExpand?: () => void;
   onCollapse?: () => void;
 }) {
@@ -313,19 +339,29 @@ function NoteHeader({
             New Note
           </PendingSubmitButton>
         </form>
-        <form action={createMeetingNote}>
-          <input type="hidden" name="workspaceId" value={workspaceId} />
-          <input type="hidden" name="meetingId" value={meetingId} />
-          <input type="hidden" name="scope" value={scope} />
-          <input type="hidden" name="type" value="WHITEBOARD" />
-          <PendingSubmitButton
-            className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
-            disabled={disabled}
-            pendingLabel="Creating..."
+        {canUseWhiteboard ? (
+          <form action={createMeetingNote}>
+            <input type="hidden" name="workspaceId" value={workspaceId} />
+            <input type="hidden" name="meetingId" value={meetingId} />
+            <input type="hidden" name="scope" value={scope} />
+            <input type="hidden" name="type" value="WHITEBOARD" />
+            <PendingSubmitButton
+              className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
+              disabled={disabled}
+              pendingLabel="Creating..."
+            >
+              New Board
+            </PendingSubmitButton>
+          </form>
+        ) : (
+          <a
+            href={`/workspaces/${workspaceId}/billing#upgrade`}
+            className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
           >
             New Board
-          </PendingSubmitButton>
-        </form>
+            <span className="rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--color-secondary)]">Pro</span>
+          </a>
+        )}
         {onExpand ? (
           <button
             onClick={onExpand}
@@ -357,6 +393,7 @@ function FocusedMeetingNoteChrome({
   meetingId,
   scope,
   disabled,
+  canUseWhiteboard = true,
   picker,
   showFloatingVideo,
   onToggleFloatingVideo,
@@ -369,6 +406,7 @@ function FocusedMeetingNoteChrome({
   meetingId: string;
   scope: "SHARED" | "PRIVATE";
   disabled: boolean;
+  canUseWhiteboard?: boolean;
   picker: ReactNode;
   showFloatingVideo: boolean;
   onToggleFloatingVideo: () => void;
@@ -421,21 +459,32 @@ function FocusedMeetingNoteChrome({
                 Note
               </PendingSubmitButton>
             </form>
-            <form action={createMeetingNote}>
-              <input type="hidden" name="workspaceId" value={workspaceId} />
-              <input type="hidden" name="meetingId" value={meetingId} />
-              <input type="hidden" name="scope" value={scope} />
-              <input type="hidden" name="type" value="WHITEBOARD" />
-              <input type="hidden" name="noteFocus" value={scope === "SHARED" ? "shared" : "private"} />
-              <PendingSubmitButton
-                className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
-                disabled={disabled}
-                pendingLabel="Creating..."
+            {canUseWhiteboard ? (
+              <form action={createMeetingNote}>
+                <input type="hidden" name="workspaceId" value={workspaceId} />
+                <input type="hidden" name="meetingId" value={meetingId} />
+                <input type="hidden" name="scope" value={scope} />
+                <input type="hidden" name="type" value="WHITEBOARD" />
+                <input type="hidden" name="noteFocus" value={scope === "SHARED" ? "shared" : "private"} />
+                <PendingSubmitButton
+                  className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
+                  disabled={disabled}
+                  pendingLabel="Creating..."
+                >
+                  <SquarePen size={13} />
+                  Board
+                </PendingSubmitButton>
+              </form>
+            ) : (
+              <a
+                href={`/workspaces/${workspaceId}/billing#upgrade`}
+                className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
               >
                 <SquarePen size={13} />
                 Board
-              </PendingSubmitButton>
-            </form>
+                <span className="rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--color-secondary)]">Pro</span>
+              </a>
+            )}
             <button
               onClick={onToggleFloatingVideo}
               className={`flex min-h-9 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition ${
@@ -662,6 +711,8 @@ function NoteEditorSlot({
   slot,
   emptyText,
   canvasHeight,
+  canExportPdf = true,
+  canUploadAssets = true,
   lazy = false,
   focusMode,
 }: {
@@ -670,6 +721,8 @@ function NoteEditorSlot({
   slot: NoteSlotData;
   emptyText: string;
   canvasHeight: number | string;
+  canExportPdf?: boolean;
+  canUploadAssets?: boolean;
   lazy?: boolean;
   focusMode?: "document" | "whiteboard";
 }) {
@@ -712,6 +765,8 @@ function NoteEditorSlot({
             initialSnapshot={getTldrawSnapshot(contentJson)}
             saveAction={saveMeetingWhiteboard}
             canEdit={canEdit}
+            canExportPdf={canExportPdf}
+            canUploadAssets={canUploadAssets}
             canvasHeight={canvasHeight}
             variant={focusMode === "whiteboard" ? "goodnotes" : "card"}
           />

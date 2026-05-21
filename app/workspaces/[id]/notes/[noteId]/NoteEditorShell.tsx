@@ -13,8 +13,11 @@ type Props = {
   noteType: "TEXT" | "WHITEBOARD";
   title: string;
   contentJson: unknown;
+  noteVisibility?: string;
   canEdit: boolean;
-  canExport: boolean;
+  canChangeVisibility?: boolean;
+  canExportPdf?: boolean;
+  canUploadAssets?: boolean;
   tldrawSnapshot: unknown;
 };
 
@@ -24,11 +27,14 @@ export function NoteEditorShell({
   noteType,
   title,
   contentJson,
+  noteVisibility,
   canEdit,
-  canExport,
+  canChangeVisibility = false,
+  canExportPdf = true,
+  canUploadAssets = true,
   tldrawSnapshot,
 }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const roomId = createNoteRoomId(workspaceId, noteId);
 
   // Escape key collapses the expanded view
@@ -53,30 +59,8 @@ export function NoteEditorShell({
 
   if (expanded) {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-[#f7f7f2]">
-        {/* Minimal header bar */}
-        <div className="flex shrink-0 items-center gap-3 border-b border-[#d8d8ce] bg-white px-4 py-3 sm:px-6">
-          <p className="min-w-0 flex-1 truncate font-semibold text-[#20201d]">{title}</p>
-          {canExport && noteType === "TEXT" ? (
-            <a
-              href={`/api/notes/${noteId}/export`}
-              className="shrink-0 rounded-md bg-[#2f604b] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#244b3a]"
-            >
-              Export PDF
-            </a>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            className="flex shrink-0 items-center gap-1.5 rounded-md border border-[#c8c8bd] bg-white px-3 py-2 text-sm font-medium text-[#4d4f47] transition hover:bg-[#f7f7f2]"
-          >
-            <CollapseIcon />
-            Collapse
-          </button>
-        </div>
-
-        {/* Editor — fills remaining height */}
-        <div className="min-h-0 flex-1 overflow-auto">
+      <div className="fixed inset-0 z-50 flex flex-col">
+        <div className="min-h-0 flex-1 overflow-hidden">
           <LiveblocksRoom roomId={roomId}>
             {noteType === "TEXT" ? (
               <TextNoteEditor
@@ -86,20 +70,27 @@ export function NoteEditorShell({
                 contentJson={contentJson}
                 saveAction={saveTextNote}
                 canEdit={canEdit}
+                canExportPdf={canExportPdf}
+                noteVisibility={noteVisibility}
+                canChangeVisibility={canChangeVisibility}
                 variant="document"
+                onCollapse={() => setExpanded(false)}
               />
             ) : (
-              <div className="h-full p-4">
-                <TldrawWhiteboardEditor
-                  workspaceId={workspaceId}
-                  noteId={noteId}
-                  title={title}
-                  initialSnapshot={tldrawSnapshot}
-                  saveAction={saveWhiteboardNote}
-                  canEdit={canEdit}
-                  canvasHeight="calc(100vh - 160px)"
-                />
-              </div>
+              <TldrawWhiteboardEditor
+                workspaceId={workspaceId}
+                noteId={noteId}
+                title={title}
+                initialSnapshot={tldrawSnapshot}
+                saveAction={saveWhiteboardNote}
+                canEdit={canEdit}
+                canExportPdf={canExportPdf}
+                canUploadAssets={canUploadAssets}
+                noteVisibility={noteVisibility}
+                canChangeVisibility={canChangeVisibility}
+                variant="goodnotes"
+                onCollapse={() => setExpanded(false)}
+              />
             )}
           </LiveblocksRoom>
         </div>
@@ -114,7 +105,7 @@ export function NoteEditorShell({
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="flex items-center gap-1.5 rounded-md border border-[#c8c8bd] bg-white px-3 py-2 text-sm font-medium text-[#4d4f47] shadow-sm transition hover:bg-[#f7f7f2]"
+          className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-medium text-[var(--color-muted)] shadow-sm transition hover:bg-[var(--color-surface-mid)]"
         >
           <ExpandIcon />
           Expand
@@ -133,7 +124,7 @@ export function NoteEditorShell({
             canEdit={canEdit}
           />
         ) : (
-          <section className="rounded-md border border-[#d8d8ce] bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
             <TldrawWhiteboardEditor
               workspaceId={workspaceId}
               noteId={noteId}
@@ -157,10 +148,3 @@ function ExpandIcon() {
   );
 }
 
-function CollapseIcon() {
-  return (
-    <svg width={14} height={14} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}>
-      <path d="M13 5H9V1M1 9h4v4M9 1l-5 5M5 13l5-5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
