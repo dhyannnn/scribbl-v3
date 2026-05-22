@@ -168,7 +168,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
       {/* Footer */}
       <div className="mt-8 flex gap-5">
-        {[["Privacy Policy", "/privacy"], ["Terms of Service", "/terms"], ["Contact Support", "mailto:support@scribblapp.ca"]].map(
+        {[["Privacy Policy", "/privacy"], ["Terms of Service", "/terms"], ["Contact Support", "mailto:inquiry@scribblapp.ca"]].map(
           ([label, href]) => (
             <a key={label} href={href} className="font-mono text-xs text-[var(--color-subtle)] transition hover:text-[var(--color-muted)]">
               {label}

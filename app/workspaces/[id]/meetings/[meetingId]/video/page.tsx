@@ -143,23 +143,15 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
           name: true,
           messages: {
             select: {
-              id: true,
-              channelId: true,
-              senderUserId: true,
-              body: true,
-              createdAt: true,
-              editedAt: true,
-              deletedAt: true,
-              sender: {
-                select: {
-                  displayName: true,
-                  avatarUrl: true,
-                },
-              },
+              id: true, channelId: true, senderUserId: true, body: true,
+              createdAt: true, editedAt: true, deletedAt: true,
+              isPinned: true, replyToId: true,
+              sender: { select: { displayName: true, avatarUrl: true } },
+              replyTo: { select: { id: true, body: true, sender: { select: { displayName: true } } } },
+              reactions: { select: { emoji: true, userId: true } },
+              attachmentFile: { select: { id: true, name: true, mimeType: true, sizeBytes: true, publicUrl: true } },
             },
-            orderBy: {
-              createdAt: "desc",
-            },
+            orderBy: { createdAt: "desc" },
             take: 100,
           },
         },
@@ -273,19 +265,24 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
     ? {
         id: meeting.channel.id,
         name: meeting.channel.name,
-        messages: [...meeting.channel.messages].reverse().map((message) => ({
-          id: message.id,
-          channelId: message.channelId,
-          senderUserId: message.senderUserId,
-          body: message.body,
-          createdAt: message.createdAt.toISOString(),
-          editedAt: message.editedAt?.toISOString() ?? null,
-          deletedAt: message.deletedAt?.toISOString() ?? null,
-          sender: {
-            displayName: message.sender.displayName,
-            avatarUrl: message.sender.avatarUrl,
-          },
-        })),
+        messages: [...meeting.channel.messages].reverse().map((message) => {
+          const reactionMap = new Map<string, string[]>();
+          for (const r of message.reactions) {
+            const arr = reactionMap.get(r.emoji) ?? [];
+            arr.push(r.userId);
+            reactionMap.set(r.emoji, arr);
+          }
+          return {
+            id: message.id, channelId: message.channelId, senderUserId: message.senderUserId,
+            body: message.body, createdAt: message.createdAt.toISOString(),
+            editedAt: message.editedAt?.toISOString() ?? null, deletedAt: message.deletedAt?.toISOString() ?? null,
+            isPinned: message.isPinned, replyToId: message.replyToId,
+            replyTo: message.replyTo ?? null,
+            reactions: Array.from(reactionMap.entries()).map(([emoji, userIds]) => ({ emoji, userIds })),
+            attachmentFile: message.attachmentFile ?? null,
+            sender: { displayName: message.sender.displayName, avatarUrl: message.sender.avatarUrl },
+          };
+        }),
       }
     : null;
   const participants = meeting.participants.map((participant) => ({

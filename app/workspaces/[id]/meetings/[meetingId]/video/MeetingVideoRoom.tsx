@@ -110,7 +110,11 @@ export function MeetingVideoRoom({
   const [error, setError] = useState("");
   const [hasMarkedJoined, setHasMarkedJoined] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const clientSessionIdRef = useRef("");
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  // Persist clientSessionId across same-browser mode switches (floating → full → split).
+  // A different device has no stored ID so it always generates a fresh one, which is
+  // what triggers the real cross-device conflict check.
+  const clientSessionIdRef = useRef(getStoredClientSessionId(meetingId));
   const connectedRef = useRef(false);
   const leaveTimeoutRef = useRef<number | null>(null);
   const activeSessionIntervalRef = useRef<number | null>(null);
@@ -143,9 +147,10 @@ export function MeetingVideoRoom({
   const leaveRoom = useCallback(() => {
     markLeft();
     clientSessionIdRef.current = "";
+    clearStoredClientSessionId(meetingId);
     setConnection(null);
     onAfterLeave?.();
-  }, [markLeft, onAfterLeave]);
+  }, [markLeft, meetingId, onAfterLeave]);
 
   useEffect(() => {
     return () => {
@@ -153,37 +158,54 @@ export function MeetingVideoRoom({
     };
   }, [markLeft]);
 
-  const joinRoom = useCallback(async () => {
-    setError("");
-    const clientSessionId = createClientSessionId();
+  const fetchToken = useCallback(async (force = false) => {
+    const clientSessionId = clientSessionIdRef.current || createClientSessionId();
     clientSessionIdRef.current = clientSessionId;
 
+    const response = await fetch("/api/livekit-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId, meetingId, clientSessionId, ...(force ? { force: true } : {}) }),
+    });
+    const payload = await response.json();
+
+    if (response.status === 409 && payload.conflict) {
+      setShowConflictModal(true);
+      return;
+    }
+
+    if (!response.ok) {
+      clientSessionIdRef.current = "";
+      clearStoredClientSessionId(meetingId);
+      setError(typeof payload?.error === "string" ? payload.error : "Unable to join video.");
+      return;
+    }
+
+    storeClientSessionId(meetingId, clientSessionId);
+    setConnection(payload as TokenResponse);
+  }, [meetingId, workspaceId]);
+
+  const joinRoom = useCallback(async () => {
+    setError("");
+    clientSessionIdRef.current = createClientSessionId();
     try {
-      const response = await fetch("/api/livekit-token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          workspaceId,
-          meetingId,
-          clientSessionId,
-        }),
-      });
-      const payload = await response.json();
-
-      if (!response.ok) {
-        clientSessionIdRef.current = "";
-        setError(typeof payload?.error === "string" ? payload.error : "Unable to join video.");
-        return;
-      }
-
-      setConnection(payload as TokenResponse);
+      await fetchToken(false);
     } catch {
       clientSessionIdRef.current = "";
       setError("Unable to reach the video service.");
     }
-  }, [meetingId, workspaceId]);
+  }, [fetchToken]);
+
+  const joinForced = useCallback(async () => {
+    setShowConflictModal(false);
+    setError("");
+    try {
+      await fetchToken(true);
+    } catch {
+      clientSessionIdRef.current = "";
+      setError("Unable to reach the video service.");
+    }
+  }, [fetchToken]);
 
   useEffect(() => {
     if (!autoJoin || disabled || connection || isPending) {
@@ -198,28 +220,65 @@ export function MeetingVideoRoom({
 
   if (!connection) {
     return (
-      <div className={getJoinSurfaceClassName(mode)}>
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#b7c8ba]">LiveKit Video</p>
-        <h2 className={mode === "floating" ? "mt-2 text-xl font-semibold" : "mt-3 text-3xl font-semibold"}>
-          Join the room
-        </h2>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-white/70">
-          Mic, camera, and screen share controls will open here.
-        </p>
-        {error ? (
-          <p className="mt-5 rounded-md border border-[#f1c7c2] bg-[#fff7f5] px-4 py-3 text-sm text-[#7a3434]">
-            {error}
+      <>
+        {/* Multi-device conflict modal */}
+        {showConflictModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-sm rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-2xl">
+              <div className="mb-1 flex items-center gap-2 text-[var(--color-warning)]">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <h2 className="font-semibold text-[var(--color-text)]">Already in this meeting</h2>
+              </div>
+              <p className="mt-2 text-sm text-[var(--color-muted)]">
+                You&apos;re in this meeting from another device. Joining here will disconnect that session.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowConflictModal(false)}
+                  className="flex-1 rounded-full border border-[var(--color-border)] py-2 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={joinForced}
+                  className="flex-1 rounded-full bg-[var(--color-secondary)] py-2 text-sm font-medium text-white transition hover:bg-[var(--color-secondary-hover)]"
+                >
+                  Join here
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className={getJoinSurfaceClassName(mode)}>
+          <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#b7c8ba]">LiveKit Video</p>
+          <h2 className={mode === "floating" ? "mt-2 text-xl font-semibold" : "mt-3 text-3xl font-semibold"}>
+            Join the room
+          </h2>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-white/70">
+            Mic, camera, and screen share controls will open here.
           </p>
-        ) : null}
-        <button
-          type="button"
-          disabled={disabled || isPending}
-          onClick={joinRoom}
-          className="mt-6 rounded-md bg-white px-5 py-2.5 text-sm font-medium text-[#20201d] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {disabled ? "Video unavailable" : isPending ? "Joining..." : "Join Video"}
-        </button>
-      </div>
+          {error ? (
+            <p className="mt-5 rounded-md border border-[#f1c7c2] bg-[#fff7f5] px-4 py-3 text-sm text-[#7a3434]">
+              {error}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            disabled={disabled || isPending}
+            onClick={joinRoom}
+            className="mt-6 rounded-md bg-white px-5 py-2.5 text-sm font-medium text-[#20201d] transition hover:bg-[#eef5ef] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {disabled ? "Video unavailable" : isPending ? "Joining..." : "Join Video"}
+          </button>
+        </div>
+      </>
     );
   }
 
@@ -294,6 +353,20 @@ export function hasRecentActiveVideoSession(meetingId: string) {
 
 function getActiveVideoStorageKey(meetingId: string) {
   return `scribbl-video-active:${meetingId}`;
+}
+
+// Persist clientSessionId so same-browser mode switches (floating → full → split)
+// reuse the same DB session and never trip the cross-device conflict check.
+function storeClientSessionId(meetingId: string, id: string) {
+  try { localStorage.setItem(`scribbl-video-sid:${meetingId}`, id); } catch { /* ignore */ }
+}
+
+function getStoredClientSessionId(meetingId: string): string {
+  try { return localStorage.getItem(`scribbl-video-sid:${meetingId}`) ?? ""; } catch { return ""; }
+}
+
+function clearStoredClientSessionId(meetingId: string) {
+  try { localStorage.removeItem(`scribbl-video-sid:${meetingId}`); } catch { /* ignore */ }
 }
 
 function ConferenceSurface({

@@ -34,7 +34,7 @@ vi.mock("@/lib/supabase/server", () => ({
   })),
 }));
 
-const { deleteAccount } = await import("@/app/account/actions");
+const { deleteAccount } = await import("@/app/(app)/account/actions");
 
 describe("deleteAccount", () => {
   const user = makeUser();

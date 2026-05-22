@@ -86,6 +86,13 @@ export function getRecordingOverageRateCad(plan: SubscriptionPlan): number {
   }
 }
 
+// ── Storage overage helper ────────────────────────────────────────────────────
+
+export function getStorageOverageGB(usedBytes: number, limitBytes: number): number {
+  const overBytes = Math.max(0, usedBytes - limitBytes);
+  return Math.ceil(overBytes / (1024 * 1024 * 1024));
+}
+
 // ── Storage queries ───────────────────────────────────────────────────────────
 
 // Sums WORKSPACE_SHARED files only — used for workspace shared storage gating
@@ -185,12 +192,21 @@ export async function syncWorkspacePlanFromStripe(workspaceId: string): Promise<
     if (subscription.stripeSubscriptionId) {
       stripeSub = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId);
     } else {
-      const list = await stripe.subscriptions.list({
+      // Prefer an active subscription; fall back to the most recent one
+      const active = await stripe.subscriptions.list({
         customer: subscription.stripeCustomerId,
-        status: "all",
+        status: "active",
         limit: 1,
       });
-      stripeSub = list.data[0] ?? null;
+      stripeSub = active.data[0] ?? null;
+      if (!stripeSub) {
+        const all = await stripe.subscriptions.list({
+          customer: subscription.stripeCustomerId,
+          status: "all",
+          limit: 1,
+        });
+        stripeSub = all.data[0] ?? null;
+      }
     }
 
     if (!stripeSub) {

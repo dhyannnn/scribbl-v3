@@ -335,7 +335,7 @@ export function NoteToolbar({ editor, flat = false }: { editor: Editor; flat?: b
         {sep()}
 
         {/* Link */}
-        {btn(editor.isActive("link"), "Insert / remove link", () => {
+        {btn(editor.isActive("link"), "Insert / remove link (⌘⇧K)", () => {
           if (editor.isActive("link")) {
             editor.chain().focus().unsetLink().run();
           } else {

@@ -1,4 +1,4 @@
-import { AccessToken, TrackSource } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient, TrackSource } from "livekit-server-sdk";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/current-user";
 import { createLiveKitMeetingRoomName } from "@/lib/livekit-room";
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { workspaceId, meetingId, clientSessionId } = parseBody(body);
+  const { workspaceId, meetingId, clientSessionId, force } = parseBody(body);
 
   if (!workspaceId || !meetingId || !clientSessionId) {
     return NextResponse.json({ error: "Workspace and meeting are required." }, { status: 400 });
@@ -119,6 +119,34 @@ export async function POST(request: Request) {
   ].filter((source): source is TrackSource => source !== null);
 
   const roomName = createLiveKitMeetingRoomName(meeting.id);
+
+  // Check for an active session from a different device
+  const existingSession = await prisma.meetingVideoSession.findFirst({
+    where: {
+      meetingId,
+      userId: currentUser.id,
+      disconnectedAt: null,
+      clientSessionId: { not: clientSessionId },
+    },
+    select: { id: true },
+  });
+
+  if (existingSession) {
+    if (!force) {
+      return NextResponse.json(
+        { conflict: true, error: "You are already in this meeting from another device." },
+        { status: 409 },
+      );
+    }
+    // force=true: kick the old session from LiveKit then let this one in
+    try {
+      const roomService = new RoomServiceClient(livekitUrl, livekitApiKey, livekitApiSecret);
+      await roomService.removeParticipant(roomName, currentUser.id);
+    } catch {
+      // Participant may have already left — safe to continue
+    }
+  }
+
   const token = new AccessToken(livekitApiKey, livekitApiSecret, {
     identity: currentUser.id,
     name: currentUser.displayName,
@@ -144,22 +172,20 @@ export async function POST(request: Request) {
 
 function parseBody(body: unknown) {
   if (!body || typeof body !== "object") {
-    return {
-      workspaceId: "",
-      meetingId: "",
-      clientSessionId: "",
-    };
+    return { workspaceId: "", meetingId: "", clientSessionId: "", force: false };
   }
 
   const maybeBody = body as {
     workspaceId?: unknown;
     meetingId?: unknown;
     clientSessionId?: unknown;
+    force?: unknown;
   };
 
   return {
     workspaceId: typeof maybeBody.workspaceId === "string" ? maybeBody.workspaceId : "",
     meetingId: typeof maybeBody.meetingId === "string" ? maybeBody.meetingId : "",
     clientSessionId: typeof maybeBody.clientSessionId === "string" ? maybeBody.clientSessionId : "",
+    force: maybeBody.force === true,
   };
 }

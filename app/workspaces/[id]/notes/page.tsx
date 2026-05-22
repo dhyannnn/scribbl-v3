@@ -374,7 +374,7 @@ function NoteSection({
                 <div className="mt-auto pt-4 flex flex-wrap gap-2">
                   <Link
                     href={`/workspaces/${workspaceId}/notes/${note.id}`}
-                    className="rounded-full bg-[var(--color-primary)] px-4 py-1.5 text-sm font-semibold text-white transition hover:opacity-80"
+                    className="inline-flex items-center justify-center rounded-full bg-[var(--color-secondary)] px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-[var(--color-secondary-hover)]"
                   >
                     Open
                   </Link>

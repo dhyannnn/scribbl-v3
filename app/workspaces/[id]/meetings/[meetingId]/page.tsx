@@ -237,23 +237,15 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           name: true,
           messages: {
             select: {
-              id: true,
-              channelId: true,
-              senderUserId: true,
-              body: true,
-              createdAt: true,
-              editedAt: true,
-              deletedAt: true,
-              sender: {
-                select: {
-                  displayName: true,
-                  avatarUrl: true,
-                },
-              },
+              id: true, channelId: true, senderUserId: true, body: true,
+              createdAt: true, editedAt: true, deletedAt: true,
+              isPinned: true, replyToId: true,
+              sender: { select: { displayName: true, avatarUrl: true } },
+              replyTo: { select: { id: true, body: true, sender: { select: { displayName: true } } } },
+              reactions: { select: { emoji: true, userId: true } },
+              attachmentFile: { select: { id: true, name: true, mimeType: true, sizeBytes: true, publicUrl: true } },
             },
-            orderBy: {
-              createdAt: "desc",
-            },
+            orderBy: { createdAt: "desc" },
             take: 100,
           },
         },
@@ -452,19 +444,24 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
     ? {
         id: meeting.channel.id,
         name: meeting.channel.name,
-        messages: [...meeting.channel.messages].reverse().map((message) => ({
-          id: message.id,
-          channelId: message.channelId,
-          senderUserId: message.senderUserId,
-          body: message.body,
-          createdAt: message.createdAt.toISOString(),
-          editedAt: message.editedAt?.toISOString() ?? null,
-          deletedAt: message.deletedAt?.toISOString() ?? null,
-          sender: {
-            displayName: message.sender.displayName,
-            avatarUrl: message.sender.avatarUrl,
-          },
-        })),
+        messages: [...meeting.channel.messages].reverse().map((message) => {
+          const reactionMap = new Map<string, string[]>();
+          for (const r of message.reactions) {
+            const arr = reactionMap.get(r.emoji) ?? [];
+            arr.push(r.userId);
+            reactionMap.set(r.emoji, arr);
+          }
+          return {
+            id: message.id, channelId: message.channelId, senderUserId: message.senderUserId,
+            body: message.body, createdAt: message.createdAt.toISOString(),
+            editedAt: message.editedAt?.toISOString() ?? null, deletedAt: message.deletedAt?.toISOString() ?? null,
+            isPinned: message.isPinned, replyToId: message.replyToId,
+            replyTo: message.replyTo ?? null,
+            reactions: Array.from(reactionMap.entries()).map(([emoji, userIds]) => ({ emoji, userIds })),
+            attachmentFile: message.attachmentFile ?? null,
+            sender: { displayName: message.sender.displayName, avatarUrl: message.sender.avatarUrl },
+          };
+        }),
       }
     : null;
 
@@ -748,8 +745,8 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           </div>
         </section>
 
-        <section data-split-stack className="grid gap-6 lg:grid-cols-3">
-            <section id="meeting-participants" className="flex min-h-0 flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm lg:col-span-2 lg:row-span-2">
+        <section data-split-stack className="grid gap-6 lg:grid-cols-[3fr_1fr]">
+            <section id="meeting-participants" className="flex min-h-0 flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm lg:row-span-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-[var(--color-text)]">
@@ -784,7 +781,9 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                     className="grid gap-2 border-b border-[var(--color-border)] px-3 py-3 last:border-0 lg:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)] lg:items-start"
                   >
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-[var(--color-text)]">{participant.user.displayName}</p>
+                      <Link href={`/profile/${participant.userId}`} className="truncate font-medium text-[var(--color-text)] hover:text-[var(--color-secondary)] hover:underline">
+                        {participant.user.displayName}
+                      </Link>
                       <p className="truncate text-xs text-[var(--color-subtle)]">{participant.user.email}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -841,22 +840,22 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
             </section>
 
             {currentParticipant ? (
-              <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
-                <h2 className="font-display text-base font-semibold text-[var(--color-text)]">Your RSVP</h2>
-                <p className="mt-2 text-sm text-[var(--color-muted)]">
+              <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-sm">
+                <h2 className="font-display text-sm font-semibold text-[var(--color-text)]">Your RSVP</h2>
+                <p className="mt-1 text-xs text-[var(--color-muted)]">
                   {currentParticipant.status.toLowerCase()}
                   {currentParticipant.joinedAt ? ` · joined ${formatShortDateTime(currentParticipant.joinedAt)}` : ""}
                   {currentParticipant.leftAt ? ` · left ${formatShortDateTime(currentParticipant.leftAt)}` : ""}
                 </p>
                 {canUpdateRsvp ? (
-                  <form action={updateCurrentUserParticipantStatus} className="mt-4 grid grid-cols-2 gap-2">
+                  <form action={updateCurrentUserParticipantStatus} className="mt-3 grid grid-cols-2 gap-2">
                     <input type="hidden" name="workspaceId" value={id} />
                     <input type="hidden" name="meetingId" value={meeting.id} />
                     <PendingSubmitButton
                       name="status"
                       value="ACCEPTED"
                       pendingLabel="Saving..."
-                      className="rounded-full border border-[var(--color-secondary)] bg-[var(--color-surface)] px-3 py-2 text-sm font-semibold text-[var(--color-secondary)] transition hover:bg-[var(--color-secondary-dim)] disabled:opacity-50"
+                      className="rounded-full border border-[var(--color-secondary)] bg-[var(--color-surface)] px-2 py-1.5 text-xs font-semibold text-[var(--color-secondary)] transition hover:bg-[var(--color-secondary-dim)] disabled:opacity-50"
                     >
                       Accept
                     </PendingSubmitButton>
@@ -864,22 +863,22 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                       name="status"
                       value="DECLINED"
                       pendingLabel="Saving..."
-                      className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-semibold text-[var(--color-muted)] transition hover:border-[var(--color-danger)] hover:text-[var(--color-danger)] disabled:opacity-50"
+                      className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-xs font-semibold text-[var(--color-muted)] transition hover:border-[var(--color-danger)] hover:text-[var(--color-danger)] disabled:opacity-50"
                     >
                       Decline
                     </PendingSubmitButton>
                   </form>
                 ) : (
-                  <p className="mt-4 text-xs text-[var(--color-subtle)]">
-                    RSVP changes are closed for this meeting.
+                  <p className="mt-2 text-xs text-[var(--color-subtle)]">
+                    RSVP changes are closed.
                   </p>
                 )}
               </section>
             ) : null}
 
-            <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
-              <h2 className="font-display text-base font-semibold text-[var(--color-text)]">Session Details</h2>
-              <div className="mt-3 flex flex-col gap-1.5 text-sm text-[var(--color-muted)]">
+            <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-sm">
+              <h2 className="font-display text-sm font-semibold text-[var(--color-text)]">Session Details</h2>
+              <div className="mt-2 flex flex-col gap-1 text-xs text-[var(--color-muted)]">
                 <p>Created by {meeting.createdBy.displayName}</p>
                 <p>Provider: {meeting.provider ?? "not connected"}</p>
                 <p>Ends: {formatShortDateTime(meetingEndsAt)}</p>
@@ -1183,21 +1182,21 @@ function ParticipantPermissionControls({
   const requestedCount = permissionRows.filter((row) => row.status.source === "requested").length;
 
   return (
-    <details className="group w-full min-w-0">
-      <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 text-sm font-medium text-[var(--color-secondary)] transition hover:bg-[var(--color-secondary-dim)] [&::-webkit-details-marker]:hidden">
-        <span>Permissions</span>
-        <span className="truncate text-xs font-normal text-[var(--color-muted)]">
-          {requestedCount > 0 ? `${requestedCount} requested` : blockedCount > 0 ? `${blockedCount} blocked` : "All allowed"}
+    <details className="group min-w-0 max-w-full">
+      <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] [&::-webkit-details-marker]:hidden">
+        <span className="font-semibold text-[var(--color-text)]">Permissions</span>
+        <span className="shrink-0 font-mono text-[10px] text-[var(--color-subtle)]">
+          {requestedCount > 0 ? `${requestedCount} requested` : blockedCount > 0 ? `${blockedCount} blocked` : "all allowed"}
         </span>
       </summary>
-      <div className="mt-1.5 grid gap-0.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] p-1">
+      <div className="mt-1.5 grid gap-0.5 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] p-1">
         {permissionRows.map((row) => (
           <div
             key={row.key}
             className="flex items-center gap-1.5 px-1.5 py-1"
           >
             <span className="w-20 shrink-0 text-[11px] font-medium text-[var(--color-text)]">{row.label}</span>
-            <span className={`min-w-0 flex-1 truncate text-[10px] ${getPermissionBadgeClassName(row.status.allowed, row.status.source)}`}>
+            <span className={`shrink-0 text-[10px] ${getPermissionBadgeClassName(row.status.allowed, row.status.source)}`}>
               {row.status.label}
             </span>
             <div className="shrink-0">

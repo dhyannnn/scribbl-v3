@@ -1,13 +1,14 @@
 import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 import { writeAuditLog } from "@/lib/audit-log";
+import { sendCancellationEmail, sendPaymentFailedEmail } from "@/lib/email/billing-emails";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
+import { createStorageOverageSubscriptionIfNeeded } from "@/lib/stripe-overage";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
 
-// Stripe requires the raw body to verify webhook signatures.
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const headersList = await headers();
@@ -37,26 +38,41 @@ export async function POST(request: NextRequest) {
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
+        // Don't sync storage-overage-only subscriptions into the main plan field
+        if (subscription.metadata?.type === "storage-overage-only") break;
         await syncSubscription(subscription, null);
         break;
       }
 
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
+        // Storage-overage-only subscriptions ending don't affect the workspace plan
+        if (subscription.metadata?.type === "storage-overage-only") break;
         await cancelSubscription(subscription);
+        break;
+      }
+
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const parent = session.subscription;
+        if (parent) {
+          const subscriptionId = typeof parent === "string" ? parent : parent;
+          const sub = await stripe.subscriptions.retrieve(subscriptionId as string);
+          await syncSubscription(sub, null);
+        }
         break;
       }
 
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
-        // In Stripe API v2026-04-22 (dahlia), subscription ID lives in parent.subscription_details.subscription
         const parent = invoice.parent as (Stripe.Invoice.Parent & { subscription_details?: { subscription?: string | Stripe.Subscription } }) | null;
         const subscriptionId = parent?.subscription_details?.subscription;
         if (subscriptionId) {
           const sid = typeof subscriptionId === "string" ? subscriptionId : subscriptionId.id;
           const subscription = await stripe.subscriptions.retrieve(sid);
-          // invoice.period_end is the current period end in the new API
-          await syncSubscription(subscription, invoice.period_end ?? null);
+          if (subscription.metadata?.type !== "storage-overage-only") {
+            await syncSubscription(subscription, invoice.period_end ?? null);
+          }
         }
         break;
       }
@@ -69,7 +85,7 @@ export async function POST(request: NextRequest) {
           const sid = typeof subscriptionId === "string" ? subscriptionId : subscriptionId.id;
           const sub = await prisma.subscription.findFirst({
             where: { stripeSubscriptionId: sid },
-            select: { workspaceId: true },
+            select: { workspaceId: true, workspace: { select: { name: true } } },
           });
           await prisma.subscription.updateMany({
             where: { stripeSubscriptionId: sid },
@@ -81,6 +97,18 @@ export async function POST(request: NextRequest) {
             targetId: sid,
             metadata: { stripeSubscriptionId: sid },
           });
+          // Email the workspace owner
+          if (sub?.workspaceId) {
+            const owner = await getWorkspaceOwner(sub.workspaceId);
+            const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+            if (owner) {
+              void sendPaymentFailedEmail({
+                to: owner.email,
+                workspaceName: sub.workspace?.name ?? "your workspace",
+                manageUrl: `${appUrl}/workspaces/${sub.workspaceId}/billing`,
+              });
+            }
+          }
         }
         break;
       }
@@ -132,7 +160,6 @@ async function syncSubscription(subscription: Stripe.Subscription, periodEnd: nu
     },
   });
 
-  // Sync plan down to Workspace
   if (existing.workspaceId) {
     await prisma.workspace.update({
       where: { id: existing.workspaceId },
@@ -140,7 +167,6 @@ async function syncSubscription(subscription: Stripe.Subscription, periodEnd: nu
     });
   }
 
-  // Sync plan down to Organization and all its workspaces
   if (existing.organizationId) {
     await prisma.organization.update({
       where: { id: existing.organizationId },
@@ -152,7 +178,6 @@ async function syncSubscription(subscription: Stripe.Subscription, periodEnd: nu
     });
   }
 
-  // Write audit log when plan actually changes
   if (oldPlan !== plan) {
     await writeAuditLog({
       action: "BILLING_UPGRADED",
@@ -168,13 +193,16 @@ async function cancelSubscription(subscription: Stripe.Subscription) {
 
   const existing = await prisma.subscription.findFirst({
     where: { stripeCustomerId: customerId },
+    include: { workspace: { select: { name: true } } },
   });
 
   if (!existing) return;
 
+  const previousPlan = existing.plan;
+
   await prisma.subscription.update({
     where: { id: existing.id },
-    data: { plan: "FREE", status: "CANCELED" },
+    data: { plan: "FREE", status: "CANCELED", stripeSubscriptionId: null },
   });
 
   if (existing.workspaceId) {
@@ -182,6 +210,9 @@ async function cancelSubscription(subscription: Stripe.Subscription) {
       where: { id: existing.workspaceId },
       data: { plan: "FREE" },
     });
+
+    // Create a storage-overage subscription if they're over the Free limit
+    await createStorageOverageSubscriptionIfNeeded(customerId, existing.workspaceId);
   }
 
   if (existing.organizationId) {
@@ -199,8 +230,31 @@ async function cancelSubscription(subscription: Stripe.Subscription) {
     action: "BILLING_CANCELED",
     workspaceId: existing.workspaceId,
     targetId: subscription.id,
-    metadata: { stripeSubscriptionId: subscription.id, previousPlan: existing.plan },
+    metadata: { stripeSubscriptionId: subscription.id, previousPlan },
   });
+
+  // Email the workspace owner
+  if (existing.workspaceId) {
+    const owner = await getWorkspaceOwner(existing.workspaceId);
+    if (owner) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const periodEnd = (subscription as any).current_period_end;
+      void sendCancellationEmail({
+        to: owner.email,
+        workspaceName: existing.workspace?.name ?? "your workspace",
+        planName: previousPlan.charAt(0) + previousPlan.slice(1).toLowerCase(),
+        periodEnd: periodEnd ? new Date(periodEnd * 1000) : undefined,
+      });
+    }
+  }
+}
+
+async function getWorkspaceOwner(workspaceId: string) {
+  const member = await prisma.workspaceMember.findFirst({
+    where: { workspaceId, role: "OWNER", status: "ACTIVE" },
+    select: { user: { select: { email: true } } },
+  });
+  return member?.user ?? null;
 }
 
 function getPlanFromPriceId(priceId: string | undefined) {

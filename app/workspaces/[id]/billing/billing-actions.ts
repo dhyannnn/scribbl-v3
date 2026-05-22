@@ -27,15 +27,12 @@ export async function upgradeWorkspaceToPlan(formData: FormData) {
     redirect(`/workspaces/${workspaceId}/billing?billing=invalid-plan`);
   }
 
-  // Prevent downgrading via this action — use the Stripe portal for that
   const currentWorkspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
     select: { plan: true },
   });
-  if (
-    currentWorkspace?.plan === "INSTITUTION" && targetPlan === "PRO" ||
-    currentWorkspace?.plan === "ENTERPRISE"
-  ) {
+  // Enterprise changes must go through sales
+  if (currentWorkspace?.plan === "ENTERPRISE") {
     redirect(`/workspaces/${workspaceId}/billing?billing=use-portal-to-change`);
   }
 
@@ -48,7 +45,7 @@ export async function upgradeWorkspaceToPlan(formData: FormData) {
   let stripeCustomerId: string;
   const existingSub = await prisma.subscription.findFirst({
     where: { workspaceId },
-    select: { stripeCustomerId: true },
+    select: { stripeCustomerId: true, stripeSubscriptionId: true },
   });
 
   if (existingSub?.stripeCustomerId) {
@@ -66,6 +63,54 @@ export async function upgradeWorkspaceToPlan(formData: FormData) {
   }
 
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+
+  // Query Stripe directly for active subscriptions — never trust our DB's
+  // stripeSubscriptionId, which can be stale if webhooks were failing.
+  // Also auto-cancels any duplicate subscriptions found (cleanup).
+  let updated = false;
+  try {
+    const activeSubs = await stripe.subscriptions.list({
+      customer: stripeCustomerId,
+      status: "active",
+    });
+
+    // Filter out storage-overage-only subscriptions
+    const mainSubs = activeSubs.data.filter(
+      (s) => s.metadata?.type !== "storage-overage-only",
+    );
+
+    if (mainSubs.length > 0) {
+      // Keep the most recently created, cancel any extras
+      const [keep, ...duplicates] = [...mainSubs].sort((a, b) => b.created - a.created);
+
+      for (const dup of duplicates) {
+        await stripe.subscriptions.cancel(dup.id);
+      }
+
+      const itemId = keep.items.data[0]?.id;
+      if (itemId) {
+        await stripe.subscriptions.update(keep.id, {
+          items: [{ id: itemId, price: priceId }],
+          proration_behavior: "create_prorations",
+        });
+
+        // Sync the correct subscription ID back to our DB
+        await prisma.subscription.updateMany({
+          where: { workspaceId },
+          data: { stripeSubscriptionId: keep.id },
+        });
+
+        updated = true;
+      }
+    }
+  } catch (err) {
+    console.error("[stripe subscription update error]", err);
+  }
+
+  // redirect() must be outside try/catch — it throws NEXT_REDIRECT internally
+  if (updated) {
+    redirect(`/workspaces/${workspaceId}/billing?billing=success`);
+  }
 
   let sessionUrl: string;
   try {
@@ -88,6 +133,51 @@ export async function upgradeWorkspaceToPlan(formData: FormData) {
   redirect(sessionUrl);
 }
 
+
+export async function downgradeToFree(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const currentUser = await getCurrentUser();
+  if (!currentUser) redirect("/login");
+
+  await assertOwner(workspaceId, currentUser.id);
+
+  // Only allowed when there is no live Stripe subscription — if there is one,
+  // the user must cancel through the billing portal so Stripe stops charging them.
+  const existingSub = await prisma.subscription.findFirst({
+    where: { workspaceId },
+    select: { stripeCustomerId: true, stripeSubscriptionId: true },
+  });
+
+  // Check Stripe directly for any active subscriptions on this customer
+  if (existingSub?.stripeCustomerId) {
+    const activeSubs = await stripe.subscriptions.list({
+      customer: existingSub.stripeCustomerId,
+      status: "active",
+    });
+    const hasActivePaidSub = activeSubs.data.some(
+      (s) => s.metadata?.type !== "storage-overage-only",
+    );
+    if (hasActivePaidSub) {
+      redirect(`/workspaces/${workspaceId}/billing?billing=use-portal-to-change`);
+    }
+  }
+
+  await prisma.workspace.update({ where: { id: workspaceId }, data: { plan: "FREE" } });
+  if (existingSub) {
+    await prisma.subscription.updateMany({
+      where: { workspaceId },
+      data: { plan: "FREE", status: "CANCELED", stripeSubscriptionId: null },
+    });
+
+    // If they're over the Free storage limit, start a storage-overage subscription
+    if (existingSub.stripeCustomerId) {
+      const { createStorageOverageSubscriptionIfNeeded } = await import("@/lib/stripe-overage");
+      await createStorageOverageSubscriptionIfNeeded(existingSub.stripeCustomerId, workspaceId);
+    }
+  }
+
+  redirect(`/workspaces/${workspaceId}/billing?billing=success`);
+}
 
 export async function refreshBillingStatus(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");

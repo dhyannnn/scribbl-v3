@@ -32,7 +32,7 @@ export function LandingPage() {
       <HowItWorks />
       <GenericComparison />
       <AboutSection />
-      <TeamSection />
+      <OriginStory />
       <LandingPricing />
       <FeedbackSection />
       <ComingSoon />
@@ -553,42 +553,45 @@ function AboutSection() {
   );
 }
 
-function TeamSection() {
-  const team = [
-    { name: "Team member", role: "Co-founder", initials: "TM" },
-    { name: "Team member", role: "Product and engineering", initials: "PE" },
-    { name: "Team member", role: "Design and research", initials: "DR" },
-    { name: "Team member", role: "Engineering", initials: "EN" },
-  ];
-
+function OriginStory() {
   return (
     <section className="bg-[var(--color-bg)] py-24">
       <div className="mx-auto max-w-6xl px-5 sm:px-8 lg:px-10">
-        <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <div className="max-w-3xl">
+        <div className="grid gap-12 lg:grid-cols-[1fr_1fr] lg:items-start">
+          <div>
             <p className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-secondary)]">
-              Meet the team
+              Our story
             </p>
             <h2 className="mt-3 font-display text-3xl font-bold text-[var(--color-text)] sm:text-4xl">
-              Four student builders making collaboration feel less scattered.
+              Built from real frustration, shaped by real feedback.
             </h2>
+            <p className="mt-6 leading-8 text-[var(--color-muted)]">
+              Scribbl started at a hackathon — a weekend sprint to solve the chaos of collaborative study sessions. Too many tabs, too many tools, too much friction just to sit down and work together.
+            </p>
+            <p className="mt-4 leading-8 text-[var(--color-muted)]">
+              That prototype became the foundation for two back-to-back course projects: a UX/UI final where we stress-tested every screen against real users, and a database systems final where we designed the architecture that powers it today.
+            </p>
+            <p className="mt-4 leading-8 text-[var(--color-muted)]">
+              Along the way we sat down with students pulling late-night study sessions, tutors managing dozens of learners at once, and corporate teams running weekly syncs across time zones. We asked them what they hated about their current tools, what they wished existed, and what they would actually pay for.
+            </p>
+            <p className="mt-4 leading-8 text-[var(--color-muted)]">
+              Every feature in Scribbl — the meeting hub, shared whiteboards, collaborative notes, real-time chat — came directly from those conversations. No guesswork. No features built to impress a demo. Just the things people told us they actually needed.
+            </p>
           </div>
-          <p className="max-w-md leading-7 text-[var(--color-muted)]">
-            Scribbl is built by a team of four graduate and undergraduate students. We are
-            replacing these placeholders with real photos and names as the public launch gets closer.
-          </p>
-        </div>
 
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {team.map(({ initials, name, role }) => (
-            <article key={role} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
-              <div className="flex aspect-square items-center justify-center rounded-2xl bg-[var(--color-surface-low)]">
-                <span className="font-display text-4xl font-bold text-[var(--color-secondary)]">{initials}</span>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+            {[
+              { label: "Started at a hackathon", body: "A weekend to build something that solved a real problem. We didn't sleep much, but we shipped." },
+              { label: "Refined through coursework", body: "A UX/UI final project taught us how to design for people. A database systems project taught us how to make it scale." },
+              { label: "Validated by real users", body: "Interviews with students, tutors, and corporate teams across multiple organizations shaped every product decision." },
+              { label: "Built on actual feedback", body: "Not hypothetical users. Real people who told us exactly what they needed and what they'd throw away." },
+            ].map(({ label, body }) => (
+              <div key={label} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
+                <p className="font-display text-base font-bold text-[var(--color-text)]">{label}</p>
+                <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">{body}</p>
               </div>
-              <h3 className="mt-5 font-display text-lg font-bold text-[var(--color-text)]">{name}</h3>
-              <p className="mt-1 text-sm font-semibold text-[var(--color-muted)]">{role}</p>
-            </article>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -692,7 +695,7 @@ function LandingPricing() {
         <p className="mt-10 text-center text-sm text-[var(--color-muted)]">
           Taxes calculated at checkout. Prices in Canadian dollars.
           Need custom limits or an annual contract?{" "}
-          <a href="mailto:hello@scribblapp.ca?subject=Enterprise inquiry" className="font-bold text-[var(--color-secondary)] hover:underline">
+          <a href="mailto:billing@scribblapp.ca?subject=Enterprise inquiry" className="font-bold text-[var(--color-secondary)] hover:underline">
             Contact us about Enterprise →
           </a>
           <br className="hidden sm:block" />
@@ -823,16 +826,22 @@ function LandingFooter() {
           © {new Date().getFullYear()} Scribbl. All rights reserved.
         </p>
 
-        <nav className="flex items-center gap-6">
+        <nav className="flex flex-wrap items-center gap-6">
           <Link href="/login" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
             Sign in
           </Link>
           <a href="#feedback" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
             Feedback
           </a>
-          <a href="mailto:hello@scribblapp.ca" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
+          <Link href="/contact" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
             Contact
-          </a>
+          </Link>
+          <Link href="/privacy" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
+            Privacy
+          </Link>
+          <Link href="/terms" className="text-sm font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-text)]">
+            Terms
+          </Link>
         </nav>
       </div>
     </footer>

@@ -31,6 +31,7 @@ import { FontSize } from "@/lib/tiptap/font-size";
 import { Indent } from "@/lib/tiptap/indent";
 import { KeyboardShortcuts } from "@/lib/tiptap/keyboard-shortcuts";
 import { LiveblocksCursors, type CursorUser } from "@/lib/tiptap/liveblocks-cursors";
+import { SlashCommands } from "@/lib/tiptap/slash-commands";
 import { NoteToolbar } from "@/components/NoteToolbar";
 import { VisibilityDropdown } from "@/components/VisibilityDropdown";
 import { noteTitleMaxLength } from "@/lib/note-title";
@@ -241,6 +242,7 @@ function TextNoteEditorInner({
       Subscript,
       Superscript,
       MathNode,
+      ...(canEdit ? [SlashCommands] : []),
     ],
     onCreate: ({ editor: e }) => {
       const yFragment = ySetup.yDoc.getXmlFragment("tiptap-v1");

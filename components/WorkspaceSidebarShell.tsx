@@ -55,7 +55,7 @@ export function WorkspaceSidebarShell({
         style={{ width: open ? SIDEBAR_W : 0 }}
       >
         {/* Fixed-width inner — sidebar content never wraps during width transition */}
-        <div style={{ width: SIDEBAR_W }}>
+        <div style={{ width: SIDEBAR_W, height: "100%" }}>
           {sidebar}
         </div>
       </div>

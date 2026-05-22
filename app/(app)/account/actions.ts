@@ -25,14 +25,26 @@ export async function updateAccountProfile(formData: FormData) {
     redirect("/login?next=/account");
   }
 
-  const firstName = String(formData.get("firstName") ?? "").trim();
-  const lastName = String(formData.get("lastName") ?? "").trim();
-  const displayName = String(formData.get("displayName") ?? "").trim();
+  // Accept either separate first/last or a combined "fullName" field
+  const fullName = String(formData.get("fullName") ?? "").trim();
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  const firstName = parts.length > 0
+    ? parts[0]
+    : String(formData.get("firstName") ?? "").trim();
+  const lastName = parts.length > 1
+    ? parts.slice(1).join(" ")
+    : String(formData.get("lastName") ?? "").trim();
+  const displayName = String(formData.get("displayName") ?? fullName).trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const institution = String(formData.get("institution") ?? "").trim() || null;
+  const jobTitle = String(formData.get("jobTitle") ?? "").trim() || null;
+  const bio = String(formData.get("bio") ?? "").trim() || null;
+  const timezone = String(formData.get("timezone") ?? "UTC").trim() || "UTC";
+  const language = String(formData.get("language") ?? "en").trim() || "en";
   const resolvedDisplayName = displayName || [firstName, lastName].filter(Boolean).join(" ") || email.split("@")[0];
 
-  if (!firstName || !lastName || !email) {
-    redirect("/account?message=Enter your first name, last name, and email address");
+  if (!firstName || !email) {
+    redirect("/account?message=Enter your name and email address");
   }
 
   const supabase = await createClient();
@@ -72,6 +84,11 @@ export async function updateAccountProfile(formData: FormData) {
       lastName,
       displayName: resolvedDisplayName,
       email: confirmedEmail === email ? email : currentUser.email,
+      institution,
+      jobTitle,
+      bio,
+      timezone,
+      language,
     },
   });
 
@@ -80,6 +97,7 @@ export async function updateAccountProfile(formData: FormData) {
       ? "Account updated"
       : "Profile updated. Check your email to confirm the new address.";
 
+  revalidatePath("/account");
   redirect(`/account?message=${encodeURIComponent(message)}`);
 }
 
@@ -283,6 +301,21 @@ export async function deleteAccount(formData: FormData) {
   await supabase.auth.signOut();
 
   redirect("/login?message=Account deleted");
+}
+
+export async function signOutAllDevices() {
+  const supabase = await createClient();
+  await supabase.auth.signOut({ scope: "global" });
+  redirect("/login?message=Signed out of all devices");
+}
+
+export async function updateDarkMode(enabled: boolean) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return;
+  await prisma.user.update({
+    where: { id: currentUser.id },
+    data: { darkMode: enabled },
+  });
 }
 
 function getAvatarExtension(contentType: string) {

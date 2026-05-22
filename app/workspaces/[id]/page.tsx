@@ -115,14 +115,21 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
   const now = new Date();
 
   const myGroupIds = new Set(workspace.groups.map((g) => g.id));
-  const visibleMeetings = canManage
-    ? workspace.meetings.slice(0, 5)
-    : workspace.meetings.filter((m) => m.groupId === null || myGroupIds.has(m.groupId)).slice(0, 5);
 
-  const liveMeeting = visibleMeetings.find((m) => {
+  const allVisibleMeetings = canManage
+    ? workspace.meetings
+    : workspace.meetings.filter((m) => m.groupId === null || myGroupIds.has(m.groupId));
+
+  // Search all fetched meetings for a live one — don't limit to the display slice
+  const liveMeeting = allVisibleMeetings.find((m) => {
     const lc = getMeetingLifecycle(m, now);
     return canJoinMeeting(lc);
   });
+
+  // Show most recent meetings first so today's session appears at the top
+  const visibleMeetings = [...allVisibleMeetings]
+    .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())
+    .slice(0, 5);
 
   const typeLabel = workspace.type.replace("_", " ").toLowerCase();
 

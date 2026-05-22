@@ -30,6 +30,18 @@ export async function createWorkspace(formData: FormData) {
     redirect("/?workspace=plan-limit");
   }
 
+  // Block creation if any owned workspace has a failed payment
+  const pastDueSub = await prisma.subscription.findFirst({
+    where: {
+      status: "PAST_DUE",
+      workspace: { members: { some: { userId: currentUser.id, role: "OWNER", status: "ACTIVE" } } },
+    },
+    select: { workspaceId: true },
+  });
+  if (pastDueSub) {
+    redirect(`/?workspace=payment-failed&workspaceId=${pastDueSub.workspaceId}`);
+  }
+
   const workspace = await prisma.workspace.create({
     data: {
       name,

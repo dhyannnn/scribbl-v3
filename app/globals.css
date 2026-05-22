@@ -53,6 +53,45 @@
   --color-warning-dim:      #fdefc3;
 }
 
+/* ── Dark mode token overrides ───────────────────────────────────────── */
+
+:root[data-theme="dark"] {
+  --color-bg:               #111118;
+  --color-surface:          #1a1a24;
+  --color-surface-low:      #14141e;
+  --color-surface-mid:      #222230;
+  --color-surface-high:     #2a2a3c;
+  --color-surface-highest:  #323248;
+
+  --color-text:             #e4e4f0;
+  --color-muted:            #9898b2;
+  --color-subtle:           #606078;
+
+  --color-border:           #2e2e42;
+  --color-border-strong:    #48486a;
+
+  --color-primary:          #4a8ef0;
+  --color-on-primary:       #ffffff;
+
+  --color-secondary:        #5b9cf6;
+  --color-secondary-hover:  #7ab4ff;
+  --color-secondary-dim:    #1a2d50;
+  --color-on-secondary:     #ffffff;
+
+  --color-live:             #080d18;
+  --color-on-live:          #ffffff;
+
+  --color-danger:           #f28b82;
+  --color-danger-dim:       #2d1515;
+  --color-on-danger:        #ffffff;
+
+  --color-success:          #6bcf8f;
+  --color-success-dim:      #152d1e;
+
+  --color-warning:          #fbbf24;
+  --color-warning-dim:      #2a1e08;
+}
+
 /* ── Base styles ─────────────────────────────────────────────────────── */
 
 body {
@@ -90,6 +129,13 @@ body {
   line-height: 1.75;
   color: var(--color-text);
   font-family: var(--font-sans, system-ui, sans-serif);
+}
+
+/* Document mode: paper uses theme surface color so it adapts to dark/light mode,
+   matching the card mode behavior exactly. */
+.scribbl-document-editor .ProseMirror {
+  color: var(--color-text);
+  background-color: var(--color-surface);
 }
 
 .ProseMirror p { margin: 0 0 0.75em; }
@@ -193,7 +239,7 @@ body {
 /* Document editor — paper-in-viewport layout */
 .scribbl-document-editor .ProseMirror {
   /* Paper appearance */
-  background: #ffffff;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   box-shadow: 0 4px 24px -4px rgba(26, 27, 32, 0.08), 0 1px 4px rgba(26, 27, 32, 0.04);
   margin: 0 auto;

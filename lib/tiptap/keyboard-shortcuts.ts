@@ -147,7 +147,7 @@ export const KeyboardShortcuts = Extension.create({
     };
 
     return {
-      "Mod-k": setPromptedLink,
+      "Mod-Shift-k": setPromptedLink,
       "Mod-e": toggleCenterAlign,
       "Mod-Alt-e": () => this.editor.chain().focus().toggleCode().run(),
       "Mod-Alt-c": () => this.editor.chain().focus().toggleCodeBlock().run(),

@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Too many messages. Slow down." }, { status: 429 });
   }
 
-  const { workspaceId, channelId, body } = parseBody(await readJson(request));
+  const { workspaceId, channelId, body, replyToId } = parseBody(await readJson(request));
 
   if (!workspaceId || !channelId || !body) {
     return NextResponse.json({ error: "Message is required." }, { status: 400 });
@@ -47,8 +47,9 @@ export async function POST(request: Request) {
       channelId: channel.id,
       senderUserId: currentUser.id,
       body,
+      ...(replyToId ? { replyToId } : {}),
     },
-    select: messageSelect,
+    select: messageFullSelect,
   });
   const messageCreatedAt = performance.now();
   logChatTiming("create", startedAt, userResolvedAt, accessCheckedAt, messageCreatedAt);
@@ -69,15 +70,27 @@ export async function POST(request: Request) {
     });
   } else {
     after(() => {
-      void createWorkspaceNotifications({
-        actorUserId: currentUser.id,
-        body,
-        href: `/workspaces/${workspaceId}/chat?channel=${channel.id}`,
-        preference: "chatMessages",
-        title: `${currentUser.displayName} posted in #${channel.name}`,
-        type: "CHAT_MESSAGE",
-        workspaceId,
-      }).catch((error) => {
+      void Promise.all([
+        // General chat notification (respects per-user chatMessages preference)
+        createWorkspaceNotifications({
+          actorUserId: currentUser.id,
+          body,
+          href: `/workspaces/${workspaceId}/chat/${channelId}`,
+          preference: "chatMessages",
+          title: `${currentUser.displayName} posted in #${channel.name}`,
+          type: "CHAT_MESSAGE",
+          workspaceId,
+        }),
+        // @mention notifications — always delivered, bypass chatMessages preference
+        createMentionNotifications({
+          body,
+          workspaceId,
+          channelId,
+          channelName: channel.name,
+          actorUserId: currentUser.id,
+          actorDisplayName: currentUser.displayName,
+        }),
+      ]).catch((error) => {
         logger.error("Chat notifications could not be created", { workspaceId, channelId }, error);
       });
     });
@@ -115,58 +128,55 @@ function logChatTiming(
 
 export async function PATCH(request: Request) {
   const currentUser = await getCurrentUser();
+  if (!currentUser) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
-  if (!currentUser) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  const { workspaceId, messageId, body, pin } = parseBody(await readJson(request));
+  if (!workspaceId || !messageId) return NextResponse.json({ error: "messageId required." }, { status: 400 });
+
+  // Pin/unpin — requires OWNER or ADMIN
+  if (pin !== null) {
+    const [membership, message] = await Promise.all([
+      prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+        select: { role: true, status: true },
+      }),
+      prisma.message.findFirst({
+        where: { id: messageId, deletedAt: null, channel: { workspaceId } },
+        select: { id: true },
+      }),
+    ]);
+    if (membership?.status !== "ACTIVE" || !message) {
+      return NextResponse.json({ error: "Access denied." }, { status: 403 });
+    }
+    if (membership.role !== "OWNER" && membership.role !== "ADMIN") {
+      return NextResponse.json({ error: "Only admins can pin messages." }, { status: 403 });
+    }
+    const pinned = await prisma.message.update({
+      where: { id: message.id },
+      data: { isPinned: pin },
+      select: messageFullSelect,
+    });
+    return NextResponse.json({ message: serializeMessage(pinned, pinned.sender) });
   }
 
-  const { workspaceId, messageId, body } = parseBody(await readJson(request));
-
-  if (!workspaceId || !messageId || !body) {
-    return NextResponse.json({ error: "Message is required." }, { status: 400 });
-  }
-
-  if (body.length > maxMessageLength) {
-    return NextResponse.json({ error: "Message is too long." }, { status: 400 });
-  }
+  // Edit body — sender only
+  if (!body) return NextResponse.json({ error: "Message body required." }, { status: 400 });
+  if (body.length > maxMessageLength) return NextResponse.json({ error: "Message too long." }, { status: 400 });
 
   const message = await prisma.message.findFirst({
     where: {
-      id: messageId,
-      senderUserId: currentUser.id,
-      deletedAt: null,
-      channel: {
-        workspaceId,
-        workspace: {
-          members: {
-            some: {
-              userId: currentUser.id,
-              status: "ACTIVE",
-            },
-          },
-        },
-      },
+      id: messageId, senderUserId: currentUser.id, deletedAt: null,
+      channel: { workspaceId, workspace: { members: { some: { userId: currentUser.id, status: "ACTIVE" } } } },
     },
-    select: {
-      id: true,
-    },
+    select: { id: true },
   });
-
-  if (!message) {
-    return NextResponse.json({ error: "You do not have permission to edit this message." }, { status: 403 });
-  }
+  if (!message) return NextResponse.json({ error: "You do not have permission to edit this message." }, { status: 403 });
 
   const updatedMessage = await prisma.message.update({
-    where: {
-      id: message.id,
-    },
-    data: {
-      body,
-      editedAt: new Date(),
-    },
-    include: messageInclude,
+    where: { id: message.id },
+    data: { body, editedAt: new Date() },
+    select: messageFullSelect,
   });
-
   return NextResponse.json({ message: serializeMessage(updatedMessage, updatedMessage.sender) });
 }
 
@@ -224,7 +234,7 @@ export async function DELETE(request: Request) {
     data: {
       deletedAt: new Date(),
     },
-    include: messageInclude,
+    select: messageFullSelect,
   });
 
   return NextResponse.json({ message: serializeMessage(deletedMessage, deletedMessage.sender) });
@@ -270,13 +280,14 @@ function canPostAnnouncement(role?: string) {
   return role === "OWNER" || role === "ADMIN";
 }
 
-const messageInclude = {
-  sender: {
-    select: {
-      displayName: true,
-      avatarUrl: true,
-    },
-  },
+// Full select used by PATCH / DELETE (combines scalars + relations in one select)
+const messageFullSelect = {
+  id: true, channelId: true, senderUserId: true, body: true,
+  createdAt: true, editedAt: true, deletedAt: true, isPinned: true, replyToId: true,
+  sender: { select: { displayName: true, avatarUrl: true } },
+  replyTo: { select: { id: true, body: true, sender: { select: { displayName: true } } } },
+  reactions: { select: { emoji: true, userId: true } },
+  attachmentFile: { select: { id: true, name: true, mimeType: true, sizeBytes: true, publicUrl: true } },
 } as const;
 
 const messageSelect = {
@@ -287,20 +298,38 @@ const messageSelect = {
   createdAt: true,
   editedAt: true,
   deletedAt: true,
+  isPinned: true,
+  replyToId: true,
+  replyTo: {
+    select: {
+      id: true,
+      body: true,
+      sender: { select: { displayName: true } },
+    },
+  },
+  reactions: { select: { emoji: true, userId: true } },
+  attachmentFile: {
+    select: { id: true, name: true, mimeType: true, sizeBytes: true, publicUrl: true },
+  },
 } as const;
 
-function serializeMessage(message: {
-  id: string;
-  channelId: string;
-  senderUserId: string;
-  body: string;
-  createdAt: Date;
-  editedAt: Date | null;
-  deletedAt: Date | null;
-}, sender: {
-  displayName: string;
-  avatarUrl: string | null;
-}) {
+function serializeMessage(
+  message: {
+    id: string; channelId: string; senderUserId: string; body: string;
+    createdAt: Date; editedAt: Date | null; deletedAt: Date | null;
+    isPinned: boolean; replyToId: string | null;
+    replyTo: { id: string; body: string; sender: { displayName: string } } | null;
+    reactions: { emoji: string; userId: string }[];
+    attachmentFile: { id: string; name: string; mimeType: string; sizeBytes: number | null; publicUrl: string | null } | null;
+  },
+  sender: { displayName: string; avatarUrl: string | null },
+) {
+  const reactionMap = new Map<string, string[]>();
+  for (const r of message.reactions) {
+    const arr = reactionMap.get(r.emoji) ?? [];
+    arr.push(r.userId);
+    reactionMap.set(r.emoji, arr);
+  }
   return {
     id: message.id,
     channelId: message.channelId,
@@ -309,6 +338,11 @@ function serializeMessage(message: {
     createdAt: message.createdAt.toISOString(),
     editedAt: message.editedAt?.toISOString() ?? null,
     deletedAt: message.deletedAt?.toISOString() ?? null,
+    isPinned: message.isPinned,
+    replyToId: message.replyToId,
+    replyTo: message.replyTo ?? null,
+    reactions: Array.from(reactionMap.entries()).map(([emoji, userIds]) => ({ emoji, userIds })),
+    attachmentFile: message.attachmentFile ?? null,
     sender,
   };
 }
@@ -332,10 +366,8 @@ function parseBody(body: unknown) {
   }
 
   const maybeBody = body as {
-    workspaceId?: unknown;
-    channelId?: unknown;
-    messageId?: unknown;
-    body?: unknown;
+    workspaceId?: unknown; channelId?: unknown; messageId?: unknown;
+    body?: unknown; replyToId?: unknown; pin?: unknown;
   };
 
   return {
@@ -343,5 +375,61 @@ function parseBody(body: unknown) {
     channelId: typeof maybeBody.channelId === "string" ? maybeBody.channelId : "",
     messageId: typeof maybeBody.messageId === "string" ? maybeBody.messageId : "",
     body: typeof maybeBody.body === "string" ? maybeBody.body.trim() : "",
+    replyToId: typeof maybeBody.replyToId === "string" ? maybeBody.replyToId : null,
+    pin: typeof maybeBody.pin === "boolean" ? maybeBody.pin : null,
   };
+}
+
+
+// ── @mention notifications ────────────────────────────────────────────────────
+
+function extractMentionedNames(body: string): string[] {
+  const re = /@((?:\w+\s?){1,4})/g;
+  const names = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null) {
+    names.add(m[1].trim().toLowerCase());
+  }
+  return [...names];
+}
+
+async function createMentionNotifications({
+  body, workspaceId, channelId, channelName, actorUserId, actorDisplayName,
+}: {
+  body: string; workspaceId: string; channelId: string; channelName: string;
+  actorUserId: string; actorDisplayName: string;
+}) {
+  const mentionedNames = extractMentionedNames(body);
+  if (mentionedNames.length === 0) return;
+
+  const members = await prisma.workspaceMember.findMany({
+    where: { workspaceId, status: "ACTIVE", userId: { not: actorUserId } },
+    select: { userId: true, user: { select: { displayName: true, deletedAt: true } } },
+  });
+
+  const mentionedUserIds = members
+    .filter((m) => {
+      if (m.user.deletedAt) return false;
+      const name = m.user.displayName.toLowerCase();
+      return mentionedNames.some((mention) => name.startsWith(mention) || name === mention);
+    })
+    .map((m) => m.userId);
+
+  if (mentionedUserIds.length === 0) return;
+
+  const href = `/workspaces/${workspaceId}/chat/${channelId}`;
+  const preview = body.length > 80 ? body.slice(0, 80) + "…" : body;
+
+  await prisma.notification.createMany({
+    data: mentionedUserIds.map((userId) => ({
+      userId,
+      workspaceId,
+      actorUserId,
+      type: "CHAT_MESSAGE" as const,
+      title: `${actorDisplayName} mentioned you in #${channelName}`,
+      body: preview,
+      href,
+    })),
+    skipDuplicates: true,
+  });
 }

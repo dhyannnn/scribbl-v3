@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Hanken_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import "@livekit/components-styles";
+import { CommandPalette } from "@/components/CommandPalette";
+import { getCurrentUser } from "@/lib/current-user";
 import { Providers } from "./Providers";
 import "./globals.css";
 
@@ -27,18 +29,23 @@ export const metadata: Metadata = {
   description: "Collaborative workspaces for teams, classes, and projects.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const user = await getCurrentUser();
+  const darkMode = user?.darkMode ?? false;
+
   return (
     <html
       lang="en"
+      data-theme={darkMode ? "dark" : undefined}
       className={`h-full antialiased ${hankenGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
+        <CommandPalette />
       </body>
     </html>
   );

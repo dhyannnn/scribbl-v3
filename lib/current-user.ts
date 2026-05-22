@@ -143,13 +143,16 @@ function getChangedProfileData(
   if (current.email !== next.email) {
     data.email = next.email;
   }
-  if (current.firstName !== next.firstName) {
+  // Name fields are only synced from auth on first login (account creation).
+  // After that they're owned by the user via the account page — never overwrite
+  // from a potentially stale JWT, which would silently undo explicit user saves.
+  if (!current.firstName && current.firstName !== next.firstName) {
     data.firstName = next.firstName;
   }
-  if (current.lastName !== next.lastName) {
+  if (!current.lastName && current.lastName !== next.lastName) {
     data.lastName = next.lastName;
   }
-  if (current.displayName !== next.displayName) {
+  if (!current.displayName && current.displayName !== next.displayName) {
     data.displayName = next.displayName;
   }
   if (next.avatarUrl !== undefined && current.avatarUrl !== next.avatarUrl) {

@@ -82,6 +82,15 @@ export async function acceptWorkspaceInvite(formData: FormData) {
     return;
   }
 
+  // Block joining a workspace whose subscription payment has failed
+  const workspaceSub = await prisma.subscription.findFirst({
+    where: { workspaceId: invite.workspaceId },
+    select: { status: true },
+  });
+  if (workspaceSub?.status === "PAST_DUE") {
+    redirect(`/invites/${token}?error=payment-failed`);
+  }
+
   // On Free workspaces, enforce the member limit at acceptance time.
   // The invite-creation check isn't sufficient because multiple invites can be
   // sent and accepted simultaneously, each passing the check individually.

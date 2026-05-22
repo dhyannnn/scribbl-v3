@@ -29,6 +29,10 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
         name: true,
         type: true,
         meetingId: true,
+        dmUser1Id: true,
+        dmUser2Id: true,
+        dmUser1: { select: { id: true, displayName: true, avatarUrl: true } },
+        dmUser2: { select: { id: true, displayName: true, avatarUrl: true } },
         meeting: { select: { id: true, title: true } },
         workspace: { select: { id: true, name: true } },
       },
@@ -70,26 +74,32 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
   const canManage = membership.role === "OWNER" || membership.role === "ADMIN";
   const canPost = channel.type !== "ANNOUNCEMENT" || canManage;
   const isMeetingChannel = !!channel.meetingId;
+  const isDm = channel.type === "DIRECT";
 
-  const displayName = channel.type === "ANNOUNCEMENT"
+  const dmOtherUser = isDm
+    ? (channel.dmUser1Id === currentUser.id ? channel.dmUser2 : channel.dmUser1)
+    : null;
+
+  const displayName = isDm
+    ? (dmOtherUser?.displayName ?? "Direct Message")
+    : channel.type === "ANNOUNCEMENT"
     ? "Announcements"
     : isMeetingChannel
-      ? (channel.meeting?.title ?? channel.name)
-      : `#${channel.name}`;
+    ? (channel.meeting?.title ?? channel.name)
+    : `#${channel.name}`;
 
   // Fetch right panel data in parallel with messages
   const [messages, recentNotes, pinnedFiles, members] = await Promise.all([
     prisma.message.findMany({
       where: { channelId, deletedAt: null },
       select: {
-        id: true,
-        channelId: true,
-        senderUserId: true,
-        body: true,
-        createdAt: true,
-        editedAt: true,
-        deletedAt: true,
+        id: true, channelId: true, senderUserId: true, body: true,
+        createdAt: true, editedAt: true, deletedAt: true,
+        isPinned: true, replyToId: true,
         sender: { select: { displayName: true, avatarUrl: true } },
+        replyTo: { select: { id: true, body: true, sender: { select: { displayName: true } } } },
+        reactions: { select: { emoji: true, userId: true } },
+        attachmentFile: { select: { id: true, name: true, mimeType: true, sizeBytes: true, publicUrl: true } },
       },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -120,16 +130,24 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
     id: channel.id,
     name: displayName,
     type: channel.type,
-    messages: messages.reverse().map((m) => ({
-      id: m.id,
-      channelId: m.channelId,
-      senderUserId: m.senderUserId,
-      body: m.body,
-      createdAt: m.createdAt.toISOString(),
-      editedAt: m.editedAt?.toISOString() ?? null,
-      deletedAt: m.deletedAt?.toISOString() ?? null,
-      sender: { displayName: m.sender.displayName, avatarUrl: m.sender.avatarUrl },
-    })),
+    messages: messages.reverse().map((m) => {
+      const reactionMap = new Map<string, string[]>();
+      for (const r of m.reactions) {
+        const arr = reactionMap.get(r.emoji) ?? [];
+        arr.push(r.userId);
+        reactionMap.set(r.emoji, arr);
+      }
+      return {
+        id: m.id, channelId: m.channelId, senderUserId: m.senderUserId,
+        body: m.body, createdAt: m.createdAt.toISOString(),
+        editedAt: m.editedAt?.toISOString() ?? null, deletedAt: m.deletedAt?.toISOString() ?? null,
+        isPinned: m.isPinned, replyToId: m.replyToId,
+        replyTo: m.replyTo ?? null,
+        reactions: Array.from(reactionMap.entries()).map(([emoji, userIds]) => ({ emoji, userIds })),
+        attachmentFile: m.attachmentFile ?? null,
+        sender: { displayName: m.sender.displayName, avatarUrl: m.sender.avatarUrl },
+      };
+    }),
   };
 
   return (
@@ -197,6 +215,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
             canPostMessages={canPost}
             readOnlyText="Only workspace owners and admins can post announcements."
             variant="fullscreen"
+            members={members.map((m) => ({ id: m.user.id, displayName: m.user.displayName, avatarUrl: m.user.avatarUrl }))}
           />
         </div>
 

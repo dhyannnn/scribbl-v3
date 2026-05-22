@@ -29,7 +29,7 @@ export async function submitLandingFeedback(
   }
 
   const result = await sendResendEmail({
-    to: "hello@scribblapp.ca",
+    to: "feedback@scribblapp.ca",
     subject: "New Scribbl landing page feedback",
     text: `From: ${email}\n\n${feedback}`,
     html: `
@@ -42,7 +42,7 @@ export async function submitLandingFeedback(
   if (!result.ok) {
     return {
       ok: false,
-      message: "We could not send that yet. Please email hello@scribblapp.ca directly.",
+      message: "We could not send that yet. Please email feedback@scribblapp.ca directly.",
     };
   }
 

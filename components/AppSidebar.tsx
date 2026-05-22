@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import {
@@ -221,6 +222,25 @@ export async function AppSidebar({ activePath = "/" }: AppSidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
+        {/* Search */}
+        <form action="/search" method="GET" className="mb-4">
+          <label className="relative flex items-center">
+            <svg
+              className="pointer-events-none absolute left-3.5 text-[var(--color-subtle)]"
+              width="13" height="13" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+            </svg>
+            <input
+              name="q"
+              type="search"
+              placeholder="Search…"
+              className="h-9 w-full rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] pl-9 pr-3 text-sm text-[var(--color-text)] outline-none transition focus:border-[var(--color-secondary)] focus:bg-[var(--color-surface)] placeholder:text-[var(--color-subtle)]"
+            />
+          </label>
+        </form>
+
         {workspaceIds.length > 0 ? (
           <div className="mb-4 grid gap-3">
             <Link
@@ -338,6 +358,20 @@ export async function AppSidebar({ activePath = "/" }: AppSidebarProps) {
 
       {/* User + plan */}
       <div className="border-t border-[var(--color-border)] p-4">
+        <div className="mb-2 space-y-0.5">
+          <Link
+            href="/help"
+            className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)]"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Help & Docs
+          </Link>
+          <ThemeToggle initialDark={currentUser?.darkMode ?? false} />
+        </div>
         {currentUser ? (
           <Link
             href="/account"
