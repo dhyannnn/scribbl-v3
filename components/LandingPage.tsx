@@ -464,7 +464,8 @@ function GenericComparison() {
         </div>
 
         <div className="mt-12 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
-          <table className="w-full min-w-[760px] text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px] text-sm">
             <thead>
               <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface-low)]">
                 <th className="px-6 py-4 text-left font-bold text-[var(--color-text)]">Capability</th>
@@ -484,6 +485,7 @@ function GenericComparison() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </section>
