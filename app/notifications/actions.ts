@@ -72,6 +72,7 @@ export async function updateNotificationPreferences(formData: FormData) {
       meetings: formData.get("meetings") === "on",
       files: formData.get("files") === "on",
       notes: formData.get("notes") === "on",
+      soundEnabled: formData.get("soundEnabled") === "on",
     },
   });
 

@@ -11,6 +11,7 @@ import {
   type MeetingLifecycleState,
 } from "@/lib/meeting-lifecycle";
 import { prisma } from "@/lib/prisma";
+import { TimezoneInput } from "@/components/TimezoneInput";
 import { scheduleMeeting } from "./actions";
 import { ScheduleMeetingSubmitButton } from "./ScheduleMeetingSubmitButton";
 
@@ -159,6 +160,7 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
               </h2>
               <form action={scheduleMeeting} className="mt-5 flex flex-col gap-4">
                 <input type="hidden" name="workspaceId" value={workspace.id} />
+                <TimezoneInput />
 
                 <label className="flex flex-col gap-1.5">
                   <span className="text-xs font-medium text-[var(--color-muted)]">Title</span>

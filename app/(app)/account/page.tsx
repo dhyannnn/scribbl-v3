@@ -217,6 +217,8 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                   defaultChecked={notificationPreference?.notes ?? notificationPreferenceDefaults.notes} />
                 <Toggle name="chatMessages" label="Chat messages" description="Off by default."
                   defaultChecked={notificationPreference?.chatMessages ?? notificationPreferenceDefaults.chatMessages} />
+                <Toggle name="soundEnabled" label="Notification sound" description="Play a ding when a notification arrives."
+                  defaultChecked={notificationPreference?.soundEnabled ?? true} />
                 <div className="pt-1">
                   <PendingSubmitButton
                     pendingLabel="Saving…"

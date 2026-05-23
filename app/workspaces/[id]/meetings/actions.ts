@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { writeAuditLog } from "@/lib/audit-log";
 import { createAppUrl } from "@/lib/app-url";
 import { RateLimits } from "@/lib/rate-limit";
+import { parseLocalDateTimeInZone } from "@/lib/timezone";
 import { getCurrentUser } from "@/lib/current-user";
 import { sendMeetingCanceledEmail, sendMeetingScheduledEmail } from "@/lib/email/meeting-notifications";
 import { logger } from "@/lib/logger";
@@ -22,14 +23,13 @@ export async function scheduleMeeting(formData: FormData) {
   const timezoneOffset = parseInt(String(formData.get("timezoneOffset") ?? "0"), 10);
   const durationMinutes = Number(formData.get("durationMinutes") ?? 60);
   const groupIdRaw = String(formData.get("groupId") ?? "").trim();
+  const userTimezone = String(formData.get("userTimezone") ?? "UTC");
 
   if (!workspaceId || !title || !startsAtValue) {
     redirect(workspaceId ? `/workspaces/${workspaceId}/meetings?meeting=invalid` : "/");
   }
 
-  // datetime-local sends local time with no timezone — correct to UTC using the client's offset
-  const startsAtRaw = new Date(startsAtValue);
-  const startsAt = new Date(startsAtRaw.getTime() + timezoneOffset * 60 * 1000);
+  const startsAt = parseLocalDateTimeInZone(startsAtValue, userTimezone);
 
   if (Number.isNaN(startsAt.getTime())) {
     redirect(`/workspaces/${workspaceId}/meetings?meeting=invalid`);
@@ -132,7 +132,7 @@ export async function scheduleMeeting(formData: FormData) {
   const recurrenceRaw = String(formData.get("recurrence") ?? "").trim();
   const recurrenceEndsAtRaw = String(formData.get("recurrenceEndsAt") ?? "").trim();
   const recurrenceEndsAtDate = recurrenceEndsAtRaw
-    ? new Date(recurrenceEndsAtRaw + "T23:59:59")
+    ? parseLocalDateTimeInZone(recurrenceEndsAtRaw + "T23:59:59", userTimezone)
     : null;
   const isRecurringSeries =
     Boolean(recurrenceRaw) &&
@@ -258,6 +258,7 @@ export async function scheduleMeeting(formData: FormData) {
         day: "numeric",
         hour: "numeric",
         minute: "2-digit",
+        timeZone: userTimezone,
       }),
       groupId,
       href: `/workspaces/${workspaceId}/meetings/${meetingId}`,
@@ -283,6 +284,7 @@ export async function scheduleMeeting(formData: FormData) {
       recipients: emailRecipientMembers.map((member) => member.user.email),
       scheduledByName: currentUser.displayName,
       startsAt,
+      timeZone: userTimezone,
       title,
       workspaceId,
       workspaceName: workspace.name,
@@ -308,12 +310,13 @@ export async function updateMeetingDetails(formData: FormData) {
   const durationMinutes = Number(formData.get("durationMinutes") ?? 60);
   const scopeRaw = String(formData.get("editScope") ?? "THIS");
   const editScope = scopeRaw === "THIS_AND_FUTURE" || scopeRaw === "ALL" ? scopeRaw : "THIS";
+  const userTimezone = String(formData.get("userTimezone") ?? "UTC");
 
   if (!workspaceId || !meetingId || !title || !startsAtValue) {
     redirect(workspaceId ? `/workspaces/${workspaceId}/meetings?meeting=invalid` : "/");
   }
 
-  const startsAt = new Date(startsAtValue);
+  const startsAt = parseLocalDateTimeInZone(startsAtValue, userTimezone);
 
   if (Number.isNaN(startsAt.getTime())) {
     redirect(`/workspaces/${workspaceId}/meetings/${meetingId}?meeting=invalid`);
@@ -441,6 +444,7 @@ export async function updateMeetingDetails(formData: FormData) {
         day: "numeric",
         hour: "numeric",
         minute: "2-digit",
+        timeZone: userTimezone,
       }),
       groupId: meeting.groupId,
       href: `/workspaces/${workspaceId}/meetings/${meeting.id}`,
@@ -656,6 +660,7 @@ async function sendScheduledMeetingEmail({
   recipients,
   scheduledByName,
   startsAt,
+  timeZone,
   title,
   workspaceId,
   workspaceName,
@@ -667,6 +672,7 @@ async function sendScheduledMeetingEmail({
   recipients: string[];
   scheduledByName: string;
   startsAt: Date;
+  timeZone: string;
   title: string;
   workspaceId: string;
   workspaceName: string;
@@ -678,6 +684,7 @@ async function sendScheduledMeetingEmail({
     recipients: uniqueEmails(recipients).filter((email) => email !== creatorEmail),
     scheduledByName,
     startsAt,
+    timeZone,
     title,
     workspaceName,
   });
