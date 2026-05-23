@@ -80,6 +80,8 @@ export function NotificationListener() {
       soundEnabledRef.current = data.soundEnabled;
       sinceRef.current = new Date().toISOString();
 
+      console.log("[notifications] poll result", data);
+
       if (data.notifications.length === 0) return;
 
       if (soundEnabledRef.current) {
