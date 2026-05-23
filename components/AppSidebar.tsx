@@ -209,14 +209,10 @@ export async function AppSidebar({ activePath = "/" }: AppSidebarProps) {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] lg:flex">
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 border-b border-[var(--color-border)] px-5">
-        <Link href="/" className="flex items-center gap-2.5 min-w-0">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary)]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-            </svg>
+        <Link href="/" className="flex items-center min-w-0">
+          <div className="rounded-full bg-white px-3 py-1.5 shadow-sm">
+            <img src="/scribbl-logo.png" alt="Scribbl" className="h-6 w-auto object-contain" />
           </div>
-          <span className="font-display text-base font-bold text-[var(--color-text)] tracking-tight">Scribbl</span>
         </Link>
       </div>
 
@@ -418,14 +414,10 @@ function MobileAppNav({
   return (
     <>
       <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 lg:hidden">
-        <Link href="/" className="flex min-w-0 items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary)]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-            </svg>
+        <Link href="/" className="flex min-w-0 items-center">
+          <div className="rounded-full bg-white px-3 py-1.5 shadow-sm">
+            <img src="/scribbl-logo.png" alt="Scribbl" className="h-6 w-auto object-contain" />
           </div>
-          <span className="truncate font-display text-base font-bold text-[var(--color-text)]">Scribbl</span>
         </Link>
         {currentUser ? (
           <Link

@@ -28,14 +28,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-[var(--color-bg)] px-4 py-12">
       {/* Logo */}
-      <Link href="/" className="mb-8 flex items-center gap-2.5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--color-primary)]">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 20h9" />
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-          </svg>
+      <Link href="/" className="mb-8 flex items-center">
+        <div className="rounded-full bg-white px-4 py-2 shadow-sm">
+          <img src="/scribbl-logo.png" alt="Scribbl" className="h-8 w-auto object-contain" />
         </div>
-        <span className="font-display text-xl font-bold tracking-tight text-[var(--color-text)]">Scribbl</span>
       </Link>
 
       {/* Card */}
