@@ -211,7 +211,7 @@ export async function AppSidebar({ activePath = "/" }: AppSidebarProps) {
       <div className="flex h-16 items-center gap-3 border-b border-[var(--color-border)] px-5">
         <Link href="/" className="flex items-center min-w-0">
           <div className="rounded-full bg-white px-3 py-1.5 shadow-sm">
-            <img src="/scribbl-logo.png" alt="Scribbl" className="h-6 w-auto object-contain" />
+            <img src="/scribbl-logo.png" alt="Scribbl" className="h-9 w-auto object-contain" />
           </div>
         </Link>
       </div>
@@ -416,7 +416,7 @@ function MobileAppNav({
       <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 lg:hidden">
         <Link href="/" className="flex min-w-0 items-center">
           <div className="rounded-full bg-white px-3 py-1.5 shadow-sm">
-            <img src="/scribbl-logo.png" alt="Scribbl" className="h-6 w-auto object-contain" />
+            <img src="/scribbl-logo.png" alt="Scribbl" className="h-9 w-auto object-contain" />
           </div>
         </Link>
         {currentUser ? (

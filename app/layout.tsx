@@ -28,6 +28,22 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Scribbl",
   description: "Collaborative workspaces for teams, classes, and projects.",
+  icons: {
+    icon: "/scribbl-logo.png",
+    apple: "/scribbl-logo.png",
+  },
+  openGraph: {
+    title: "Scribbl",
+    description: "Collaborative workspaces for teams, classes, and projects.",
+    url: "https://scribblapp.ca",
+    siteName: "Scribbl",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Scribbl",
+    description: "Collaborative workspaces for teams, classes, and projects.",
+  },
 };
 
 export default async function RootLayout({

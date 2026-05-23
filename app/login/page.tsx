@@ -30,7 +30,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       {/* Logo */}
       <Link href="/" className="mb-8 flex items-center">
         <div className="rounded-full bg-white px-4 py-2 shadow-sm">
-          <img src="/scribbl-logo.png" alt="Scribbl" className="h-8 w-auto object-contain" />
+          <img src="/scribbl-logo.png" alt="Scribbl" className="h-11 w-auto object-contain" />
         </div>
       </Link>
 
