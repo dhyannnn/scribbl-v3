@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { WorkspaceActionPicker } from "@/app/new/WorkspaceActionPicker";
 
 export default function NewSessionPage() {
