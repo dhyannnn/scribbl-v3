@@ -208,8 +208,8 @@ export async function AppSidebar({ activePath = "/" }: AppSidebarProps) {
     <>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] lg:flex">
       {/* Logo */}
-      <div className="flex h-16 items-center gap-3 border-b border-[var(--color-border)] px-5">
-        <Link href="/" className="flex items-center min-w-0">
+      <div className="flex h-16 items-center justify-center border-b border-[var(--color-border)] px-5">
+        <Link href="/" className="flex items-center">
           <div className="rounded-full bg-white px-3 py-1.5 shadow-sm">
             <img src="/scribbl-logo.png" alt="Scribbl" className="h-9 w-auto object-contain" />
           </div>
