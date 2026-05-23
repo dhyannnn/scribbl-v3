@@ -63,7 +63,7 @@ export async function signInWithOAuth(formData: FormData) {
   const provider = String(formData.get("provider") ?? "");
   const next = getSafeNext(formData.get("next"));
 
-  if (provider !== "google" && provider !== "azure") {
+  if (provider !== "google") {
     redirect(createLoginUrl({ message: "Unknown provider", next }));
   }
 
@@ -72,7 +72,6 @@ export async function signInWithOAuth(formData: FormData) {
     provider,
     options: {
       redirectTo: `${getSiteUrl()}/auth/callback?next=${encodeURIComponent(next)}`,
-      scopes: provider === "azure" ? "email" : undefined,
     },
   });
 

@@ -144,17 +144,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             </PendingSubmitButton>
           </form>
 
-          <form action={signInWithOAuth}>
-            <input type="hidden" name="provider" value="azure" />
-            {safeNext !== "/" ? <input type="hidden" name="next" value={safeNext} /> : null}
-            <PendingSubmitButton
-              pendingLabel="Continuing..."
-              className="flex min-h-11 w-full items-center justify-center gap-3 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 text-sm font-medium text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <MicrosoftIcon />
-              Continue with Microsoft
-            </PendingSubmitButton>
-          </form>
         </div>
 
         {/* Toggle sign in / sign up */}
@@ -191,17 +180,6 @@ function GoogleIcon() {
   );
 }
 
-function MicrosoftIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 23 23" aria-hidden="true">
-      <path fill="#f3f3f3" d="M0 0h23v23H0z" />
-      <path fill="#f35325" d="M1 1h10v10H1z" />
-      <path fill="#81bc06" d="M12 1h10v10H12z" />
-      <path fill="#05a6f0" d="M1 12h10v10H1z" />
-      <path fill="#ffba08" d="M12 12h10v10H12z" />
-    </svg>
-  );
-}
 
 function getSafeNext(value: string | undefined) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
