@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LocalTime } from "@/components/LocalTime";
 import { LandingPage } from "@/components/LandingPage";
 import { AppSidebar } from "@/components/AppSidebar";
 import { getCurrentUser } from "@/lib/current-user";
@@ -275,7 +276,7 @@ export default async function Home({
                         </span>
                       </div>
                       <span className="rounded-full bg-[var(--color-secondary)] px-5 py-2 text-sm font-semibold text-white">
-                        {isHeroLive ? "Join session" : liveOrNext.startsAt.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                        {isHeroLive ? "Join session" : <LocalTime date={liveOrNext.startsAt} short />}
                       </span>
                     </div>
                   </Link>
@@ -445,12 +446,7 @@ export default async function Home({
                         <p className="font-mono text-xs text-[var(--color-subtle)]">{meeting.workspace?.name ?? ""}</p>
                         <p className="text-sm font-semibold text-[var(--color-text)]">{meeting.title}</p>
                         <p className="text-xs text-[var(--color-muted)]">
-                          {meeting.startsAt.toLocaleString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}
+                          <LocalTime date={meeting.startsAt} short />
                         </p>
                       </Link>
                     ))}

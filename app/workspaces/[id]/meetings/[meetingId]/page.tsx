@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { LocalTime } from "@/components/LocalTime";
 import {
   MeetingNotesSection,
   type NoteArtifactData,
@@ -537,13 +538,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 {formatMeetingLifecycleLabel(lifecycle)}
               </p>
               <p className="mt-1 font-medium text-[var(--color-text)]">
-                {meeting.startsAt.toLocaleString("en-US", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
+                <LocalTime date={meeting.startsAt} short />
               </p>
             </div>
           </div>
@@ -1530,6 +1525,7 @@ function formatShortDate(value: Date) {
   return value.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -1539,6 +1535,7 @@ function formatShortDateTime(value: Date) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "UTC",
   });
 }
 
