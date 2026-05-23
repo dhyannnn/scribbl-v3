@@ -116,6 +116,7 @@ describe("ensureNotificationPreference", () => {
       id: "pref-id",
       userId: user.id,
       ...notificationPreferenceDefaults,
+      soundEnabled: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     });

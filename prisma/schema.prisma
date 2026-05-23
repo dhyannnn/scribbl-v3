@@ -651,6 +651,7 @@ model NotificationPreference {
   meetings      Boolean  @default(true)
   files         Boolean  @default(true)
   notes         Boolean  @default(true)
+  soundEnabled  Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

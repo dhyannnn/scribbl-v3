@@ -11,6 +11,7 @@ type MeetingEmailInput = {
   recipients: string[];
   scheduledByName?: string;
   startsAt: Date;
+  timeZone?: string;
   title: string;
   workspaceName: string;
 };
@@ -22,6 +23,7 @@ export async function sendMeetingScheduledEmail({
   recipients,
   scheduledByName,
   startsAt,
+  timeZone,
   title,
   workspaceName,
 }: MeetingEmailInput): Promise<SendEmailResult> {
@@ -31,7 +33,7 @@ export async function sendMeetingScheduledEmail({
     text: [
       `${scheduledByName ?? "A workspace member"} scheduled ${title} in ${workspaceName}.`,
       "",
-      `When: ${formatDateTime(startsAt)}`,
+      `When: ${formatDateTime(startsAt, timeZone)}`,
       `Duration: ${formatDuration(durationMinutes)}`,
       description ? `Description: ${description}` : "",
       "",
@@ -44,6 +46,7 @@ export async function sendMeetingScheduledEmail({
       meetingUrl,
       scheduledByName,
       startsAt,
+      timeZone,
       title,
       workspaceName,
     }),
@@ -57,6 +60,7 @@ export async function sendMeetingCanceledEmail({
   meetingUrl,
   recipients,
   startsAt,
+  timeZone,
   title,
   workspaceName,
 }: MeetingEmailInput): Promise<SendEmailResult> {
@@ -66,7 +70,7 @@ export async function sendMeetingCanceledEmail({
     text: [
       `${canceledByName ?? "A workspace member"} canceled ${title} in ${workspaceName}.`,
       "",
-      `Original time: ${formatDateTime(startsAt)}`,
+      `Original time: ${formatDateTime(startsAt, timeZone)}`,
       `Duration: ${formatDuration(durationMinutes)}`,
       cancellationReason ? `Reason: ${cancellationReason}` : "",
       "",
@@ -79,6 +83,7 @@ export async function sendMeetingCanceledEmail({
       durationMinutes,
       meetingUrl,
       startsAt,
+      timeZone,
       title,
       workspaceName,
     }),
@@ -91,6 +96,7 @@ function createMeetingScheduledHtml({
   meetingUrl,
   scheduledByName,
   startsAt,
+  timeZone,
   title,
   workspaceName,
 }: Omit<MeetingEmailInput, "recipients" | "canceledByName" | "cancellationReason">) {
@@ -98,7 +104,7 @@ function createMeetingScheduledHtml({
     actionLabel: "Open meeting",
     body: [
       `${escapeHtml(scheduledByName ?? "A workspace member")} scheduled <strong>${escapeHtml(title)}</strong> in <strong>${escapeHtml(workspaceName)}</strong>.`,
-      `<strong>When:</strong> ${escapeHtml(formatDateTime(startsAt))}`,
+      `<strong>When:</strong> ${escapeHtml(formatDateTime(startsAt, timeZone))}`,
       `<strong>Duration:</strong> ${escapeHtml(formatDuration(durationMinutes))}`,
       description ? `<strong>Description:</strong> ${escapeHtml(description)}` : "",
     ],
@@ -112,6 +118,7 @@ function createMeetingCanceledHtml({
   durationMinutes,
   meetingUrl,
   startsAt,
+  timeZone,
   title,
   workspaceName,
 }: Omit<MeetingEmailInput, "recipients" | "description" | "scheduledByName">) {
@@ -119,7 +126,7 @@ function createMeetingCanceledHtml({
     actionLabel: "Open meeting record",
     body: [
       `${escapeHtml(canceledByName ?? "A workspace member")} canceled <strong>${escapeHtml(title)}</strong> in <strong>${escapeHtml(workspaceName)}</strong>.`,
-      `<strong>Original time:</strong> ${escapeHtml(formatDateTime(startsAt))}`,
+      `<strong>Original time:</strong> ${escapeHtml(formatDateTime(startsAt, timeZone))}`,
       `<strong>Duration:</strong> ${escapeHtml(formatDuration(durationMinutes))}`,
       cancellationReason ? `<strong>Reason:</strong> ${escapeHtml(cancellationReason)}` : "",
     ],
@@ -151,7 +158,7 @@ function createMeetingEmailShell({
   `;
 }
 
-function formatDateTime(value: Date) {
+function formatDateTime(value: Date, timeZone?: string) {
   return value.toLocaleString("en-US", {
     weekday: "short",
     month: "short",
@@ -159,6 +166,7 @@ function formatDateTime(value: Date) {
     hour: "numeric",
     minute: "2-digit",
     timeZoneName: "short",
+    ...(timeZone ? { timeZone } : {}),
   });
 }
 

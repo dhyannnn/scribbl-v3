@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LocalTime } from "@/components/LocalTime";
+import { TimezoneInput } from "@/components/TimezoneInput";
 import {
   MeetingNotesSection,
   type NoteArtifactData,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/meeting-permissions";
 import { CancelMeetingForm } from "../CancelMeetingForm";
 import { updateMeetingDetails } from "../actions";
+import { formatDateTimeLocalInZone } from "@/lib/timezone";
 import { MeetingChatPanel } from "./MeetingChatPanel";
 import { FloatingMeetingVideo } from "./video/FloatingMeetingVideo";
 import {
@@ -617,6 +619,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
             <form action={updateMeetingDetails} className="grid gap-4 lg:grid-cols-[1fr_220px_160px_auto]">
               <input type="hidden" name="workspaceId" value={id} />
               <input type="hidden" name="meetingId" value={meeting.id} />
+              <TimezoneInput />
               <label className="grid gap-1.5">
                 <span className="text-xs font-medium text-[var(--color-muted)]">Title</span>
                 <input
@@ -632,7 +635,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                   name="startsAt"
                   type="datetime-local"
                   required
-                  defaultValue={formatDateTimeLocal(meeting.startsAt)}
+                  defaultValue={formatDateTimeLocalInZone(meeting.startsAt, currentUser.timezone)}
                   className="min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)]"
                 />
               </label>
@@ -839,8 +842,8 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 <h2 className="font-display text-sm font-semibold text-[var(--color-text)]">Your RSVP</h2>
                 <p className="mt-1 text-xs text-[var(--color-muted)]">
                   {currentParticipant.status.toLowerCase()}
-                  {currentParticipant.joinedAt ? ` · joined ${formatShortDateTime(currentParticipant.joinedAt)}` : ""}
-                  {currentParticipant.leftAt ? ` · left ${formatShortDateTime(currentParticipant.leftAt)}` : ""}
+                  {currentParticipant.joinedAt ? <> · joined <LocalTime date={currentParticipant.joinedAt} short /></> : ""}
+                  {currentParticipant.leftAt ? <> · left <LocalTime date={currentParticipant.leftAt} short /></> : ""}
                 </p>
                 {canUpdateRsvp ? (
                   <form action={updateCurrentUserParticipantStatus} className="mt-3 grid grid-cols-2 gap-2">
@@ -876,7 +879,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               <div className="mt-2 flex flex-col gap-1 text-xs text-[var(--color-muted)]">
                 <p>Created by {meeting.createdBy.displayName}</p>
                 <p>Provider: {meeting.provider ?? "not connected"}</p>
-                <p>Ends: {formatShortDateTime(meetingEndsAt)}</p>
+                <p>Ends: <LocalTime date={meetingEndsAt} short /></p>
                 {meeting.meetingUrl ? (
                   <Link
                     href={meeting.meetingUrl}
@@ -1435,7 +1438,7 @@ function RecordingStatusPanel({
           <h2 className="mt-1 font-display text-lg font-semibold text-[var(--color-text)]">{getRecordingPanelTitle(latestRecording)}</h2>
           {latestRecording ? (
             <p className="mt-1 text-sm text-[var(--color-muted)]">
-              Started by {latestRecording.startedBy.displayName} · {formatShortDateTime(latestRecording.startedAt)}
+              Started by {latestRecording.startedBy.displayName} · <LocalTime date={latestRecording.startedAt} short />
               {latestRecording.stoppedBy ? ` · stopped by ${latestRecording.stoppedBy.displayName}` : ""}
               {latestRecording.file?.sizeBytes ? ` · ${formatFileSize(latestRecording.file.sizeBytes)}` : ""}
             </p>
@@ -1529,20 +1532,7 @@ function formatShortDate(value: Date) {
   });
 }
 
-function formatShortDateTime(value: Date) {
-  return value.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "UTC",
-  });
-}
 
-function formatDateTimeLocal(date: Date) {
-  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
-}
 
 function getDurationMinutes(startsAt: Date, endsAt?: Date | null) {
   if (!endsAt) {
@@ -1637,17 +1627,17 @@ function formatFileSize(sizeBytes: number) {
 function getSessionStatusLine(state: MeetingLifecycleState, startsAt: Date, endsAt: Date) {
   switch (state) {
     case "live":
-      return `Live until ${formatShortDateTime(endsAt)}.`;
+      return <>Live until <LocalTime date={endsAt} short />.</>;
     case "joinable":
-      return `Video is open. Starts at ${formatShortDateTime(startsAt)}.`;
+      return <>Video is open. Starts at <LocalTime date={startsAt} short />.</>;
     case "ended":
-      return `Ended around ${formatShortDateTime(endsAt)}.`;
+      return <>Ended around <LocalTime date={endsAt} short />.</>;
     case "canceled":
       return "Canceled. Saved artifacts and chat history remain available.";
     case "starting-soon":
-      return `Starts at ${formatShortDateTime(startsAt)}.`;
+      return <>Starts at <LocalTime date={startsAt} short />.</>;
     default:
-      return `Starts at ${formatShortDateTime(startsAt)}.`;
+      return <>Starts at <LocalTime date={startsAt} short />.</>;
   }
 }
 
