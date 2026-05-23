@@ -19,6 +19,7 @@ export async function scheduleMeeting(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const startsAtValue = String(formData.get("startsAt") ?? "");
+  const timezoneOffset = parseInt(String(formData.get("timezoneOffset") ?? "0"), 10);
   const durationMinutes = Number(formData.get("durationMinutes") ?? 60);
   const groupIdRaw = String(formData.get("groupId") ?? "").trim();
 
@@ -26,7 +27,9 @@ export async function scheduleMeeting(formData: FormData) {
     redirect(workspaceId ? `/workspaces/${workspaceId}/meetings?meeting=invalid` : "/");
   }
 
-  const startsAt = new Date(startsAtValue);
+  // datetime-local sends local time with no timezone — correct to UTC using the client's offset
+  const startsAtRaw = new Date(startsAtValue);
+  const startsAt = new Date(startsAtRaw.getTime() + timezoneOffset * 60 * 1000);
 
   if (Number.isNaN(startsAt.getTime())) {
     redirect(`/workspaces/${workspaceId}/meetings?meeting=invalid`);
