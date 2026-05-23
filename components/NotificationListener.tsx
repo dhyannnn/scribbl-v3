@@ -61,15 +61,15 @@ async function playDing() {
 
 export function NotificationListener() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const sinceRef = useRef<string>(new Date().toISOString());
+  const sinceRef = useRef<string | null>(null);
   const soundEnabledRef = useRef<boolean>(true);
 
   const poll = useCallback(async () => {
     try {
-      const res = await fetch(
-        `/api/notifications/poll?since=${encodeURIComponent(sinceRef.current)}`,
-        { credentials: "same-origin" }
-      );
+      const url = sinceRef.current
+        ? `/api/notifications/poll?since=${encodeURIComponent(sinceRef.current)}`
+        : `/api/notifications/poll`;
+      const res = await fetch(url, { credentials: "same-origin" });
       if (!res.ok) return;
 
       const data = await res.json() as {
