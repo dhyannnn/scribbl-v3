@@ -35,7 +35,7 @@ export function LocalTime({
   dateOnly = false,
   timeOnly = false,
   short = false,
-  fallback,
+  fallback = "",
 }: {
   date: Date | string;
   dateOnly?: boolean;
@@ -43,21 +43,12 @@ export function LocalTime({
   short?: boolean;
   fallback?: string;
 }) {
-  const [formatted, setFormatted] = useState<string | null>(null);
+  const [formatted, setFormatted] = useState<string>(fallback);
 
   useEffect(() => {
     const d = typeof date === "string" ? new Date(date) : date;
-    setFormatted(
-      formatDate(d, { date: !timeOnly, time: !dateOnly, short })
-    );
+    setFormatted(formatDate(d, { date: !timeOnly, time: !dateOnly, short }));
   }, [date, dateOnly, timeOnly, short]);
 
-  // Server render: show fallback or UTC representation to avoid hydration mismatch
-  if (formatted === null) {
-    if (fallback) return <span>{fallback}</span>;
-    const d = typeof date === "string" ? new Date(date) : date;
-    return <span suppressHydrationWarning>{formatDate(d, { date: !timeOnly, time: !dateOnly, short })}</span>;
-  }
-
-  return <span>{formatted}</span>;
+  return <span suppressHydrationWarning>{formatted}</span>;
 }
