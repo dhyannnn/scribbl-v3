@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LocalDateTimeInput } from "@/components/LocalDateTimeInput";
 import { notFound } from "next/navigation";
+import { LocalTime } from "@/components/LocalTime";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
 import {
@@ -361,13 +362,7 @@ function MeetingCard({
       {/* Date + badges row */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-xs font-semibold text-[var(--color-subtle)]">
-          {meeting.startsAt.toLocaleString("en-US", {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-          })}
+          <LocalTime date={meeting.startsAt} short />
         </span>
         <LifecycleBadge lifecycle={lifecycle} />
         {meeting.recurrence ? (

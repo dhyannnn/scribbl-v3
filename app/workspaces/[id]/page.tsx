@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InviteAcceptedBroadcast } from "@/components/InviteAcceptedBroadcast";
+import { LocalTime } from "@/components/LocalTime";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
@@ -370,12 +371,7 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
                       </div>
                       <p className="mt-1.5 truncate font-semibold text-[var(--color-text)]">{meeting.title}</p>
                       <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                        {meeting.startsAt.toLocaleString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
+                        <LocalTime date={meeting.startsAt} short />
                       </p>
                     </div>
                     <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
