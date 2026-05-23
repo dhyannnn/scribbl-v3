@@ -26,6 +26,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://scribblapp.ca"),
   title: "Scribbl",
   description: "Collaborative workspaces for teams, classes, and projects.",
   icons: {
