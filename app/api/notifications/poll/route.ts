@@ -10,12 +10,14 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const sinceParam = searchParams.get("since");
-  const since = sinceParam ? new Date(sinceParam) : new Date(Date.now() - 60_000);
+  // On first load (no since param), fetch unread notifications from the last hour
+  const since = sinceParam ? new Date(sinceParam) : new Date(Date.now() - 60 * 60 * 1000);
 
   const [notifications, preference] = await Promise.all([
     prisma.notification.findMany({
       where: {
         userId: currentUser.id,
+        readAt: null,
         createdAt: { gt: since },
       },
       select: {

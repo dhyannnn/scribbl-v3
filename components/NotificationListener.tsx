@@ -118,6 +118,8 @@ export function NotificationListener() {
       Notification.requestPermission().catch(() => {});
     }
 
+    // Immediate poll on mount catches unread notifications from before page load
+    poll();
     const interval = setInterval(poll, POLL_INTERVAL_MS);
     return () => {
       clearInterval(interval);
