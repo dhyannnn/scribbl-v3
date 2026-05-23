@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LocalTime } from "@/components/LocalTime";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -318,12 +319,7 @@ export async function AppSidebar({ activePath = "/" }: AppSidebarProps) {
             </p>
             <div className="mt-3 flex items-center justify-between gap-3">
               <span className="text-xs font-medium text-[var(--color-muted)]">
-                {nextMeeting.startsAt.toLocaleString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
+                <LocalTime date={nextMeeting.startsAt} short />
               </span>
               <span className="text-xs font-bold text-[var(--color-secondary)]">Open</span>
             </div>
