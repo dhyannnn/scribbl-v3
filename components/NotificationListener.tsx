@@ -33,27 +33,21 @@ async function playDing() {
     const ctx = sharedCtx;
     const now = ctx.currentTime;
 
-    const osc1 = ctx.createOscillator();
-    const osc2 = ctx.createOscillator();
+    const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
-    osc1.type = "sine";
-    osc1.frequency.setValueAtTime(880, now);
-    osc2.type = "sine";
-    osc2.frequency.setValueAtTime(1108, now);
+    // Soft ping: clean sine at 1046 Hz (C6), quick exponential decay
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(1046, now);
 
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.18, now + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
 
-    osc1.connect(gain);
-    osc2.connect(gain);
+    osc.connect(gain);
     gain.connect(ctx.destination);
 
-    osc1.start(now);
-    osc2.start(now);
-    osc1.stop(now + 0.8);
-    osc2.stop(now + 0.8);
+    osc.start(now);
+    osc.stop(now + 0.35);
   } catch {
     // AudioContext unavailable — silently skip
   }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Hanken_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import "@livekit/components-styles";
 import { CommandPalette } from "@/components/CommandPalette";
+import { NotificationListener } from "@/components/NotificationListener";
 import { getCurrentUser } from "@/lib/current-user";
 import { Providers } from "./Providers";
 import "./globals.css";
@@ -46,6 +47,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
         <CommandPalette />
+        <NotificationListener />
       </body>
     </html>
   );

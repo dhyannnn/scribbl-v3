@@ -1,5 +1,4 @@
 import { AppSidebar } from "@/components/AppSidebar";
-import { NotificationListener } from "@/components/NotificationListener";
 import { OnboardingModal } from "@/components/OnboardingModal";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -10,7 +9,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <OnboardingModal />
-      <NotificationListener />
     </div>
   );
 }
