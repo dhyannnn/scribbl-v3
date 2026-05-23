@@ -3,11 +3,34 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NotificationToastStack, type ToastItem } from "./NotificationToast";
 
-const POLL_INTERVAL_MS = 20_000;
+const POLL_INTERVAL_MS = 5_000;
 
-function playDing() {
+// Browsers block AudioContext until a user gesture has occurred on the page.
+// We create one shared context on first click and resume it so subsequent
+// programmatic calls (from the poll timer) are allowed to produce sound.
+let sharedCtx: AudioContext | null = null;
+
+function unlockAudio() {
+  if (sharedCtx) return;
   try {
-    const ctx = new AudioContext();
+    sharedCtx = new AudioContext();
+    // Play a silent buffer to satisfy the gesture requirement
+    const buf = sharedCtx.createBuffer(1, 1, 22050);
+    const src = sharedCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(sharedCtx.destination);
+    src.start();
+  } catch {
+    sharedCtx = null;
+  }
+}
+
+async function playDing() {
+  try {
+    if (!sharedCtx) sharedCtx = new AudioContext();
+    if (sharedCtx.state === "suspended") await sharedCtx.resume();
+
+    const ctx = sharedCtx;
     const now = ctx.currentTime;
 
     const osc1 = ctx.createOscillator();
@@ -31,11 +54,8 @@ function playDing() {
     osc2.start(now);
     osc1.stop(now + 0.8);
     osc2.stop(now + 0.8);
-
-    // Clean up after playback
-    osc1.onended = () => ctx.close();
   } catch {
-    // AudioContext blocked or unavailable — silently skip
+    // AudioContext unavailable — silently skip
   }
 }
 
@@ -63,7 +83,7 @@ export function NotificationListener() {
       if (data.notifications.length === 0) return;
 
       if (soundEnabledRef.current) {
-        playDing();
+        await playDing();
       }
 
       // Browser notification when tab is in background
@@ -88,13 +108,19 @@ export function NotificationListener() {
   }, []);
 
   useEffect(() => {
+    // Unlock AudioContext on first user interaction anywhere on the page
+    document.addEventListener("click", unlockAudio, { once: true });
+
     // Request browser notification permission once on mount
     if (typeof Notification !== "undefined" && Notification.permission === "default") {
       Notification.requestPermission().catch(() => {});
     }
 
     const interval = setInterval(poll, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("click", unlockAudio);
+    };
   }, [poll]);
 
   const dismiss = useCallback((id: string) => {
