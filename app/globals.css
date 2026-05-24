@@ -326,6 +326,10 @@ body.scribbl-video-split-active [data-split-stack] {
 }
 
 @media (min-width: 1101px) {
+  body.scribbl-video-split-active [data-workspace-main] {
+    /* Shrink the main scroll container so the fixed split panel doesn't overlap content */
+    padding-right: var(--scribbl-video-split-width);
+  }
   body.scribbl-video-split-active [data-meeting-hub-main] {
     /* Subtract sidebar width (set by WorkspaceSidebarShell) and the video split panel width */
     width: calc(100vw - var(--scribbl-sidebar-w, 0px) - var(--scribbl-video-split-width));

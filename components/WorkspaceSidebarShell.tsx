@@ -106,7 +106,7 @@ export function WorkspaceSidebarShell({
       </div>
 
       {/* ── Main content — scrolls independently of the sidebar ─────── */}
-      <div className="min-w-0 flex-1 overflow-y-auto">
+      <div className="min-w-0 flex-1 overflow-y-auto" data-workspace-main>
         {children}
       </div>
     </div>
