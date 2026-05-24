@@ -4,7 +4,7 @@ import { FloatingMeetingVideo } from "./meetings/[meetingId]/video/FloatingMeeti
 import { useActiveMeeting } from "@/components/ActiveMeetingContext";
 
 export function WorkspaceVideoOverlay() {
-  const { activeMeeting, setActiveMeeting } = useActiveMeeting();
+  const { activeMeeting } = useActiveMeeting();
 
   if (!activeMeeting) return null;
 
@@ -19,7 +19,6 @@ export function WorkspaceVideoOverlay() {
       permissions={activeMeeting.permissions}
       raisedHandCount={activeMeeting.raisedHandCount}
       pendingRequestCount={activeMeeting.pendingRequestCount}
-      onAfterLeave={() => setActiveMeeting(null)}
     />
   );
 }
