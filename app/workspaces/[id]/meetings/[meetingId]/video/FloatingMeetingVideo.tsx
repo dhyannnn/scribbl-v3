@@ -11,7 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { MeetingVideoRoom } from "./MeetingVideoRoom";
+import { MeetingVideoRoom, hasRecentActiveVideoSession } from "./MeetingVideoRoom";
 import type { MeetingVideoPermissionsProps, MeetingVideoRecordingProps } from "./VideoPopoutShell";
 
 type FloatingMeetingVideoProps = {
@@ -24,6 +24,7 @@ type FloatingMeetingVideoProps = {
   permissions: MeetingVideoPermissionsProps;
   raisedHandCount?: number;
   pendingRequestCount?: number;
+  onAfterLeave?: () => void;
 };
 
 type PanelState = {
@@ -88,9 +89,11 @@ export function FloatingMeetingVideo({
   permissions,
   raisedHandCount = 0,
   pendingRequestCount = 0,
+  onAfterLeave,
 }: FloatingMeetingVideoProps) {
   const router = useRouter();
   const [panel, setPanel] = useState(getServerSafeDefaultPanel);
+  const [autoJoin, setAutoJoin] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [videoSurface, setVideoSurface] = useState<VideoSurfaceState>("hub");
   const [hasHydrated, setHasHydrated] = useState(false);
@@ -143,6 +146,7 @@ export function FloatingMeetingVideo({
       }
 
       if (event.data.type === "bring-back") {
+        setAutoJoin(hasRecentActiveVideoSession(meetingId));
         setVideoSurface("hub");
         setIsMinimized(false);
       }
@@ -319,6 +323,7 @@ export function FloatingMeetingVideo({
 
   function bringBackVideo() {
     channelRef.current?.postMessage({ type: "bring-back" } satisfies VideoChannelMessage);
+    setAutoJoin(hasRecentActiveVideoSession(meetingId));
     setVideoSurface("hub");
     setIsMinimized(false);
   }
@@ -559,6 +564,11 @@ export function FloatingMeetingVideo({
             canRecord={canRecord}
             recordingReturnTo="current"
             permissions={permissions}
+            autoJoin={autoJoin}
+            onAfterLeave={() => {
+              setAutoJoin(false);
+              onAfterLeave?.();
+            }}
           />
         </div>
       ) : (
