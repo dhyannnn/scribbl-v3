@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { MeetingVideoRoom, hasRecentActiveVideoSession } from "./MeetingVideoRoom";
 import type { MeetingVideoPermissionsProps, MeetingVideoRecordingProps } from "./VideoPopoutShell";
 
@@ -60,6 +60,7 @@ type VideoChannelMessage =
   | { type: "popout-ready" }
   | { type: "popout-closed" }
   | { type: "bring-back" }
+  | { type: "navigate-hub-to"; href: string }
   | { type: "focus-hub"; hash: string }
   | { type: "permissions-updated" };
 
@@ -101,6 +102,7 @@ export function FloatingMeetingVideo({
   const hasLoadedStoredPanelRef = useRef(false);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const popoutRef = useRef<Window | null>(null);
+  const isInPopoutRef = useRef(false);
   const interactionRef = useRef<InteractionState | null>(null);
   const splitResizeRef = useRef<SplitResizeState | null>(null);
   const frameRef = useRef<number | null>(null);
@@ -138,17 +140,29 @@ export function FloatingMeetingVideo({
 
     channel.onmessage = (event: MessageEvent<VideoChannelMessage>) => {
       if (event.data.type === "popout-opened" || event.data.type === "popout-ready") {
+        isInPopoutRef.current = true;
         setVideoSurface("popout");
       }
 
       if (event.data.type === "popout-closed") {
-        setVideoSurface("popout-closed");
+        // Only auto-rejoin if we're still in popout mode — ignore if bring-back already handled it
+        if (isInPopoutRef.current) {
+          isInPopoutRef.current = false;
+          setAutoJoin(hasRecentActiveVideoSession(meetingId));
+          setVideoSurface("hub");
+          setIsMinimized(false);
+        }
       }
 
       if (event.data.type === "bring-back") {
+        isInPopoutRef.current = false;
         setAutoJoin(hasRecentActiveVideoSession(meetingId));
         setVideoSurface("hub");
         setIsMinimized(false);
+      }
+
+      if (event.data.type === "navigate-hub-to") {
+        router.push(event.data.href);
       }
 
       if (event.data.type === "focus-hub") {
@@ -186,13 +200,15 @@ export function FloatingMeetingVideo({
     const interval = window.setInterval(() => {
       if (popoutRef.current?.closed) {
         popoutRef.current = null;
-        setVideoSurface("popout-closed");
-        channelRef.current?.postMessage({ type: "popout-closed" } satisfies VideoChannelMessage);
+        isInPopoutRef.current = false;
+        setAutoJoin(hasRecentActiveVideoSession(meetingId));
+        setVideoSurface("hub");
+        setIsMinimized(false);
       }
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [videoSurface]);
+  }, [videoSurface, meetingId]);
 
   // Activates/deactivates the split class and cleans up on exit
   useEffect(() => {
@@ -210,6 +226,17 @@ export function FloatingMeetingVideo({
     document.body.style.setProperty("--scribbl-video-split-width", `${splitVideoWidth}px`);
     window.localStorage.setItem(SPLIT_WIDTH_KEY, String(splitVideoWidth));
   }, [videoSurface, splitVideoWidth]);
+
+  // Collapse split mode back to floating when navigating away from the meeting hub
+  const pathname = usePathname();
+  useEffect(() => {
+    if (videoSurface !== "split") return;
+    const meetingPath = `/workspaces/${workspaceId}/meetings/${meetingId}`;
+    if (!pathname.startsWith(meetingPath)) {
+      setVideoSurface("hub");
+      setIsMinimized(false);
+    }
+  }, [pathname, videoSurface, workspaceId, meetingId]);
 
   const commitPanel = useCallback((nextPanel: PanelState) => {
     pendingPanelRef.current = clampPanel(nextPanel, getRenderedPanelBounds(panelRef.current));
@@ -310,6 +337,7 @@ export function FloatingMeetingVideo({
     const fullVideo = window.open(videoHref, "_blank");
     if (fullVideo) {
       popoutRef.current = fullVideo;
+      isInPopoutRef.current = true;
       setVideoSurface("popout");
       channelRef.current?.postMessage({ type: "popout-opened" } satisfies VideoChannelMessage);
     }
@@ -323,6 +351,7 @@ export function FloatingMeetingVideo({
 
   function bringBackVideo() {
     channelRef.current?.postMessage({ type: "bring-back" } satisfies VideoChannelMessage);
+    isInPopoutRef.current = false;
     setAutoJoin(hasRecentActiveVideoSession(meetingId));
     setVideoSurface("hub");
     setIsMinimized(false);
