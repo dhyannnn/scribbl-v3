@@ -3,6 +3,8 @@ import { Hanken_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import "@livekit/components-styles";
 import { CommandPalette } from "@/components/CommandPalette";
 import { NotificationListener } from "@/components/NotificationListener";
+import { ActiveMeetingProvider } from "@/components/ActiveMeetingContext";
+import { AppVideoOverlay } from "@/components/AppVideoOverlay";
 import { getCurrentUser } from "@/lib/current-user";
 import { Providers } from "./Providers";
 import "./globals.css";
@@ -62,9 +64,12 @@ export default async function RootLayout({
       className={`h-full antialiased ${hankenGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
       <body className="min-h-full flex flex-col">
-        <Providers>{children}</Providers>
-        <CommandPalette />
-        <NotificationListener />
+        <ActiveMeetingProvider>
+          <Providers>{children}</Providers>
+          <CommandPalette />
+          <NotificationListener />
+          <AppVideoOverlay />
+        </ActiveMeetingProvider>
       </body>
     </html>
   );
