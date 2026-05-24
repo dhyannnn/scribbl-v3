@@ -1,14 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { after } from "next/server";
 import { writeAuditLog } from "@/lib/audit-log";
 import { createAppUrl } from "@/lib/app-url";
 import { RateLimits } from "@/lib/rate-limit";
 import { parseLocalDateTimeInZone } from "@/lib/timezone";
 import { getCurrentUser } from "@/lib/current-user";
-import { sendMeetingCanceledEmail, sendMeetingScheduledEmail } from "@/lib/email/meeting-notifications";
+import { sendMeetingCanceledEmail, sendMeetingScheduledEmail, sendMeetingSeriesScheduledEmail } from "@/lib/email/meeting-notifications";
 import { logger } from "@/lib/logger";
 import { createLiveKitMeetingRoomName } from "@/lib/livekit-room";
 import { canManageMeetingSchedule, getMeetingLifecycle } from "@/lib/meeting-lifecycle";
@@ -141,62 +141,72 @@ export async function scheduleMeeting(formData: FormData) {
     recurrenceEndsAtDate > startsAt;
 
   let meetingId = "";
+  let seriesInfo: { firstSlot: Date; lastSlot: Date; sessionCount: number } | null = null;
 
+  try {
   if (isRecurringSeries) {
     // ── Recurring series ─────────────────────────────────────────────────────
+    // Pre-generate all IDs upfront so we can build the full dataset without
+    // holding an interactive transaction open across multiple async round-trips
+    // (pgBouncer connection-pooling breaks async-callback transactions).
     const seriesId = crypto.randomUUID();
     const durationMs = safeDuration * 60 * 1000;
     const slots = generateSeriesDates(startsAt, durationMs, recurrenceRaw, recurrenceEndsAtDate!);
 
-    await prisma.$transaction(async (tx) => {
-      for (let i = 0; i < slots.length; i++) {
-        const slot = slots[i];
-        const meeting = await tx.meeting.create({
-          data: {
-            workspaceId: workspace.id,
-            groupId,
-            title,
-            description: description || null,
-            startsAt: slot.startsAt,
-            endsAt: slot.endsAt,
-            provider: "livekit",
-            createdByUserId: currentUser.id,
-            seriesId,
-            recurrence: recurrenceRaw as "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY",
-            seriesIndex: i + 1,
-            recurrenceEndsAt: recurrenceEndsAtDate,
-            participants: {
-              create: participantUserIds.map((userId) => ({
-                userId,
-                status: userId === currentUser.id ? "ACCEPTED" : "INVITED",
-              })),
-            },
-          },
-          select: { id: true },
-        });
+    if (slots.length === 0) {
+      redirect(`/workspaces/${workspaceId}/meetings?meeting=invalid`);
+    }
 
-        if (i === 0) meetingId = meeting.id;
+    const meetingIds = slots.map(() => crypto.randomUUID());
+    meetingId = meetingIds[0];
+    seriesInfo = {
+      firstSlot: slots[0].startsAt,
+      lastSlot: slots[slots.length - 1].startsAt,
+      sessionCount: slots.length,
+    };
 
-        const roomName = createLiveKitMeetingRoomName(meeting.id);
-        await tx.meeting.update({
-          where: { id: meeting.id },
-          data: {
-            providerMeetingId: roomName,
-            meetingUrl: `/workspaces/${workspace.id}/meetings/${meeting.id}/video`,
-          },
-        });
-
-        await tx.channel.create({
-          data: {
-            workspaceId: workspace.id,
-            meetingId: meeting.id,
-            name: formatMeetingChannelName(title),
-            type: "CHAT",
-            createdByUserId: currentUser.id,
-          },
-        });
-      }
+    const meetingsData = slots.map((slot, i) => {
+      const id = meetingIds[i];
+      return {
+        id,
+        workspaceId: workspace.id,
+        groupId,
+        title,
+        description: description || null,
+        startsAt: slot.startsAt,
+        endsAt: slot.endsAt,
+        provider: "livekit",
+        providerMeetingId: createLiveKitMeetingRoomName(id),
+        meetingUrl: `/workspaces/${workspace.id}/meetings/${id}/video`,
+        createdByUserId: currentUser.id,
+        seriesId,
+        recurrence: recurrenceRaw as "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY",
+        seriesIndex: i + 1,
+        recurrenceEndsAt: recurrenceEndsAtDate,
+      };
     });
+
+    const participantsData = meetingIds.flatMap((id) =>
+      participantUserIds.map((userId) => ({
+        meetingId: id,
+        userId,
+        status: (userId === currentUser.id ? "ACCEPTED" : "INVITED") as "ACCEPTED" | "INVITED",
+      })),
+    );
+
+    const channelsData = meetingIds.map((id) => ({
+      workspaceId: workspace.id,
+      meetingId: id,
+      name: formatMeetingChannelName(title),
+      type: "CHAT" as const,
+      createdByUserId: currentUser.id,
+    }));
+
+    await prisma.$transaction([
+      prisma.meeting.createMany({ data: meetingsData }),
+      prisma.meetingParticipant.createMany({ data: participantsData }),
+      prisma.channel.createMany({ data: channelsData }),
+    ]);
   } else {
     // ── Single meeting ───────────────────────────────────────────────────────
     await prisma.$transaction(async (tx) => {
@@ -276,29 +286,61 @@ export async function scheduleMeeting(formData: FormData) {
   revalidatePath(`/workspaces/${workspaceId}/chat`);
   revalidatePath("/");
 
-  runAfterResponse(() =>
-    sendScheduledMeetingEmail({
-      creatorEmail: currentUser.email,
-      durationMinutes: safeDuration,
-      meetingId,
-      recipients: emailRecipientMembers.map((member) => member.user.email),
-      scheduledByName: currentUser.displayName,
-      startsAt,
-      timeZone: userTimezone,
-      title,
-      workspaceId,
-      workspaceName: workspace.name,
-      description,
-    }).then((emailStatus) => {
-      if (emailStatus !== "scheduled") {
-        logger.warn("Meeting scheduled email did not send", { emailStatus, meetingId, workspaceId });
-      }
-    }).catch((error) => {
-      logger.resendError({ meetingId, workspaceId, action: "meeting.scheduled" }, error);
-    }),
-  );
+  const capturedSeriesInfo = seriesInfo;
+  if (capturedSeriesInfo) {
+    runAfterResponse(() =>
+      sendSeriesMeetingEmail({
+        creatorEmail: currentUser.email,
+        description,
+        durationMinutes: safeDuration,
+        firstSessionAt: capturedSeriesInfo.firstSlot,
+        lastSessionAt: capturedSeriesInfo.lastSlot,
+        recurrence: recurrenceRaw,
+        recipients: emailRecipientMembers.map((member) => member.user.email),
+        scheduledByName: currentUser.displayName,
+        sessionCount: capturedSeriesInfo.sessionCount,
+        timeZone: userTimezone,
+        title,
+        workspaceId,
+        workspaceName: workspace.name,
+      }).then((emailStatus) => {
+        if (emailStatus !== "scheduled") {
+          logger.warn("Series scheduled email did not send", { emailStatus, meetingId, workspaceId });
+        }
+      }).catch((error) => {
+        logger.resendError({ meetingId, workspaceId, action: "meeting.series-scheduled" }, error);
+      }),
+    );
+  } else {
+    runAfterResponse(() =>
+      sendScheduledMeetingEmail({
+        creatorEmail: currentUser.email,
+        durationMinutes: safeDuration,
+        meetingId,
+        recipients: emailRecipientMembers.map((member) => member.user.email),
+        scheduledByName: currentUser.displayName,
+        startsAt,
+        timeZone: userTimezone,
+        title,
+        workspaceId,
+        workspaceName: workspace.name,
+        description,
+      }).then((emailStatus) => {
+        if (emailStatus !== "scheduled") {
+          logger.warn("Meeting scheduled email did not send", { emailStatus, meetingId, workspaceId });
+        }
+      }).catch((error) => {
+        logger.resendError({ meetingId, workspaceId, action: "meeting.scheduled" }, error);
+      }),
+    );
+  }
 
   redirect(`/workspaces/${workspaceId}/meetings?meeting=scheduled`);
+  } catch (err) {
+    unstable_rethrow(err);
+    logger.error("scheduleMeeting failed", { workspaceId, title }, err);
+    redirect(`/workspaces/${workspaceId}/meetings?meeting=error`);
+  }
 }
 
 export async function updateMeetingDetails(formData: FormData) {
@@ -689,6 +731,11 @@ async function sendScheduledMeetingEmail({
     workspaceName,
   });
 
+  return getMeetingEmailStatus(result, "scheduled");
+}
+
+async function sendSeriesMeetingEmail(args: Parameters<typeof sendMeetingSeriesScheduledEmail>[0]) {
+  const result = await sendMeetingSeriesScheduledEmail(args);
   return getMeetingEmailStatus(result, "scheduled");
 }
 

@@ -124,6 +124,34 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
   const groupsForDropdown = isPro ? workspace.groups : [];
   const groupNameMap = new Map(workspace.groups.map((g) => [g.id, g.name]));
 
+  // Group recurring series together; leave single meetings ungrouped
+  type MeetingItem = (typeof visibleMeetings)[number];
+  type DisplayItem =
+    | { kind: "single"; meeting: MeetingItem; sortKey: Date }
+    | { kind: "series"; meetings: MeetingItem[]; sortKey: Date };
+
+  const seriesMap = new Map<string, MeetingItem[]>();
+  const singleMeetings: MeetingItem[] = [];
+
+  for (const meeting of visibleMeetings) {
+    if (meeting.seriesId) {
+      const group = seriesMap.get(meeting.seriesId) ?? [];
+      group.push(meeting);
+      seriesMap.set(meeting.seriesId, group);
+    } else {
+      singleMeetings.push(meeting);
+    }
+  }
+
+  const displayItems: DisplayItem[] = [
+    ...singleMeetings.map((m) => ({ kind: "single" as const, meeting: m, sortKey: m.startsAt })),
+    ...Array.from(seriesMap.values()).map((meetings) => ({
+      kind: "series" as const,
+      meetings,
+      sortKey: meetings[0].startsAt,
+    })),
+  ].sort((a, b) => a.sortKey.getTime() - b.sortKey.getTime());
+
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
       <div className="mx-auto max-w-[1100px] px-8 py-8">
@@ -301,16 +329,26 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
 
             {/* Meeting cards */}
             <div className="flex flex-col gap-3">
-              {visibleMeetings.map((meeting) => (
-                <MeetingCard
-                  key={meeting.id}
-                  workspaceId={workspace.id}
-                  meeting={meeting}
-                  now={now}
-                  groupName={meeting.groupId ? (groupNameMap.get(meeting.groupId) ?? null) : null}
-                />
-              ))}
-              {visibleMeetings.length === 0 ? (
+              {displayItems.map((item) =>
+                item.kind === "single" ? (
+                  <MeetingCard
+                    key={item.meeting.id}
+                    workspaceId={workspace.id}
+                    meeting={item.meeting}
+                    now={now}
+                    groupName={item.meeting.groupId ? (groupNameMap.get(item.meeting.groupId) ?? null) : null}
+                  />
+                ) : (
+                  <SeriesGroupCard
+                    key={item.meetings[0].seriesId!}
+                    workspaceId={workspace.id}
+                    meetings={item.meetings}
+                    now={now}
+                    groupName={item.meetings[0].groupId ? (groupNameMap.get(item.meetings[0].groupId) ?? null) : null}
+                  />
+                )
+              )}
+              {displayItems.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-10 text-center">
                   <p className="text-sm text-[var(--color-subtle)]">
                     No {activeView} sessions to show.
@@ -415,6 +453,101 @@ function MeetingCard({
   );
 }
 
+function SeriesGroupCard({
+  workspaceId,
+  meetings,
+  now,
+  groupName,
+}: {
+  workspaceId: string;
+  now: Date;
+  groupName: string | null;
+  meetings: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    startsAt: Date;
+    endsAt: Date | null;
+    canceledAt: Date | null;
+    provider: string | null;
+    recurrence: string | null;
+    seriesId: string | null;
+    participants: unknown[];
+    artifacts: unknown[];
+  }>;
+}) {
+  const first = meetings[0];
+  const last = meetings[meetings.length - 1];
+  const recurrenceLabel = formatSeriesRecurrence(first.recurrence);
+  const nextMeeting = meetings.find((m) => !m.canceledAt && m.startsAt > now);
+  const dateRange = `${formatSeriesDate(first.startsAt)} – ${formatSeriesDate(last.startsAt)}`;
+
+  return (
+    <details className="group rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
+      <summary className="flex cursor-pointer list-none items-start gap-3 p-5 [&::-webkit-details-marker]:hidden">
+        <svg
+          width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          className="mt-1 shrink-0 text-[var(--color-subtle)] transition group-open:rotate-90"
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-[var(--color-border)] px-2 py-0.5 font-mono text-xs text-[var(--color-subtle)]">
+              ↻ {recurrenceLabel}
+            </span>
+            <span className="rounded-full bg-[var(--color-surface-high)] px-2.5 py-0.5 font-mono text-xs text-[var(--color-muted)]">
+              {meetings.length} session{meetings.length === 1 ? "" : "s"}
+            </span>
+            {groupName ? (
+              <span className="rounded-full bg-[var(--color-secondary-dim)] px-2.5 py-0.5 font-mono text-xs font-semibold text-[var(--color-secondary)]">
+                {groupName}
+              </span>
+            ) : null}
+          </div>
+          <h3 className="mt-2 font-display text-base font-semibold leading-snug text-[var(--color-text)]">
+            {first.title}
+          </h3>
+          <p className="mt-1 text-xs text-[var(--color-subtle)]">
+            {dateRange}
+            {nextMeeting ? (
+              <> &middot; Next: <LocalTime date={nextMeeting.startsAt} short /></>
+            ) : null}
+          </p>
+        </div>
+      </summary>
+
+      <div className="flex flex-col gap-2 border-t border-[var(--color-border)] p-4">
+        {meetings.map((meeting) => (
+          <MeetingCard
+            key={meeting.id}
+            workspaceId={workspaceId}
+            meeting={meeting}
+            now={now}
+            groupName={groupName}
+          />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function formatSeriesRecurrence(recurrence: string | null): string {
+  switch (recurrence) {
+    case "DAILY": return "daily";
+    case "WEEKLY": return "weekly";
+    case "BIWEEKLY": return "biweekly";
+    case "MONTHLY": return "monthly";
+    default: return recurrence?.toLowerCase() ?? "recurring";
+  }
+}
+
+function formatSeriesDate(date: Date): string {
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function LifecycleBadge({ lifecycle }: { lifecycle: MeetingLifecycleState }) {
   const { bg, text } = getMeetingBadgeTokens(lifecycle);
   return (
@@ -461,6 +594,8 @@ function getMeetingStatusMessage(status?: string) {
       return "Meeting canceled. Add RESEND_API_KEY and EMAIL_FROM to send cancellation emails.";
     case "canceled-email-failed":
       return "Meeting canceled, but the cancellation email could not be sent.";
+    case "error":
+      return "Something went wrong scheduling the meeting. Please try again.";
     case "invalid":
       return "Check the meeting details and try again.";
     case "unauthorized":
