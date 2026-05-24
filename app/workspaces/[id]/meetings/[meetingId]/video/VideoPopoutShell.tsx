@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PermissionSubmitButton } from "@/components/PermissionSubmitButton";
 import { RealtimeChatPanel, type RealtimeChatChannel } from "@/components/RealtimeChatPanel";
@@ -218,18 +218,28 @@ export function VideoPopoutShell({
     };
   }, [channelName, closeToHub, meetingId, router]);
 
-  // When the user clicks a sidebar link from the video room tab (opened by hub),
-  // redirect the original tab to that page and close this one instead.
-  const pathname = usePathname();
+  // Intercept SPA navigation in the popout tab before the component unmounts.
+  // pushState fires synchronously inside Next.js Router before any re-render,
+  // so this is reliable even when the target component would unmount immediately.
   const videoPath = `/workspaces/${workspaceId}/meetings/${meetingId}/video`;
   useEffect(() => {
-    if (pathname === videoPath || !wasOpenedByHubRef.current) return;
-    const navChannel = new BroadcastChannel(channelName);
-    navChannel.postMessage({ type: "navigate-hub-to", href: pathname } satisfies VideoChannelMessage);
-    navChannel.close();
-    window.opener?.focus();
-    window.setTimeout(() => window.close(), 50);
-  }, [pathname, videoPath, channelName]);
+    if (!window.opener) return;
+    const originalPushState = window.history.pushState.bind(window.history);
+    window.history.pushState = function (state, title, url) {
+      if (url && String(url) !== videoPath) {
+        const ch = new BroadcastChannel(channelName);
+        ch.postMessage({ type: "navigate-hub-to", href: String(url) } satisfies VideoChannelMessage);
+        ch.close();
+        window.opener?.focus();
+        window.setTimeout(() => window.close(), 50);
+        return;
+      }
+      return originalPushState(state, title, url);
+    };
+    return () => {
+      window.history.pushState = originalPushState;
+    };
+  }, [channelName, videoPath]);
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
