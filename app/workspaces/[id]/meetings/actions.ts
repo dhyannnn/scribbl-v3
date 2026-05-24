@@ -132,7 +132,7 @@ export async function scheduleMeeting(formData: FormData) {
   const recurrenceRaw = String(formData.get("recurrence") ?? "").trim();
   const recurrenceEndsAtRaw = String(formData.get("recurrenceEndsAt") ?? "").trim();
   const recurrenceEndsAtDate = recurrenceEndsAtRaw
-    ? parseLocalDateTimeInZone(recurrenceEndsAtRaw + "T23:59:59", userTimezone)
+    ? parseLocalDateTimeInZone(recurrenceEndsAtRaw + "T23:59", userTimezone)
     : null;
   const isRecurringSeries =
     Boolean(recurrenceRaw) &&
