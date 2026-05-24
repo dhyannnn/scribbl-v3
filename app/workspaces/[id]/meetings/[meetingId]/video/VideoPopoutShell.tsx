@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PermissionSubmitButton } from "@/components/PermissionSubmitButton";
 import { RealtimeChatPanel, type RealtimeChatChannel } from "@/components/RealtimeChatPanel";
@@ -126,6 +126,7 @@ type VideoChannelMessage =
   | { type: "popout-ready" }
   | { type: "popout-closed" }
   | { type: "bring-back" }
+  | { type: "navigate-hub-to"; href: string }
   | { type: "focus-hub"; hash: string }
   | { type: "permissions-updated" };
 
@@ -211,9 +212,24 @@ export function VideoPopoutShell({
 
     return () => {
       window.removeEventListener("beforeunload", announceClosed);
+      // Also fires on SPA unmount (sidebar navigation) — beforeunload only covers actual tab close
+      channel.postMessage({ type: "popout-closed" } satisfies VideoChannelMessage);
       channel.close();
     };
   }, [channelName, closeToHub, meetingId, router]);
+
+  // When the user clicks a sidebar link from the video room tab (opened by hub),
+  // redirect the original tab to that page and close this one instead.
+  const pathname = usePathname();
+  const videoPath = `/workspaces/${workspaceId}/meetings/${meetingId}/video`;
+  useEffect(() => {
+    if (pathname === videoPath || !wasOpenedByHubRef.current) return;
+    const navChannel = new BroadcastChannel(channelName);
+    navChannel.postMessage({ type: "navigate-hub-to", href: pathname } satisfies VideoChannelMessage);
+    navChannel.close();
+    window.opener?.focus();
+    window.setTimeout(() => window.close(), 50);
+  }, [pathname, videoPath, channelName]);
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
