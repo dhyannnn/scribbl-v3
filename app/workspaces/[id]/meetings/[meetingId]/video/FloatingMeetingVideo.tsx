@@ -25,6 +25,7 @@ type FloatingMeetingVideoProps = {
   raisedHandCount?: number;
   pendingRequestCount?: number;
   onAfterLeave?: () => void;
+  onDismiss?: () => void;
 };
 
 type PanelState = {
@@ -91,6 +92,7 @@ export function FloatingMeetingVideo({
   raisedHandCount = 0,
   pendingRequestCount = 0,
   onAfterLeave,
+  onDismiss,
 }: FloatingMeetingVideoProps) {
   const router = useRouter();
   const [panel, setPanel] = useState(getServerSafeDefaultPanel);
@@ -574,6 +576,17 @@ export function FloatingMeetingVideo({
               className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
             >
               {isMinimized ? "Show" : "Hide"}
+            </button>
+          ) : null}
+          {onDismiss ? (
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={onDismiss}
+              className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
+              title="Leave and dismiss"
+            >
+              ✕
             </button>
           ) : null}
         </div>
