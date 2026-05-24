@@ -146,11 +146,9 @@ export function MeetingVideoRoom({
 
   const leaveRoom = useCallback(() => {
     markLeft();
-    clientSessionIdRef.current = "";
-    clearStoredClientSessionId(meetingId);
     setConnection(null);
     onAfterLeave?.();
-  }, [markLeft, meetingId, onAfterLeave]);
+  }, [markLeft, onAfterLeave]);
 
   useEffect(() => {
     return () => {
