@@ -4,9 +4,9 @@ import { FloatingMeetingVideo } from "@/app/workspaces/[id]/meetings/[meetingId]
 import { useActiveMeeting } from "@/components/ActiveMeetingContext";
 
 export function AppVideoOverlay() {
-  const { activeMeeting, setActiveMeeting } = useActiveMeeting();
+  const { activeMeeting, videoHidden, setVideoHidden } = useActiveMeeting();
 
-  if (!activeMeeting) return null;
+  if (!activeMeeting || videoHidden) return null;
 
   return (
     <FloatingMeetingVideo
@@ -19,7 +19,7 @@ export function AppVideoOverlay() {
       permissions={activeMeeting.permissions}
       raisedHandCount={activeMeeting.raisedHandCount}
       pendingRequestCount={activeMeeting.pendingRequestCount}
-      onDismiss={() => setActiveMeeting(null)}
+      onDismiss={() => setVideoHidden(true)}
     />
   );
 }

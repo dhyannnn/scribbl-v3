@@ -39,6 +39,7 @@ import { updateMeetingDetails } from "../actions";
 import { formatDateTimeLocalInZone } from "@/lib/timezone";
 import { MeetingChatPanel } from "./MeetingChatPanel";
 import { ActiveMeetingBridge } from "./ActiveMeetingBridge";
+import { VideoRejoinBanner } from "./VideoRejoinBanner";
 import {
   attachFileToMeeting,
   attachNoteToMeeting,
@@ -715,6 +716,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
             pendingRequestCount={pendingRequests.length}
           />
         ) : null}
+        <VideoRejoinBanner />
 
         {latestRecording && !isCanceled ? (
           <RecordingStatusPanel
