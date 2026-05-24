@@ -38,7 +38,7 @@ import { CancelMeetingForm } from "../CancelMeetingForm";
 import { updateMeetingDetails } from "../actions";
 import { formatDateTimeLocalInZone } from "@/lib/timezone";
 import { MeetingChatPanel } from "./MeetingChatPanel";
-import { FloatingMeetingVideo } from "./video/FloatingMeetingVideo";
+import { ActiveMeetingBridge } from "./ActiveMeetingBridge";
 import {
   attachFileToMeeting,
   attachNoteToMeeting,
@@ -700,9 +700,9 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
         ) : null}
 
         {currentParticipant && isSessionOpen ? (
-          <FloatingMeetingVideo
-            workspaceId={id}
+          <ActiveMeetingBridge
             meetingId={meeting.id}
+            workspaceId={id}
             videoHref={`/workspaces/${id}/meetings/${meeting.id}/video`}
             canRecord={meeting.workspace?.plan !== "FREE"}
             recording={{
@@ -711,8 +711,8 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               latestRecording,
             }}
             permissions={{ ...videoPermissions, handRaised: currentParticipantHandRaised }}
-          raisedHandCount={raisedHandParticipants.length}
-          pendingRequestCount={pendingRequests.length}
+            raisedHandCount={raisedHandParticipants.length}
+            pendingRequestCount={pendingRequests.length}
           />
         ) : null}
 

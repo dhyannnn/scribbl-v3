@@ -187,7 +187,7 @@ export function MeetingVideoRoom({
 
   const joinRoom = useCallback(async () => {
     setError("");
-    clientSessionIdRef.current = createClientSessionId();
+    // Don't overwrite — fetchToken reuses existing session ID or creates one if empty
     try {
       await fetchToken(false);
     } catch {
