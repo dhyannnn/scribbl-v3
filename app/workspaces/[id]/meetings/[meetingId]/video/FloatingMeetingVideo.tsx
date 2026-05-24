@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { MeetingVideoRoom, hasRecentActiveVideoSession } from "./MeetingVideoRoom";
 import type { MeetingVideoPermissionsProps, MeetingVideoRecordingProps } from "./VideoPopoutShell";
 
@@ -228,17 +228,6 @@ export function FloatingMeetingVideo({
     document.body.style.setProperty("--scribbl-video-split-width", `${splitVideoWidth}px`);
     window.localStorage.setItem(SPLIT_WIDTH_KEY, String(splitVideoWidth));
   }, [videoSurface, splitVideoWidth]);
-
-  // Collapse split mode back to floating when navigating away from the meeting hub
-  const pathname = usePathname();
-  useEffect(() => {
-    if (videoSurface !== "split") return;
-    const meetingPath = `/workspaces/${workspaceId}/meetings/${meetingId}`;
-    if (!pathname.startsWith(meetingPath)) {
-      setVideoSurface("hub");
-      setIsMinimized(false);
-    }
-  }, [pathname, videoSurface, workspaceId, meetingId]);
 
   const commitPanel = useCallback((nextPanel: PanelState) => {
     pendingPanelRef.current = clampPanel(nextPanel, getRenderedPanelBounds(panelRef.current));
