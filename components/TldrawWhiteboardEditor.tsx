@@ -60,8 +60,19 @@ type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 const SHAPE_UTILS = [PageBackgroundShapeUtil];
 
+type ExportCtxValue = {
+  title: string;
+  canExportPdf: boolean;
+  canUploadAssets: boolean;
+  onRegisterExportPdf: ((fn: (() => Promise<void>) | null) => void) | null;
+};
 // Context that passes per-session flags into the tldraw component tree.
-const ExportCtx = createContext({ title: "", canExportPdf: true, canUploadAssets: true });
+const ExportCtx = createContext<ExportCtxValue>({
+  title: "",
+  canExportPdf: true,
+  canUploadAssets: true,
+  onRegisterExportPdf: null,
+});
 
 // ── Custom main menu / export submenu — all formats export ALL pages, JSON is removed
 
@@ -80,7 +91,7 @@ function CustomMainMenu(props: TLUiMainMenuProps) {
 function CustomExportMenu() {
   const editor = useEditor();
   const exportAs = useExportAs();
-  const { title, canExportPdf } = useContext(ExportCtx);
+  const { title, canExportPdf, onRegisterExportPdf } = useContext(ExportCtx);
   const [busySvg, setBusySvg] = useState(false);
   const [busyPng, setBusyPng] = useState(false);
   const [busyPdf, setBusyPdf] = useState(false);
@@ -112,6 +123,14 @@ function CustomExportMenu() {
       setBusyPdf(false);
     }
   }
+
+  // Keep the outer header button wired to this handler (which has the live useEditor() instance).
+  const handlePdfRef = useRef(handlePdf);
+  handlePdfRef.current = handlePdf;
+  useEffect(() => {
+    onRegisterExportPdf?.(() => handlePdfRef.current());
+    return () => onRegisterExportPdf?.(null);
+  }, [onRegisterExportPdf]);
 
   return (
     <TldrawUiMenuSubmenu id="export-all-as" label="context-menu.export-all-as" size="small">
@@ -445,6 +464,10 @@ export function TldrawWhiteboardEditor({
   const canEditRef = useRef(canEdit);
   const canUploadAssetsRef = useRef(canUploadAssets);
   const queueAutosaveRef = useRef<() => void>(() => {});
+  const exportPdfFnRef = useRef<(() => Promise<void>) | null>(null);
+  const registerExportPdf = useCallback((fn: (() => Promise<void>) | null) => {
+    exportPdfFnRef.current = fn;
+  }, []);
 
   useEffect(() => {
     titleValueRef.current = titleValue;
@@ -627,7 +650,7 @@ export function TldrawWhiteboardEditor({
   }
 
   const canvas = (
-    <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets }}>
+    <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets, onRegisterExportPdf: registerExportPdf }}>
       <TldrawCanvas
         key={`${noteId}:${variant}`}
         store={storeWithStatus}
@@ -701,12 +724,13 @@ export function TldrawWhiteboardEditor({
           {canExportPdf && (
             <button
               type="button"
-              disabled={busyHeaderPdf}
+              disabled={busyHeaderPdf || !exportPdfFnRef.current}
               onClick={async () => {
-                if (!editorRef.current) return;
+                const fn = exportPdfFnRef.current;
+                if (!fn) return;
                 setBusyHeaderPdf(true);
                 try {
-                  await exportWhiteboardPdf(editorRef.current, titleValue || "whiteboard");
+                  await fn();
                 } finally {
                   setBusyHeaderPdf(false);
                 }
