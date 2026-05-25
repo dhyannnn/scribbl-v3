@@ -311,6 +311,8 @@ export function VideoPopoutShell({
                   canRecord={canRecord}
                   permissions={permissions}
                   onAfterLeave={() => closeToHub()}
+                  raisedHandCount={participants.filter((p) => p.handRaised).length}
+                  accessRequestCount={accessRequests.length}
                 />
               </div>
             </div>
