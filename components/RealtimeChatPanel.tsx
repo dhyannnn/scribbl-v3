@@ -967,16 +967,16 @@ function URLPreview({ url }: { url: string }) {
 
 function AttachmentCard({ file }: { file: NonNullable<RealtimeChatMessage["attachmentFile"]> }) {
   const isImage = file.mimeType.startsWith("image/");
-  if (isImage && file.publicUrl) {
+  if (isImage) {
     return (
-      <a href={file.publicUrl} target="_blank" rel="noopener noreferrer" className="mt-1 block max-w-[240px] overflow-hidden rounded-2xl border border-[var(--color-border)]">
+      <a href={`/api/files/${file.id}`} target="_blank" rel="noopener noreferrer" className="mt-1 block max-w-[240px] overflow-hidden rounded-2xl border border-[var(--color-border)]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={file.publicUrl} alt={file.name} className="max-h-48 w-full object-cover" />
+        <img src={file.publicUrl ?? `/api/files/${file.id}`} alt={file.name} className="max-h-48 w-full object-cover" />
       </a>
     );
   }
   return (
-    <a href={file.publicUrl ?? "#"} target="_blank" rel="noopener noreferrer" download={file.name}
+    <a href={`/api/files/${file.id}`} target="_blank" rel="noopener noreferrer"
       className="mt-1 flex max-w-[240px] items-center gap-2.5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm no-underline transition hover:border-[var(--color-secondary)]">
       <Paperclip size={14} className="shrink-0 text-[var(--color-muted)]" />
       <span className="min-w-0">
