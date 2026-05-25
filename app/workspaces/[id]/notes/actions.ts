@@ -17,6 +17,7 @@ export async function createTextNote(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
   const visibilityValue = String(formData.get("visibility") ?? "WORKSPACE_SHARED");
   const collaborationValue = String(formData.get("collaboration") ?? "SOLO");
+  const userTimezone = String(formData.get("userTimezone") || "UTC");
 
   if (
     !workspaceId ||
@@ -70,7 +71,7 @@ export async function createTextNote(formData: FormData) {
         scope: visibility,
         type: "TEXT",
         collaborative: collaboration === "COLLABORATIVE",
-        timeZone: currentUser.timezone,
+        timeZone: userTimezone,
       }),
       type: "TEXT",
       visibility,
@@ -95,6 +96,7 @@ export async function createWhiteboardNote(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
   const visibilityValue = String(formData.get("visibility") ?? "WORKSPACE_SHARED");
   const collaborationValue = String(formData.get("collaboration") ?? "SOLO");
+  const userTimezone = String(formData.get("userTimezone") || "UTC");
 
   if (
     !workspaceId ||
@@ -154,7 +156,7 @@ export async function createWhiteboardNote(formData: FormData) {
         scope: visibility,
         type: "WHITEBOARD",
         collaborative: collaboration === "COLLABORATIVE",
-        timeZone: currentUser.timezone,
+        timeZone: userTimezone,
       }),
       type: "WHITEBOARD",
       visibility,

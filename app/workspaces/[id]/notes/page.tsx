@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getGradient } from "@/lib/color-hash";
 import { createTextNote, createWhiteboardNote, updateNoteExportAccess } from "./actions";
 import { DeleteNoteForm } from "./DeleteNoteForm";
+import { TimezoneInput } from "@/components/TimezoneInput";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -118,6 +119,7 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
             {/* Primary CTAs */}
             <div className="flex shrink-0 flex-wrap items-start gap-2">
               <form action={createTextNote}>
+                <TimezoneInput />
                 <input type="hidden" name="workspaceId" value={workspace.id} />
                 <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
                 <input type="hidden" name="collaboration" value="COLLABORATIVE" />
@@ -131,6 +133,7 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
               </form>
               {canUseWhiteboard ? (
                 <form action={createWhiteboardNote}>
+                  <TimezoneInput />
                   <input type="hidden" name="workspaceId" value={workspace.id} />
                   <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
                   <input type="hidden" name="collaboration" value="COLLABORATIVE" />
@@ -162,6 +165,7 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
                 <div className="absolute right-0 top-full z-20 mt-2 w-52 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg">
                   <p className="px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">Private</p>
                   <form action={createTextNote}>
+                    <TimezoneInput />
                     <input type="hidden" name="workspaceId" value={workspace.id} />
                     <input type="hidden" name="visibility" value="PRIVATE" />
                     <PendingSubmitButton pendingLabel="Creating..." className="w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
@@ -169,6 +173,7 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
                     </PendingSubmitButton>
                   </form>
                   <form action={createWhiteboardNote}>
+                    <TimezoneInput />
                     <input type="hidden" name="workspaceId" value={workspace.id} />
                     <input type="hidden" name="visibility" value="PRIVATE" />
                     <PendingSubmitButton pendingLabel="Creating..." className="w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
@@ -178,6 +183,7 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
                   <div className="my-1 border-t border-[var(--color-border)]" />
                   <p className="px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">View-only Shared</p>
                   <form action={createTextNote}>
+                    <TimezoneInput />
                     <input type="hidden" name="workspaceId" value={workspace.id} />
                     <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
                     <input type="hidden" name="collaboration" value="SOLO" />
@@ -187,6 +193,7 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
                   </form>
                   {canUseWhiteboard ? (
                     <form action={createWhiteboardNote}>
+                      <TimezoneInput />
                       <input type="hidden" name="workspaceId" value={workspace.id} />
                       <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
                       <input type="hidden" name="collaboration" value="SOLO" />
