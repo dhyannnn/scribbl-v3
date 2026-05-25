@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LocalDateTimeInput } from "@/components/LocalDateTimeInput";
+import { LocalDatetimeInput } from "@/components/LocalDateTimeInput";
 import { notFound } from "next/navigation";
 import { LocalTime } from "@/components/LocalTime";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
@@ -202,7 +202,7 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
 
                 <label className="flex flex-col gap-1.5">
                   <span className="text-xs font-medium text-[var(--color-muted)]">Starts</span>
-                  <LocalDateTimeInput className="min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)] focus:bg-[var(--color-surface)]" />
+                  <LocalDatetimeInput name="startsAt" required className="min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)] focus:bg-[var(--color-surface)]" />
                 </label>
 
                 <label className="flex flex-col gap-1.5">
