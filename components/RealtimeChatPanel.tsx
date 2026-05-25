@@ -13,7 +13,7 @@ import json from "highlight.js/lib/languages/json";
 import css from "highlight.js/lib/languages/css";
 import xml from "highlight.js/lib/languages/xml";
 import { useBroadcastEvent, useEventListener, useMyPresence, useOthers } from "@liveblocks/react/suspense";
-import { Check, Edit2, Hash, Paperclip, Pin, PinOff, Reply, Search, SendHorizontal, Smile, Trash2, X } from "lucide-react";
+import { Check, Edit2, ExternalLink, Hash, Paperclip, Pin, PinOff, Reply, Search, SendHorizontal, Smile, Trash2, X } from "lucide-react";
 import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { LiveblocksRoom } from "@/components/LiveblocksRoom";
 
@@ -576,6 +576,21 @@ function RealtimeChatPanelContent({
                       </div>
                     );
                   }
+                  const isAttachmentOnly = !!message.attachmentFile &&
+                    message.body.trim() === message.attachmentFile.name.trim();
+                  if (isAttachmentOnly) {
+                    if (!message.replyTo) return null;
+                    return (
+                      <div className={`flex items-start gap-1.5 rounded-lg border-l-2 px-2 py-1 ${isOwn ? "border-white/40 bg-[var(--color-secondary-dim)]/30" : "border-[var(--color-secondary)] bg-[var(--color-surface-mid)]"}`}>
+                        <Reply size={10} className="mt-0.5 shrink-0 text-[var(--color-secondary)]" />
+                        <span className="min-w-0 truncate text-xs text-[var(--color-muted)]">
+                          <span className="font-semibold">{message.replyTo.sender.displayName}</span>
+                          <span className="ml-1">{truncate(message.replyTo.body, 50)}</span>
+                        </span>
+                      </div>
+                    );
+                  }
+
                   const tokens = tokenize(message.body);
                   const isPureBlock = tokens.length === 1 && (tokens[0].type === "code-block" || tokens[0].type === "math-block");
 
@@ -967,24 +982,45 @@ function URLPreview({ url }: { url: string }) {
 
 function AttachmentCard({ file }: { file: NonNullable<RealtimeChatMessage["attachmentFile"]> }) {
   const isImage = file.mimeType.startsWith("image/");
+  const href = `/api/files/${file.id}`;
+
   if (isImage) {
     return (
-      <a href={`/api/files/${file.id}`} target="_blank" rel="noopener noreferrer" className="mt-1 block max-w-[240px] overflow-hidden rounded-2xl border border-[var(--color-border)]">
+      <a href={href} target="_blank" rel="noopener noreferrer" className="mt-1 block">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={file.publicUrl ?? `/api/files/${file.id}`} alt={file.name} className="max-h-48 w-full object-cover" />
+        <img
+          src={file.publicUrl ?? href}
+          alt={file.name}
+          className="max-w-[280px] rounded-2xl"
+          style={{ maxHeight: 320, display: "block" }}
+        />
       </a>
     );
   }
+
+  const { label, colorClass } = fileTypeStyle(file.mimeType, file.name);
+
   return (
-    <a href={`/api/files/${file.id}`} target="_blank" rel="noopener noreferrer"
-      className="mt-1 flex max-w-[240px] items-center gap-2.5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm no-underline transition hover:border-[var(--color-secondary)]">
-      <Paperclip size={14} className="shrink-0 text-[var(--color-muted)]" />
-      <span className="min-w-0">
-        <span className="block truncate font-medium text-[var(--color-text)]">{file.name}</span>
-        {file.sizeBytes && <span className="text-xs text-[var(--color-muted)]">{formatBytes(file.sizeBytes)}</span>}
-      </span>
+    <a href={href} target="_blank" rel="noopener noreferrer"
+      className="mt-1 flex w-[280px] max-w-full items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 no-underline transition hover:border-[var(--color-secondary)]">
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-mono text-[10px] font-bold tracking-wide ${colorClass}`}>
+        {label}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-[var(--color-text)]">{file.name}</p>
+        {file.sizeBytes != null && <p className="text-xs text-[var(--color-muted)]">{formatBytes(file.sizeBytes)}</p>}
+      </div>
+      <ExternalLink size={14} className="shrink-0 text-[var(--color-subtle)]" />
     </a>
   );
+}
+
+function fileTypeStyle(mimeType: string, name: string): { label: string; colorClass: string } {
+  const ext = (name.split(".").pop() ?? "FILE").toUpperCase().slice(0, 4);
+  if (mimeType === "application/pdf") return { label: "PDF", colorClass: "bg-red-50 text-red-600" };
+  if (mimeType.includes("word") || /\.docx?$/i.test(name)) return { label: ext, colorClass: "bg-blue-50 text-blue-600" };
+  if (mimeType.includes("spreadsheet") || mimeType === "text/csv" || /\.(xlsx?|csv)$/i.test(name)) return { label: ext, colorClass: "bg-green-50 text-green-600" };
+  return { label: ext, colorClass: "bg-[var(--color-surface-high)] text-[var(--color-muted)]" };
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
