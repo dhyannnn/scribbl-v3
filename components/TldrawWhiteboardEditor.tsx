@@ -724,13 +724,15 @@ export function TldrawWhiteboardEditor({
           {canExportPdf && (
             <button
               type="button"
-              disabled={busyHeaderPdf || !exportPdfFnRef.current}
+              disabled={busyHeaderPdf}
               onClick={async () => {
                 const fn = exportPdfFnRef.current;
-                if (!fn) return;
+                const ed = editorRef.current;
+                if (!fn && !ed) return;
                 setBusyHeaderPdf(true);
                 try {
-                  await fn();
+                  if (fn) await fn();
+                  else await exportWhiteboardPdf(ed!, titleValue || "whiteboard");
                 } finally {
                   setBusyHeaderPdf(false);
                 }
