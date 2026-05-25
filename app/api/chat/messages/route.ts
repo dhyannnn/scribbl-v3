@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Too many messages. Slow down." }, { status: 429 });
   }
 
-  const { workspaceId, channelId, body, replyToId } = parseBody(await readJson(request));
+  const { workspaceId, channelId, body, replyToId, attachmentFileId } = parseBody(await readJson(request));
 
   if (!workspaceId || !channelId || !body) {
     return NextResponse.json({ error: "Message is required." }, { status: 400 });
@@ -48,6 +48,7 @@ export async function POST(request: Request) {
       senderUserId: currentUser.id,
       body,
       ...(replyToId ? { replyToId } : {}),
+      ...(attachmentFileId ? { attachmentFileId } : {}),
     },
     select: messageFullSelect,
   });
@@ -367,7 +368,7 @@ function parseBody(body: unknown) {
 
   const maybeBody = body as {
     workspaceId?: unknown; channelId?: unknown; messageId?: unknown;
-    body?: unknown; replyToId?: unknown; pin?: unknown;
+    body?: unknown; replyToId?: unknown; attachmentFileId?: unknown; pin?: unknown;
   };
 
   return {
@@ -376,6 +377,7 @@ function parseBody(body: unknown) {
     messageId: typeof maybeBody.messageId === "string" ? maybeBody.messageId : "",
     body: typeof maybeBody.body === "string" ? maybeBody.body.trim() : "",
     replyToId: typeof maybeBody.replyToId === "string" ? maybeBody.replyToId : null,
+    attachmentFileId: typeof maybeBody.attachmentFileId === "string" ? maybeBody.attachmentFileId : null,
     pin: typeof maybeBody.pin === "boolean" ? maybeBody.pin : null,
   };
 }
