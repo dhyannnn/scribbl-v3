@@ -431,6 +431,7 @@ export function TldrawWhiteboardEditor({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [isPending, startTransition] = useTransition();
   const [linkCopied, setLinkCopied] = useState(false);
+  const [busyHeaderPdf, setBusyHeaderPdf] = useState(false);
   const [zoomPct, setZoomPct] = useState(100);
   const others = useOthers();
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -698,12 +699,22 @@ export function TldrawWhiteboardEditor({
           )}
           {/* Export PDF */}
           {canExportPdf && (
-            <a
-              href={`/api/notes/${noteId}/export`}
-              className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
+            <button
+              type="button"
+              disabled={busyHeaderPdf}
+              onClick={async () => {
+                if (!editorRef.current) return;
+                setBusyHeaderPdf(true);
+                try {
+                  await exportWhiteboardPdf(editorRef.current, titleValue || "whiteboard");
+                } finally {
+                  setBusyHeaderPdf(false);
+                }
+              }}
+              className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
             >
-              Export PDF
-            </a>
+              {busyHeaderPdf ? "Exporting…" : "Export PDF"}
+            </button>
           )}
           {/* Share */}
           <button
