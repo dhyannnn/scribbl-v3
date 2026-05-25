@@ -989,7 +989,7 @@ function AttachmentCard({ file }: { file: NonNullable<RealtimeChatMessage["attac
       <a href={href} target="_blank" rel="noopener noreferrer" className="mt-1 block">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={file.publicUrl ?? href}
+          src={href}
           alt={file.name}
           className="max-w-[280px] rounded-2xl"
           style={{ maxHeight: 320, display: "block" }}
