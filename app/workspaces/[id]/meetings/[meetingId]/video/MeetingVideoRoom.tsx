@@ -389,11 +389,15 @@ function ConferenceSurface({
   const [showLocalPreview, setShowLocalPreview] = useState(false);
   const [viewMode, setViewMode] = useState<"gallery" | "spotlight">("gallery");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [pinnedTrackKey, setPinnedTrackKey] = useState<string | null>(null);
   const [showControls, setShowControls] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const onFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      if (!document.fullscreenElement) setPinnedTrackKey(null);
+    };
     document.addEventListener("fullscreenchange", onFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
@@ -420,7 +424,17 @@ function ConferenceSurface({
     () => getDisplayTracks(tracks, speakingParticipants, mode, showLocalPreview, viewMode),
     [mode, showLocalPreview, speakingParticipants, tracks, viewMode],
   );
-  const gridClassName = getVideoGridClassName(displayTracks.length, mode, viewMode);
+  const effectiveDisplayTracks = useMemo(
+    () => {
+      if (pinnedTrackKey && mode === "full") {
+        const pinned = displayTracks.find((t) => getTrackKey(t) === pinnedTrackKey);
+        return pinned ? [pinned] : displayTracks;
+      }
+      return displayTracks;
+    },
+    [displayTracks, mode, pinnedTrackKey],
+  );
+  const gridClassName = getVideoGridClassName(effectiveDisplayTracks.length, mode, viewMode);
 
   useEffect(() => {
     if (!effectivePermissions.canUseMic && localParticipant.isMicrophoneEnabled) {
@@ -462,18 +476,37 @@ function ConferenceSurface({
     >
       {/* Video grid */}
       <div className={gridClassName}>
-        {displayTracks.length > 0 ? (
-          displayTracks.map((trackRef) => (
-            <ParticipantTile
-              key={[
-                trackRef.participant.identity,
-                trackRef.source,
-                trackRef.publication?.trackSid ?? "pending",
-              ].join(":")}
-              trackRef={trackRef}
-              className={tileClassName}
-            />
-          ))
+        {effectiveDisplayTracks.length > 0 ? (
+          effectiveDisplayTracks.map((trackRef) => {
+            const key = getTrackKey(trackRef);
+            const isPinned = pinnedTrackKey === key;
+            return (
+              <div key={key} className="relative group h-full min-h-0 overflow-hidden">
+                <ParticipantTile
+                  trackRef={trackRef}
+                  className={tileClassName}
+                />
+                {mode === "full" && (
+                  <button
+                    type="button"
+                    title={isPinned ? "Unpin" : "Maximize"}
+                    onClick={() => {
+                      if (isPinned) {
+                        setPinnedTrackKey(null);
+                        void document.exitFullscreen();
+                      } else {
+                        setPinnedTrackKey(key);
+                        void containerRef.current?.requestFullscreen();
+                      }
+                    }}
+                    className="absolute top-2 right-2 z-10 rounded-md bg-black/50 p-1 text-white opacity-0 transition group-hover:opacity-100"
+                  >
+                    {isPinned ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                  </button>
+                )}
+              </div>
+            );
+          })
         ) : (
           <div className={emptyClassName}>
             <div>
@@ -870,6 +903,10 @@ function getDisplayTracks(
   const focusedRemoteTracks = [...remoteScreenShares, ...(activeCamera ? [activeCamera] : remoteCameras)];
 
   return [...dedupeTracks(focusedRemoteTracks), ...localTracks].slice(0, showLocalPreview ? 2 : 1);
+}
+
+function getTrackKey(trackRef: TrackReference) {
+  return [trackRef.participant.identity, trackRef.source, trackRef.publication?.trackSid ?? "pending"].join(":");
 }
 
 function dedupeTracks(tracks: TrackReference[]) {
