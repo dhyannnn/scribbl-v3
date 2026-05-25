@@ -85,6 +85,8 @@ type MeetingVideoRoomProps = {
   recordingReturnTo?: "current" | "hub" | "video";
   permissions: MeetingVideoPermissionsProps;
   onAfterLeave?: () => void;
+  raisedHandCount?: number;
+  accessRequestCount?: number;
 };
 
 type TokenResponse = {
@@ -105,6 +107,8 @@ export function MeetingVideoRoom({
   recording,
   recordingReturnTo = "video",
   onAfterLeave,
+  raisedHandCount,
+  accessRequestCount,
 }: MeetingVideoRoomProps) {
   const [connection, setConnection] = useState<TokenResponse | null>(null);
   const [error, setError] = useState("");
@@ -321,6 +325,8 @@ export function MeetingVideoRoom({
         hasJoinedVideo={hasMarkedJoined}
         recordingReturnTo={recordingReturnTo}
         permissions={permissions}
+        raisedHandCount={raisedHandCount}
+        accessRequestCount={accessRequestCount}
       />
       <RoomAudioRenderer />
     </LiveKitRoom>
@@ -376,6 +382,8 @@ function ConferenceSurface({
   recordingReturnTo,
   permissions,
   workspaceId,
+  raisedHandCount,
+  accessRequestCount,
 }: {
   hasJoinedVideo: boolean;
   meetingId: string;
@@ -385,6 +393,8 @@ function ConferenceSurface({
   recordingReturnTo: "current" | "hub" | "video";
   permissions: MeetingVideoPermissionsProps;
   workspaceId: string;
+  raisedHandCount?: number;
+  accessRequestCount?: number;
 }) {
   const [showLocalPreview, setShowLocalPreview] = useState(false);
   const [viewMode, setViewMode] = useState<"gallery" | "spotlight">("gallery");
@@ -474,6 +484,22 @@ function ConferenceSurface({
         : "relative flex h-full min-h-0 flex-col bg-[var(--color-live)]"
       }
     >
+      {/* Raised hand / access request notification */}
+      {((raisedHandCount ?? 0) > 0 || (accessRequestCount ?? 0) > 0) && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 flex gap-2 pointer-events-none">
+          {(raisedHandCount ?? 0) > 0 && (
+            <span className="rounded-full bg-[var(--color-warning-dim)] px-2 py-0.5 text-xs font-semibold text-[var(--color-warning)]">
+              ✋ {raisedHandCount}
+            </span>
+          )}
+          {(accessRequestCount ?? 0) > 0 && (
+            <span className="rounded-full bg-[var(--color-warning-dim)] px-2 py-0.5 text-xs font-semibold text-[var(--color-warning)]">
+              📝 {accessRequestCount}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Video grid */}
       <div className={gridClassName}>
         {effectiveDisplayTracks.length > 0 ? (
