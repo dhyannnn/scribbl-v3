@@ -126,7 +126,9 @@ function CustomExportMenu() {
 
   // Keep the outer header button wired to this handler (which has the live useEditor() instance).
   const handlePdfRef = useRef(handlePdf);
-  handlePdfRef.current = handlePdf;
+  useEffect(() => {
+    handlePdfRef.current = handlePdf;
+  });
   useEffect(() => {
     onRegisterExportPdf?.(() => handlePdfRef.current());
     return () => onRegisterExportPdf?.(null);
