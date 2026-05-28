@@ -151,6 +151,14 @@ export type MobileMessageResponse = {
   message: MobileChatMessage;
 };
 
+export type MobileSendMessageRequest = {
+  body: string;
+};
+
+export type MobileAcceptInviteResponse = {
+  workspace: MobileWorkspace;
+};
+
 export type MobileNotificationsResponse = {
   unattendedCount: number;
   notifications: MobileNotification[];

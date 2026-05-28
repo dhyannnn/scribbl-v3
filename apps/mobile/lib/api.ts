@@ -1,11 +1,14 @@
 import type {
+  MobileAcceptInviteResponse,
   MobileChannelsResponse,
   MobileMeetingsResponse,
   MobileMeResponse,
+  MobileMessageResponse,
   MobileMessagesResponse,
   MobileNotificationsResponse,
   MobileNoteResponse,
   MobileNotesResponse,
+  MobileSendMessageRequest,
   MobileWorkspaceMembersResponse,
   MobileWorkspacesResponse,
 } from "@scribbl/shared";
@@ -50,8 +53,21 @@ export async function getChannelMessages(channelId: string) {
   return apiGet<MobileMessagesResponse>(`/api/mobile/channels/${channelId}/messages`);
 }
 
+export async function sendChannelMessage(channelId: string, body: MobileSendMessageRequest) {
+  return apiRequest<MobileMessageResponse>(`/api/mobile/channels/${channelId}/messages`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export async function getNotifications() {
   return apiGet<MobileNotificationsResponse>("/api/mobile/notifications");
+}
+
+export async function acceptWorkspaceInvite(inviteId: string) {
+  return apiRequest<MobileAcceptInviteResponse>(`/api/mobile/workspace-invites/${inviteId}/accept`, {
+    method: "POST",
+  });
 }
 
 export async function getWorkspaceMeetings(workspaceId: string) {

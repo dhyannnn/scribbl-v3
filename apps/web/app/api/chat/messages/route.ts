@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { after } from "next/server";
+import {
+  chatMessageFullSelect,
+  createChatMessage,
+  createChatMessageNotifications,
+  logChatNotificationFailure,
+} from "@/lib/chat-message-write";
 import { getCurrentUser } from "@/lib/current-user";
 import { logger } from "@/lib/logger";
-import { createWorkspaceNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
-import { RateLimits } from "@/lib/rate-limit";
 
 const maxMessageLength = 2000;
 
@@ -17,88 +21,36 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  if (!RateLimits.chatSend(currentUser.id)) {
-    return NextResponse.json({ error: "Too many messages. Slow down." }, { status: 429 });
-  }
-
   const { workspaceId, channelId, body, replyToId, attachmentFileId } = parseBody(await readJson(request));
 
-  if (!workspaceId || !channelId || !body) {
-    return NextResponse.json({ error: "Message is required." }, { status: 400 });
-  }
-
-  if (body.length > maxMessageLength) {
-    return NextResponse.json({ error: "Message is too long." }, { status: 400 });
-  }
-
-  const channel = await getAccessibleChannel(workspaceId, channelId, currentUser.id);
+  const result = await createChatMessage({
+    user: currentUser,
+    workspaceId,
+    channelId,
+    body,
+    replyToId,
+    attachmentFileId,
+  });
   const accessCheckedAt = performance.now();
 
-  if (!channel) {
-    return NextResponse.json({ error: "You do not have permission to send messages here." }, { status: 403 });
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
   }
 
-  if (channel.type === "ANNOUNCEMENT" && !canPostAnnouncement(channel.workspace.members[0]?.role)) {
-    return NextResponse.json({ error: "Only workspace admins can post announcements." }, { status: 403 });
-  }
-
-  const message = await prisma.message.create({
-    data: {
-      channelId: channel.id,
-      senderUserId: currentUser.id,
-      body,
-      ...(replyToId ? { replyToId } : {}),
-      ...(attachmentFileId ? { attachmentFileId } : {}),
-    },
-    select: messageFullSelect,
-  });
   const messageCreatedAt = performance.now();
   logChatTiming("create", startedAt, userResolvedAt, accessCheckedAt, messageCreatedAt);
 
-  if (channel.type === "ANNOUNCEMENT") {
-    after(() => {
-      void createWorkspaceNotifications({
-        actorUserId: currentUser.id,
-        body,
-        href: `/workspaces/${workspaceId}/chat?channel=${channel.id}`,
-        preference: "announcements",
-        title: `${currentUser.displayName} posted an announcement`,
-        type: "ANNOUNCEMENT_POSTED",
-        workspaceId,
-      }).catch((error) => {
-        logger.error("Announcement notifications could not be created", { workspaceId, channelId }, error);
-      });
+  after(() => {
+    void createChatMessageNotifications(result.notification).catch((error) => {
+      logChatNotificationFailure({
+        workspaceId: result.notification.workspaceId,
+        channelId: result.notification.channelId,
+      }, error);
     });
-  } else {
-    after(() => {
-      void Promise.all([
-        // General chat notification (respects per-user chatMessages preference)
-        createWorkspaceNotifications({
-          actorUserId: currentUser.id,
-          body,
-          href: `/workspaces/${workspaceId}/chat/${channelId}`,
-          preference: "chatMessages",
-          title: `${currentUser.displayName} posted in #${channel.name}`,
-          type: "CHAT_MESSAGE",
-          workspaceId,
-        }),
-        // @mention notifications — always delivered, bypass chatMessages preference
-        createMentionNotifications({
-          body,
-          workspaceId,
-          channelId,
-          channelName: channel.name,
-          actorUserId: currentUser.id,
-          actorDisplayName: currentUser.displayName,
-        }),
-      ]).catch((error) => {
-        logger.error("Chat notifications could not be created", { workspaceId, channelId }, error);
-      });
-    });
-  }
+  });
 
   return NextResponse.json({
-    message: serializeMessage(message, {
+    message: serializeMessage(result.message, {
       displayName: currentUser.displayName,
       avatarUrl: currentUser.avatarUrl,
     }),
@@ -241,78 +193,8 @@ export async function DELETE(request: Request) {
   return NextResponse.json({ message: serializeMessage(deletedMessage, deletedMessage.sender) });
 }
 
-async function getAccessibleChannel(workspaceId: string, channelId: string, userId: string) {
-  return prisma.channel.findFirst({
-    where: {
-      id: channelId,
-      workspaceId,
-      workspace: {
-        members: {
-          some: {
-            userId,
-            status: "ACTIVE",
-          },
-        },
-      },
-    },
-    select: {
-      id: true,
-      name: true,
-      type: true,
-      workspace: {
-        select: {
-          members: {
-            where: {
-              userId,
-              status: "ACTIVE",
-            },
-            select: {
-              role: true,
-            },
-            take: 1,
-          },
-        },
-      },
-    },
-  });
-}
-
-function canPostAnnouncement(role?: string) {
-  return role === "OWNER" || role === "ADMIN";
-}
-
 // Full select used by PATCH / DELETE (combines scalars + relations in one select)
-const messageFullSelect = {
-  id: true, channelId: true, senderUserId: true, body: true,
-  createdAt: true, editedAt: true, deletedAt: true, isPinned: true, replyToId: true,
-  sender: { select: { displayName: true, avatarUrl: true } },
-  replyTo: { select: { id: true, body: true, sender: { select: { displayName: true } } } },
-  reactions: { select: { emoji: true, userId: true } },
-  attachmentFile: { select: { id: true, name: true, mimeType: true, sizeBytes: true, publicUrl: true } },
-} as const;
-
-const messageSelect = {
-  id: true,
-  channelId: true,
-  senderUserId: true,
-  body: true,
-  createdAt: true,
-  editedAt: true,
-  deletedAt: true,
-  isPinned: true,
-  replyToId: true,
-  replyTo: {
-    select: {
-      id: true,
-      body: true,
-      sender: { select: { displayName: true } },
-    },
-  },
-  reactions: { select: { emoji: true, userId: true } },
-  attachmentFile: {
-    select: { id: true, name: true, mimeType: true, sizeBytes: true, publicUrl: true },
-  },
-} as const;
+const messageFullSelect = chatMessageFullSelect;
 
 function serializeMessage(
   message: {
@@ -380,58 +262,4 @@ function parseBody(body: unknown) {
     attachmentFileId: typeof maybeBody.attachmentFileId === "string" ? maybeBody.attachmentFileId : null,
     pin: typeof maybeBody.pin === "boolean" ? maybeBody.pin : null,
   };
-}
-
-
-// ── @mention notifications ────────────────────────────────────────────────────
-
-function extractMentionedNames(body: string): string[] {
-  const re = /@((?:\w+\s?){1,4})/g;
-  const names = new Set<string>();
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(body)) !== null) {
-    names.add(m[1].trim().toLowerCase());
-  }
-  return [...names];
-}
-
-async function createMentionNotifications({
-  body, workspaceId, channelId, channelName, actorUserId, actorDisplayName,
-}: {
-  body: string; workspaceId: string; channelId: string; channelName: string;
-  actorUserId: string; actorDisplayName: string;
-}) {
-  const mentionedNames = extractMentionedNames(body);
-  if (mentionedNames.length === 0) return;
-
-  const members = await prisma.workspaceMember.findMany({
-    where: { workspaceId, status: "ACTIVE", userId: { not: actorUserId } },
-    select: { userId: true, user: { select: { displayName: true, deletedAt: true } } },
-  });
-
-  const mentionedUserIds = members
-    .filter((m) => {
-      if (m.user.deletedAt) return false;
-      const name = m.user.displayName.toLowerCase();
-      return mentionedNames.some((mention) => name.startsWith(mention) || name === mention);
-    })
-    .map((m) => m.userId);
-
-  if (mentionedUserIds.length === 0) return;
-
-  const href = `/workspaces/${workspaceId}/chat/${channelId}`;
-  const preview = body.length > 80 ? body.slice(0, 80) + "…" : body;
-
-  await prisma.notification.createMany({
-    data: mentionedUserIds.map((userId) => ({
-      userId,
-      workspaceId,
-      actorUserId,
-      type: "CHAT_MESSAGE" as const,
-      title: `${actorDisplayName} mentioned you in #${channelName}`,
-      body: preview,
-      href,
-    })),
-    skipDuplicates: true,
-  });
 }

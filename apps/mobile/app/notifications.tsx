@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MobileNotification } from "@scribbl/shared";
 import { formatShortDateTime } from "@scribbl/shared";
 import { CardButton, EmptyState, ErrorState, Header, LoadingState, Screen, colors, fonts, useTheme } from "@/components/ui";
-import { getNotifications, webUrl } from "@/lib/api";
+import { acceptWorkspaceInvite, getNotifications, webUrl } from "@/lib/api";
 
 export default function NotificationsScreen() {
   const { colors: themeColors } = useTheme();
@@ -11,6 +11,7 @@ export default function NotificationsScreen() {
   const [unattendedCount, setUnattendedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [acceptingInviteId, setAcceptingInviteId] = useState("");
   const [error, setError] = useState("");
 
   async function load() {
@@ -31,6 +32,19 @@ export default function NotificationsScreen() {
     void load();
   }, []);
 
+  async function acceptInvite(inviteId: string) {
+    setAcceptingInviteId(inviteId);
+    setError("");
+    try {
+      await acceptWorkspaceInvite(inviteId);
+      await load();
+    } catch (acceptError) {
+      setError(acceptError instanceof Error ? acceptError.message : "Could not accept workspace invite.");
+    } finally {
+      setAcceptingInviteId("");
+    }
+  }
+
   if (loading) {
     return <LoadingState />;
   }
@@ -47,7 +61,10 @@ export default function NotificationsScreen() {
           <EmptyState title="No notifications" body="Workspace invites, chat updates, and session activity will show here." />
         ) : (
           notifications.map((notification) => (
-            <CardButton key={notification.id} onPress={() => Linking.openURL(webUrl(notification.href))}>
+            <CardButton
+              key={notification.id}
+              onPress={notification.kind === "workspace_invite" ? undefined : () => Linking.openURL(webUrl(notification.href))}
+            >
               <View style={local.rowTop}>
                 <Text style={[local.type, { color: notification.kind === "workspace_invite" ? themeColors.success : themeColors.secondary }]}>
                   {notification.kind === "workspace_invite" ? "workspace invite" : formatNotificationType(notification.type)}
@@ -61,6 +78,29 @@ export default function NotificationsScreen() {
                   ? `Expires ${formatShortDateTime(notification.expiresAt)}`
                   : ([notification.workspaceName, notification.actorName].filter(Boolean).join(" · ") || "Scribbl")}
               </Text>
+              {notification.kind === "workspace_invite" ? (
+                <View style={local.inviteActions}>
+                  <Pressable
+                    disabled={acceptingInviteId === notification.id}
+                    onPress={() => acceptInvite(notification.id)}
+                    style={({ pressed }) => [
+                      local.acceptButton,
+                      { backgroundColor: themeColors.secondary },
+                      (pressed || acceptingInviteId === notification.id) && local.acceptButtonPressed,
+                    ]}
+                  >
+                    <Text style={local.acceptButtonText}>
+                      {acceptingInviteId === notification.id ? "Accepting..." : "Accept invite"}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => Linking.openURL(webUrl(notification.href))}
+                    style={({ pressed }) => [local.webButton, { borderColor: themeColors.border }, pressed && local.webButtonPressed]}
+                  >
+                    <Text style={[local.webButtonText, { color: themeColors.text }]}>Open web</Text>
+                  </Pressable>
+                </View>
+              ) : null}
             </CardButton>
           ))
         )}
@@ -116,5 +156,39 @@ const local = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: 12,
     marginTop: 10,
+  },
+  inviteActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14,
+  },
+  acceptButton: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  acceptButtonPressed: {
+    opacity: 0.72,
+  },
+  acceptButtonText: {
+    color: colors.onPrimary,
+    fontFamily: fonts.sansBold,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  webButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  webButtonPressed: {
+    opacity: 0.72,
+  },
+  webButtonText: {
+    color: colors.text,
+    fontFamily: fonts.sansBold,
+    fontSize: 13,
+    fontWeight: "900",
   },
 });
