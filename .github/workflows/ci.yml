@@ -28,6 +28,14 @@ jobs:
       RECORDINGS_S3_BUCKET: scribbl-recordings
       RECORDINGS_S3_ACCESS_KEY: placeholder
       RECORDINGS_S3_SECRET_KEY: placeholder
+      STRIPE_SECRET_KEY: sk_test_placeholder
+      STRIPE_PUBLISHABLE_KEY: pk_test_placeholder
+      STRIPE_WEBHOOK_SECRET: whsec_placeholder
+      STRIPE_PRICE_PRO_BASE_CAD: price_placeholder_pro_base
+      STRIPE_PRICE_INSTITUTION_BASE_CAD: price_placeholder_institution_base
+      STRIPE_PRICE_PRO_MEMBER_OVERAGE_CAD: price_placeholder_pro_overage
+      STRIPE_PRICE_INSTITUTION_MEMBER_OVERAGE_CAD: price_placeholder_institution_overage
+      STRIPE_PRICE_RECORDING_OVERAGE_CAD: price_placeholder_recording_overage
 
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +58,7 @@ jobs:
         run: npm run lint
 
       - name: Type check
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Test
         run: npm test

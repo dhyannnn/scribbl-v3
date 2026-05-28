@@ -6,7 +6,8 @@ A collaborative workspace app for students and educators. Supports real-time not
 
 | Layer | Tool |
 |---|---|
-| Framework | Next.js (App Router, server actions) |
+| Web | Next.js (App Router, server actions) |
+| Mobile | Expo + React Native |
 | Database | PostgreSQL via Prisma |
 | Auth + Storage | Supabase |
 | Real-time collaboration | Liveblocks (notes, whiteboards, chat events) |
@@ -17,36 +18,19 @@ A collaborative workspace app for students and educators. Supports real-time not
 ## Project Structure
 
 ```
-app/
-  page.tsx                          # Landing / dashboard
-  login/                            # Auth (Supabase)
-  auth/                             # OAuth callback
-  invites/[token]/                  # Workspace invite acceptance
-  workspaces/[id]/                  # Workspace home
-    chat/                           # Workspace-level chat channels
-    notes/[noteId]/                 # Text notes + whiteboards (Liveblocks)
-    files/                          # File upload/download
-    members/                        # Member list
-    meetings/
-      [meetingId]/                  # Meeting detail page
-        video/                      # LiveKit video room
+apps/
+  web/
+    app/                            # Next.js routes and API handlers
+    components/                     # Web UI components
+    lib/                            # Web server/client helpers
+    tests/                          # Web unit tests
+  mobile/
+    app/                            # Expo Router screens
+    components/                     # Mobile UI components
+    lib/                            # Supabase session + mobile API client
 
-components/
-  RealtimeChatPanel.tsx             # Reusable real-time chat (Liveblocks broadcast events + DB persistence)
-  TextNoteEditor.tsx                # Rich text note editor
-  WhiteboardEditor.tsx              # Whiteboard editor
-  LiveblocksRoom.tsx                # Liveblocks room wrapper
-  PresenceBar.tsx                   # Shows who's online in a room
-
-lib/
-  prisma.ts                         # Prisma client
-  current-user.ts                   # Get authenticated user from Supabase session
-  meeting-lifecycle.ts              # Meeting state machine (upcoming, live, ended, cancelled)
-  liveblocks-room.ts                # Liveblocks server auth helper
-  livekit-room.ts                   # LiveKit token generation
-  supabase/                         # Supabase client, server, admin, proxy
-  email/                            # Resend email templates (invites, meeting notifications)
-  pdf/                              # Note PDF export
+packages/
+  shared/                           # Shared DTOs and runtime-safe helpers
 
 prisma/
   schema.prisma                     # Full DB schema
@@ -84,13 +68,15 @@ prisma/
 - LiveKit video rooms embedded in meeting pages
 - Meeting artifacts (attach notes/files to meetings)
 - Chat channels per workspace and per meeting
+- Expo mobile app for read-heavy core flows: login, workspaces/sessions, notes, chat, meetings
+- Mobile bearer-token API under `apps/web/app/api/mobile`
 - **Real-time chat using Liveblocks broadcast events + Postgres persistence** ← currently in progress
 
 ## Real-Time Chat Architecture
 
-Chat is implemented in `components/RealtimeChatPanel.tsx`:
+Chat is implemented in `apps/web/components/RealtimeChatPanel.tsx`:
 
-- Messages are **persisted to Postgres** via server actions in `app/api/chat/messages/route.ts`
+- Messages are **persisted to Postgres** via server actions in `apps/web/app/api/chat/messages/route.ts`
 - **Real-time delivery** uses Liveblocks broadcast events (`useBroadcastEvent` / `useEventListener`) so all users in the same Liveblocks room see new/edited/deleted messages instantly without polling
 - Each channel is tied to a Liveblocks room (workspace room or meeting room)
 - Optimistic UI: messages appear immediately for the sender while the server action runs
@@ -98,7 +84,7 @@ Chat is implemented in `components/RealtimeChatPanel.tsx`:
 
 ## Current Focus
 
-Real-time chat is the active development area. The `RealtimeChatPanel` component is reused for both workspace chat (`app/workspaces/[id]/chat/`) and meeting chat (`app/workspaces/[id]/meetings/[meetingId]/`).
+Mobile is now scaffolded as a companion app. The first native surface is read-heavy and opens the web app for rich note editing, whiteboards, video, and recording-heavy meeting flows.
 
 ## Setup
 
@@ -122,14 +108,26 @@ Real-time chat is the active development area. The `RealtimeChatPanel` component
    ```
 5. Run the dev server:
    ```bash
-   npm run dev
+   npm run dev:web
    ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
+6. Run the mobile app:
+   ```bash
+   npm run start:mobile
+   ```
+
+The Expo app reads Supabase and API settings from the root `.env` through `apps/mobile/app.config.js`. Override with `EXPO_PUBLIC_API_BASE_URL`, `EXPO_PUBLIC_SUPABASE_URL`, or `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` when testing on a physical device.
+
 ## Useful Commands
 
 ```bash
+npm run dev:web                                    # Next.js web app
+npm run start:mobile                              # Expo mobile app
+npm run typecheck                                 # web + mobile type checks
+npm run lint                                      # web + mobile lint
+npm test                                          # web unit tests
 npx prisma migrate dev --name describe_your_change   # create + apply a new migration
 npx prisma studio                                    # visual DB browser
 npx prisma format                                    # format schema.prisma
