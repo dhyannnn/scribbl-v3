@@ -12,6 +12,53 @@ import { prisma } from "@/lib/prisma";
 
 const maxMessageLength = 2000;
 
+export async function GET(request: Request) {
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const workspaceId = searchParams.get("workspaceId") ?? "";
+  const channelId = searchParams.get("channelId") ?? "";
+
+  if (!workspaceId || !channelId) {
+    return NextResponse.json({ error: "workspaceId and channelId are required." }, { status: 400 });
+  }
+
+  const channel = await prisma.channel.findFirst({
+    where: {
+      id: channelId,
+      workspaceId,
+      workspace: {
+        members: { some: { userId: currentUser.id, status: "ACTIVE" } },
+      },
+      OR: [
+        { type: { not: "DIRECT" } },
+        { dmUser1Id: currentUser.id },
+        { dmUser2Id: currentUser.id },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (!channel) {
+    return NextResponse.json({ error: "Access denied." }, { status: 403 });
+  }
+
+  const messages = await prisma.message.findMany({
+    where: { channelId, deletedAt: null },
+    select: chatMessageFullSelect,
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+
+  return NextResponse.json({
+    messages: messages.reverse().map((message) => serializeMessage(message, message.sender)),
+  });
+}
+
 export async function POST(request: Request) {
   const startedAt = performance.now();
   const currentUser = await getCurrentUser();

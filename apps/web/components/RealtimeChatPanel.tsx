@@ -16,6 +16,7 @@ import { useBroadcastEvent, useEventListener, useMyPresence, useOthers } from "@
 import { Check, Edit2, ExternalLink, Hash, Paperclip, Pin, PinOff, Reply, Search, SendHorizontal, Smile, Trash2, X } from "lucide-react";
 import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { LiveblocksRoom } from "@/components/LiveblocksRoom";
+import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 hljs.registerLanguage("javascript", javascript);
 hljs.registerLanguage("typescript", typescript);
@@ -163,6 +164,7 @@ function RealtimeChatPanelContent({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const pendingCounterRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const channelId = channel?.id ?? "";
 
   const typingUsers = useMemo(
     () => others
@@ -189,6 +191,39 @@ function RealtimeChatPanelContent({
       if (el) el.scrollTop = el.scrollHeight;
     }
   }, [messages, searchQuery]);
+
+  const loadMessages = useCallback(async () => {
+    if (!channelId) return;
+    const fetched = await readMessages(workspaceId, channelId);
+    if (fetched) {
+      setMessages(fetched);
+    }
+  }, [channelId, workspaceId]);
+
+  useEffect(() => {
+    if (!channelId) return;
+
+    const supabase = createSupabaseBrowserClient();
+    const subscription = supabase
+      .channel(`web-channel-messages:${channelId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "Message",
+          filter: `channelId=eq.${channelId}`,
+        },
+        () => {
+          void loadMessages();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(subscription);
+    };
+  }, [channelId, loadMessages]);
 
   // Close emoji picker on outside click
   useEffect(() => {
@@ -1054,6 +1089,16 @@ async function writeMessage(method: "POST" | "PATCH" | "DELETE", body: object) {
     const payload = await res.json();
     if (!res.ok || !payload?.message) return null;
     return payload.message as RealtimeChatMessage;
+  } catch { return null; }
+}
+
+async function readMessages(workspaceId: string, channelId: string) {
+  try {
+    const params = new URLSearchParams({ workspaceId, channelId });
+    const res = await fetch(`/api/chat/messages?${params.toString()}`);
+    const payload = await res.json();
+    if (!res.ok || !Array.isArray(payload?.messages)) return null;
+    return payload.messages as RealtimeChatMessage[];
   } catch { return null; }
 }
 
