@@ -126,6 +126,7 @@ type VideoChannelMessage =
   | { type: "popout-ready" }
   | { type: "popout-closed" }
   | { type: "bring-back" }
+  | { type: "navigate-hub-to"; href: string }
   | { type: "focus-hub"; hash: string }
   | { type: "permissions-updated" };
 
@@ -211,9 +212,34 @@ export function VideoPopoutShell({
 
     return () => {
       window.removeEventListener("beforeunload", announceClosed);
+      // Also fires on SPA unmount (sidebar navigation) — beforeunload only covers actual tab close
+      channel.postMessage({ type: "popout-closed" } satisfies VideoChannelMessage);
       channel.close();
     };
   }, [channelName, closeToHub, meetingId, router]);
+
+  // Intercept SPA navigation in the popout tab before the component unmounts.
+  // pushState fires synchronously inside Next.js Router before any re-render,
+  // so this is reliable even when the target component would unmount immediately.
+  const videoPath = `/workspaces/${workspaceId}/meetings/${meetingId}/video`;
+  useEffect(() => {
+    if (!window.opener) return;
+    const originalPushState = window.history.pushState.bind(window.history);
+    window.history.pushState = function (state, title, url) {
+      if (url && String(url) !== videoPath) {
+        const ch = new BroadcastChannel(channelName);
+        ch.postMessage({ type: "navigate-hub-to", href: String(url) } satisfies VideoChannelMessage);
+        ch.close();
+        window.opener?.focus();
+        window.setTimeout(() => window.close(), 50);
+        return;
+      }
+      return originalPushState(state, title, url);
+    };
+    return () => {
+      window.history.pushState = originalPushState;
+    };
+  }, [channelName, videoPath]);
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
@@ -285,6 +311,8 @@ export function VideoPopoutShell({
                   canRecord={canRecord}
                   permissions={permissions}
                   onAfterLeave={() => closeToHub()}
+                  raisedHandCount={participants.filter((p) => p.handRaised).length}
+                  accessRequestCount={accessRequests.length}
                 />
               </div>
             </div>

@@ -60,8 +60,19 @@ type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 const SHAPE_UTILS = [PageBackgroundShapeUtil];
 
+type ExportCtxValue = {
+  title: string;
+  canExportPdf: boolean;
+  canUploadAssets: boolean;
+  onRegisterExportPdf: ((fn: (() => Promise<void>) | null) => void) | null;
+};
 // Context that passes per-session flags into the tldraw component tree.
-const ExportCtx = createContext({ title: "", canExportPdf: true, canUploadAssets: true });
+const ExportCtx = createContext<ExportCtxValue>({
+  title: "",
+  canExportPdf: true,
+  canUploadAssets: true,
+  onRegisterExportPdf: null,
+});
 
 // ── Custom main menu / export submenu — all formats export ALL pages, JSON is removed
 
@@ -80,7 +91,7 @@ function CustomMainMenu(props: TLUiMainMenuProps) {
 function CustomExportMenu() {
   const editor = useEditor();
   const exportAs = useExportAs();
-  const { title, canExportPdf } = useContext(ExportCtx);
+  const { title, canExportPdf, onRegisterExportPdf } = useContext(ExportCtx);
   const [busySvg, setBusySvg] = useState(false);
   const [busyPng, setBusyPng] = useState(false);
   const [busyPdf, setBusyPdf] = useState(false);
@@ -112,6 +123,14 @@ function CustomExportMenu() {
       setBusyPdf(false);
     }
   }
+
+  // Keep the outer header button wired to this handler (which has the live useEditor() instance).
+  const handlePdfRef = useRef(handlePdf);
+  handlePdfRef.current = handlePdf;
+  useEffect(() => {
+    onRegisterExportPdf?.(() => handlePdfRef.current());
+    return () => onRegisterExportPdf?.(null);
+  }, [onRegisterExportPdf]);
 
   return (
     <TldrawUiMenuSubmenu id="export-all-as" label="context-menu.export-all-as" size="small">
@@ -431,6 +450,7 @@ export function TldrawWhiteboardEditor({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [isPending, startTransition] = useTransition();
   const [linkCopied, setLinkCopied] = useState(false);
+  const [busyHeaderPdf, setBusyHeaderPdf] = useState(false);
   const [zoomPct, setZoomPct] = useState(100);
   const others = useOthers();
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -444,6 +464,10 @@ export function TldrawWhiteboardEditor({
   const canEditRef = useRef(canEdit);
   const canUploadAssetsRef = useRef(canUploadAssets);
   const queueAutosaveRef = useRef<() => void>(() => {});
+  const exportPdfFnRef = useRef<(() => Promise<void>) | null>(null);
+  const registerExportPdf = useCallback((fn: (() => Promise<void>) | null) => {
+    exportPdfFnRef.current = fn;
+  }, []);
 
   useEffect(() => {
     titleValueRef.current = titleValue;
@@ -626,7 +650,7 @@ export function TldrawWhiteboardEditor({
   }
 
   const canvas = (
-    <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets }}>
+    <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets, onRegisterExportPdf: registerExportPdf }}>
       <TldrawCanvas
         key={`${noteId}:${variant}`}
         store={storeWithStatus}
@@ -698,12 +722,25 @@ export function TldrawWhiteboardEditor({
           )}
           {/* Export PDF */}
           {canExportPdf && (
-            <a
-              href={`/api/notes/${noteId}/export`}
-              className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
+            <button
+              type="button"
+              disabled={busyHeaderPdf}
+              onClick={async () => {
+                const fn = exportPdfFnRef.current;
+                const ed = editorRef.current;
+                if (!fn && !ed) return;
+                setBusyHeaderPdf(true);
+                try {
+                  if (fn) await fn();
+                  else await exportWhiteboardPdf(ed!, titleValue || "whiteboard");
+                } finally {
+                  setBusyHeaderPdf(false);
+                }
+              }}
+              className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
             >
-              Export PDF
-            </a>
+              {busyHeaderPdf ? "Exporting…" : "Export PDF"}
+            </button>
           )}
           {/* Share */}
           <button

@@ -475,7 +475,7 @@ export default async function Home({
                           <ActivityIcon icon={item.icon} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm text-[var(--color-text)]">{item.label}</p>
+                          <p className="line-clamp-2 break-words text-sm text-[var(--color-text)]">{item.label}</p>
                           <p className="mt-0.5 font-mono text-xs text-[var(--color-subtle)]">
                             {formatRelativeTime(item.createdAt, now)}
                           </p>

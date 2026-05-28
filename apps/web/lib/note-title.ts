@@ -12,11 +12,13 @@ export function createDefaultNoteTitle({
   type,
   collaborative = false,
   date = new Date(),
+  timeZone,
 }: {
   scope: "PRIVATE" | "WORKSPACE_SHARED";
   type: "TEXT" | "WHITEBOARD";
   collaborative?: boolean;
   date?: Date;
+  timeZone?: string;
 }) {
   const scopeLabel =
     scope === "PRIVATE" ? "Private" : collaborative ? "Collaborative" : "Shared";
@@ -26,6 +28,7 @@ export function createDefaultNoteTitle({
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    ...(timeZone ? { timeZone } : {}),
   });
 
   return `${scopeLabel} ${typeLabel} - ${timestamp}`;

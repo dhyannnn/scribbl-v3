@@ -36,9 +36,10 @@ import {
 } from "@/lib/meeting-permissions";
 import { CancelMeetingForm } from "../CancelMeetingForm";
 import { updateMeetingDetails } from "../actions";
-import { formatDateTimeLocalInZone } from "@/lib/timezone";
+import { LocalDatetimeInput } from "@/components/LocalDateTimeInput";
 import { MeetingChatPanel } from "./MeetingChatPanel";
-import { FloatingMeetingVideo } from "./video/FloatingMeetingVideo";
+import { ActiveMeetingBridge } from "./ActiveMeetingBridge";
+import { VideoRejoinBanner } from "./VideoRejoinBanner";
 import {
   attachFileToMeeting,
   attachNoteToMeeting,
@@ -616,7 +617,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
         {canManageSchedule ? (
           <section className="grid gap-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
             <h2 className="font-display text-lg font-semibold text-[var(--color-text)]">Meeting Settings</h2>
-            <form action={updateMeetingDetails} className="grid gap-4 lg:grid-cols-[1fr_220px_160px_auto]">
+            <form action={updateMeetingDetails} className="grid gap-4 lg:grid-cols-[1fr_250px_160px_auto]">
               <input type="hidden" name="workspaceId" value={id} />
               <input type="hidden" name="meetingId" value={meeting.id} />
               <TimezoneInput />
@@ -631,12 +632,11 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               </label>
               <label className="grid gap-1.5">
                 <span className="text-xs font-medium text-[var(--color-muted)]">Starts</span>
-                <input
+                <LocalDatetimeInput
                   name="startsAt"
-                  type="datetime-local"
+                  utcIso={meeting.startsAt.toISOString()}
                   required
-                  defaultValue={formatDateTimeLocalInZone(meeting.startsAt, currentUser.timezone)}
-                  className="min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)]"
+                  className="w-full min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)]"
                 />
               </label>
               <label className="grid gap-1.5">
@@ -644,7 +644,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 <select
                   name="durationMinutes"
                   defaultValue={String(getDurationMinutes(meeting.startsAt, meeting.endsAt))}
-                  className="min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)]"
+                  className="w-full min-h-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 text-sm outline-none transition focus:border-[var(--color-secondary)]"
                 >
                   <option value="30">30 min</option>
                   <option value="60">1 hour</option>
@@ -700,9 +700,9 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
         ) : null}
 
         {currentParticipant && isSessionOpen ? (
-          <FloatingMeetingVideo
-            workspaceId={id}
+          <ActiveMeetingBridge
             meetingId={meeting.id}
+            workspaceId={id}
             videoHref={`/workspaces/${id}/meetings/${meeting.id}/video`}
             canRecord={meeting.workspace?.plan !== "FREE"}
             recording={{
@@ -711,10 +711,11 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               latestRecording,
             }}
             permissions={{ ...videoPermissions, handRaised: currentParticipantHandRaised }}
-          raisedHandCount={raisedHandParticipants.length}
-          pendingRequestCount={pendingRequests.length}
+            raisedHandCount={raisedHandParticipants.length}
+            pendingRequestCount={pendingRequests.length}
           />
         ) : null}
+        <VideoRejoinBanner />
 
         {latestRecording && !isCanceled ? (
           <RecordingStatusPanel

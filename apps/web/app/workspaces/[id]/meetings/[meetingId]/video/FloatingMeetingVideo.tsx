@@ -11,7 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { MeetingVideoRoom } from "./MeetingVideoRoom";
+import { MeetingVideoRoom, hasRecentActiveVideoSession } from "./MeetingVideoRoom";
 import type { MeetingVideoPermissionsProps, MeetingVideoRecordingProps } from "./VideoPopoutShell";
 
 type FloatingMeetingVideoProps = {
@@ -24,6 +24,8 @@ type FloatingMeetingVideoProps = {
   permissions: MeetingVideoPermissionsProps;
   raisedHandCount?: number;
   pendingRequestCount?: number;
+  onAfterLeave?: () => void;
+  onDismiss?: () => void;
 };
 
 type PanelState = {
@@ -59,6 +61,7 @@ type VideoChannelMessage =
   | { type: "popout-ready" }
   | { type: "popout-closed" }
   | { type: "bring-back" }
+  | { type: "navigate-hub-to"; href: string }
   | { type: "focus-hub"; hash: string }
   | { type: "permissions-updated" };
 
@@ -88,9 +91,12 @@ export function FloatingMeetingVideo({
   permissions,
   raisedHandCount = 0,
   pendingRequestCount = 0,
+  onAfterLeave,
+  onDismiss,
 }: FloatingMeetingVideoProps) {
   const router = useRouter();
   const [panel, setPanel] = useState(getServerSafeDefaultPanel);
+  const [autoJoin, setAutoJoin] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [videoSurface, setVideoSurface] = useState<VideoSurfaceState>("hub");
   const [hasHydrated, setHasHydrated] = useState(false);
@@ -98,6 +104,7 @@ export function FloatingMeetingVideo({
   const hasLoadedStoredPanelRef = useRef(false);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const popoutRef = useRef<Window | null>(null);
+  const isInPopoutRef = useRef(false);
   const interactionRef = useRef<InteractionState | null>(null);
   const splitResizeRef = useRef<SplitResizeState | null>(null);
   const frameRef = useRef<number | null>(null);
@@ -135,16 +142,29 @@ export function FloatingMeetingVideo({
 
     channel.onmessage = (event: MessageEvent<VideoChannelMessage>) => {
       if (event.data.type === "popout-opened" || event.data.type === "popout-ready") {
+        isInPopoutRef.current = true;
         setVideoSurface("popout");
       }
 
       if (event.data.type === "popout-closed") {
-        setVideoSurface("popout-closed");
+        // Only auto-rejoin if we're still in popout mode — ignore if bring-back already handled it
+        if (isInPopoutRef.current) {
+          isInPopoutRef.current = false;
+          setAutoJoin(hasRecentActiveVideoSession(meetingId));
+          setVideoSurface("hub");
+          setIsMinimized(false);
+        }
       }
 
       if (event.data.type === "bring-back") {
+        isInPopoutRef.current = false;
+        setAutoJoin(hasRecentActiveVideoSession(meetingId));
         setVideoSurface("hub");
         setIsMinimized(false);
+      }
+
+      if (event.data.type === "navigate-hub-to") {
+        router.push(event.data.href);
       }
 
       if (event.data.type === "focus-hub") {
@@ -182,13 +202,15 @@ export function FloatingMeetingVideo({
     const interval = window.setInterval(() => {
       if (popoutRef.current?.closed) {
         popoutRef.current = null;
-        setVideoSurface("popout-closed");
-        channelRef.current?.postMessage({ type: "popout-closed" } satisfies VideoChannelMessage);
+        isInPopoutRef.current = false;
+        setAutoJoin(hasRecentActiveVideoSession(meetingId));
+        setVideoSurface("hub");
+        setIsMinimized(false);
       }
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [videoSurface]);
+  }, [videoSurface, meetingId]);
 
   // Activates/deactivates the split class and cleans up on exit
   useEffect(() => {
@@ -306,6 +328,7 @@ export function FloatingMeetingVideo({
     const fullVideo = window.open(videoHref, "_blank");
     if (fullVideo) {
       popoutRef.current = fullVideo;
+      isInPopoutRef.current = true;
       setVideoSurface("popout");
       channelRef.current?.postMessage({ type: "popout-opened" } satisfies VideoChannelMessage);
     }
@@ -319,6 +342,8 @@ export function FloatingMeetingVideo({
 
   function bringBackVideo() {
     channelRef.current?.postMessage({ type: "bring-back" } satisfies VideoChannelMessage);
+    isInPopoutRef.current = false;
+    setAutoJoin(hasRecentActiveVideoSession(meetingId));
     setVideoSurface("hub");
     setIsMinimized(false);
   }
@@ -542,6 +567,17 @@ export function FloatingMeetingVideo({
               {isMinimized ? "Show" : "Hide"}
             </button>
           ) : null}
+          {onDismiss ? (
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={onDismiss}
+              className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
+              title="Leave and dismiss"
+            >
+              ✕
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -559,6 +595,11 @@ export function FloatingMeetingVideo({
             canRecord={canRecord}
             recordingReturnTo="current"
             permissions={permissions}
+            autoJoin={autoJoin}
+            onAfterLeave={() => {
+              setAutoJoin(false);
+              onAfterLeave?.();
+            }}
           />
         </div>
       ) : (
