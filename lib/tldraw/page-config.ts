@@ -6,6 +6,10 @@ export type PageTemplate =
   | "lined"
   | "dotted"
   | "grid"
+  | "blank-dark"
+  | "lined-dark"
+  | "dotted-dark"
+  | "grid-dark"
   | "cover-blue"
   | "cover-green"
   | "cover-rose"
@@ -16,6 +20,10 @@ export const TEMPLATE_LABELS: Record<PageTemplate, string> = {
   lined: "Lined",
   dotted: "Dotted",
   grid: "Grid",
+  "blank-dark": "Blank",
+  "lined-dark": "Lined",
+  "dotted-dark": "Dotted",
+  "grid-dark": "Grid",
   "cover-blue": "Blue",
   "cover-green": "Green",
   "cover-rose": "Rose",
@@ -36,8 +44,16 @@ export const COVER_TEMPLATES: PageTemplate[] = [
   "cover-dark",
 ];
 
+export const LIGHT_TEMPLATES: PageTemplate[] = ["blank", "lined", "dotted", "grid"];
+
+export const DARK_TEMPLATES: PageTemplate[] = ["blank-dark", "lined-dark", "dotted-dark", "grid-dark"];
+
 export function isCoverTemplate(t: string): boolean {
   return COVER_TEMPLATES.includes(t as PageTemplate);
+}
+
+export function isDarkTemplate(t: string): boolean {
+  return DARK_TEMPLATES.includes(t as PageTemplate);
 }
 
 export function getPageBackgroundShapeId(pageId: string) {

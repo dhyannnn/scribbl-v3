@@ -4,31 +4,39 @@ import "tldraw/tldraw.css";
 import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
+  ArrowheadStylePickerSet,
   ArrowToolbarItem,
   DefaultMainMenu,
+  DefaultStylePanel,
   DefaultToolbarContent,
   DrawToolbarItem,
   EditSubmenu,
   EraserToolbarItem,
   ExtrasGroup,
+  GeoStylePickerSet,
   HandToolbarItem,
   HighlightToolbarItem,
   LaserToolbarItem,
   MobileStylePanel,
   NoteToolbarItem,
+  OpacitySlider,
   OverflowingToolbar,
   PORTRAIT_BREAKPOINT,
   PreferencesGroup,
   SelectToolbarItem,
+  SplineStylePickerSet,
+  TextStylePickerSet,
   TextToolbarItem,
   TldrawUiMenuGroup,
   TldrawUiMenuItem,
   TldrawUiMenuSubmenu,
+  TldrawUiButtonPicker,
   ViewSubmenu,
   useBreakpoint,
   useEditor,
   useExportAs,
   useReadonly,
+  useRelevantStyles,
   useTldrawUiComponents,
   useValue,
   type Editor,
@@ -36,7 +44,25 @@ import {
   type TLPageId,
   type TLShapeId,
   type TLUiMainMenuProps,
+  type TLUiStylePanelProps,
 } from "tldraw";
+import {
+  ArrowShapeArrowheadEndStyle,
+  ArrowShapeArrowheadStartStyle,
+  DefaultColorStyle,
+  DefaultDashStyle,
+  DefaultFillStyle,
+  DefaultFontStyle,
+  DefaultSizeStyle,
+  GeoShapeGeoStyle,
+  LineShapeSplineStyle,
+  getDefaultColorTheme,
+  type TLDefaultColorStyle,
+  type TLDefaultSizeStyle,
+  type TLDefaultDashStyle,
+  type TLDefaultFillStyle,
+} from "@tldraw/tlschema";
+import { useIsDarkMode } from "@tldraw/editor";
 import { getYjsProviderForRoom } from "@liveblocks/yjs";
 import { useOthers, useRoom } from "@liveblocks/react/suspense";
 import { VisibilityDropdown } from "@/components/VisibilityDropdown";
@@ -45,6 +71,8 @@ import { noteTitleMaxLength } from "@/lib/note-title";
 import { useTldrawYjsStore } from "@/components/tldraw-yjs-store";
 import {
   COVER_TEMPLATES,
+  DARK_TEMPLATES,
+  LIGHT_TEMPLATES,
   getPageBackgroundShapeId,
   PAGE_H,
   PAGE_W,
@@ -72,6 +100,24 @@ const ExportCtx = createContext<ExportCtxValue>({
   canExportPdf: true,
   canUploadAssets: true,
   onRegisterExportPdf: null,
+});
+
+type PenSlot = { color: TLDefaultColorStyle; size: TLDefaultSizeStyle };
+
+const DEFAULT_PEN_SLOTS: [PenSlot, PenSlot, PenSlot] = [
+  { color: "black", size: "m" },
+  { color: "blue", size: "s" },
+  { color: "red", size: "l" },
+];
+
+type PenSlotCtxValue = {
+  penSlots: [PenSlot, PenSlot, PenSlot];
+  setSlot: (idx: number, slot: PenSlot) => void;
+};
+
+const PenSlotCtx = createContext<PenSlotCtxValue>({
+  penSlots: DEFAULT_PEN_SLOTS,
+  setSlot: () => {},
 });
 
 // ── Custom main menu / export submenu — all formats export ALL pages, JSON is removed
@@ -167,6 +213,7 @@ const TLDRAW_COMPONENTS = {
   InFrontOfTheCanvas: TemplatePicker,
   MainMenu: CustomMainMenu,
   MenuPanel: ScribblMenuPanel,
+  StylePanel: ScribblStylePanel,
   Toolbar: ScribblToolbar,
 } satisfies TLComponents;
 
@@ -205,25 +252,42 @@ function ScribblToolbar() {
   const breakpoint = useBreakpoint();
   const isReadonlyMode = useReadonly();
   const { canUploadAssets } = useContext(ExportCtx);
+  const { penSlots, setSlot } = useContext(PenSlotCtx);
+  const editor = useEditor();
+  const [activeSlotIdx, setActiveSlotIdx] = useState<number | null>(null);
+  const currentToolId = useValue("scribbl-current-tool", () => editor.getCurrentToolId(), [editor]);
 
   return (
     <div className="tlui-toolbar">
       <div className="tlui-toolbar__inner">
         <div className="tlui-toolbar__left">
+          {!isReadonlyMode && (
+            <div style={{ display: "flex", gap: 2, padding: "0 4px", alignItems: "center" }}>
+              {penSlots.map((slot, idx) => (
+                <PenSlotButton
+                  key={idx}
+                  slot={slot}
+                  isActive={currentToolId === "draw" && activeSlotIdx === idx}
+                  onActivate={() => setActiveSlotIdx(idx)}
+                  onUpdateSlot={(updated: PenSlot) => setSlot(idx, updated)}
+                />
+              ))}
+            </div>
+          )}
           <OverflowingToolbar>
             {canUploadAssets ? (
               <DefaultToolbarContent />
             ) : (
               <>
+                <DrawToolbarItem />
                 <SelectToolbarItem />
                 <HandToolbarItem />
-                <DrawToolbarItem />
-                <HighlightToolbarItem />
                 <EraserToolbarItem />
-                <LaserToolbarItem />
                 <ArrowToolbarItem />
                 <TextToolbarItem />
                 <NoteToolbarItem />
+                <HighlightToolbarItem />
+                <LaserToolbarItem />
                 {/* AssetToolbarItem intentionally omitted — image uploads gated to Pro */}
               </>
             )}
@@ -235,6 +299,133 @@ function ScribblToolbar() {
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+// ── Pen slot buttons ──────────────────────────────────────────────────────────
+
+function PenSlotButton({
+  slot,
+  isActive,
+  onActivate,
+  onUpdateSlot,
+}: {
+  slot: PenSlot;
+  isActive: boolean;
+  onActivate: () => void;
+  onUpdateSlot: (slot: PenSlot) => void;
+}) {
+  const editor = useEditor();
+  const isDarkMode = useIsDarkMode();
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const theme = getDefaultColorTheme({ isDarkMode });
+  const hexColor = (theme as unknown as Record<string, { solid: string }>)[slot.color]?.solid ?? "#000";
+
+  function activate() {
+    editor.setCurrentTool("draw");
+    editor.setStyleForNextShapes(DefaultColorStyle, slot.color);
+    editor.setStyleForNextShapes(DefaultSizeStyle, slot.size);
+    onActivate();
+  }
+
+  return (
+    <div style={{ position: "relative" }} onPointerDown={(e) => e.stopPropagation()}>
+      {popoverOpen && (
+        <>
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 590 }}
+            onPointerDown={() => setPopoverOpen(false)}
+          />
+          <div
+            style={{
+              position: "absolute",
+              bottom: "calc(100% + 8px)",
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 600,
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 8,
+              padding: 8,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+              width: 184,
+            }}
+          >
+            <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-subtle)", margin: "0 0 6px" }}>Color</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 3, marginBottom: 10 }}>
+              {(["black", "grey", "red", "light-red", "orange", "yellow", "green", "light-green", "blue", "light-blue", "violet", "light-violet"] as TLDefaultColorStyle[]).map((c) => {
+                const hex = (getDefaultColorTheme({ isDarkMode }) as unknown as Record<string, { solid: string }>)[c]?.solid ?? "#000";
+                return (
+                  <button
+                    key={c}
+                    onClick={() => onUpdateSlot({ ...slot, color: c })}
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: "50%",
+                      background: hex,
+                      border: "none",
+                      outline: slot.color === c ? "2px solid var(--color-secondary)" : "2px solid transparent",
+                      outlineOffset: 1,
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-subtle)", margin: "0 0 6px" }}>Size</p>
+            <div style={{ display: "flex", gap: 3 }}>
+              {SIZE_ORDER.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => onUpdateSlot({ ...slot, size: s })}
+                  style={{
+                    flex: 1,
+                    height: 28,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 4,
+                    background: slot.size === s ? "var(--color-surface-highest)" : "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                >
+                  <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+                    <line x1={4} y1={8} x2={24} y2={8} stroke={hexColor} strokeWidth={SIZE_STROKE_WEIGHTS[s]} strokeLinecap="round" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+      <button
+        title="Double-tap to edit"
+        onClick={activate}
+        onDoubleClick={(e) => { e.preventDefault(); setPopoverOpen((v) => !v); }}
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 6,
+          border: "none",
+          outline: isActive ? "2px solid var(--color-secondary)" : "none",
+          outlineOffset: 1,
+          background: "transparent",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+        }}
+      >
+        <svg width={20} height={20} viewBox="0 0 20 20" fill="none" style={{ display: "block" }}>
+          <line x1={4} y1={15} x2={16} y2={5} stroke={hexColor} strokeWidth={SIZE_STROKE_WEIGHTS[slot.size] + 0.5} strokeLinecap="round" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -266,25 +457,24 @@ function TemplatePicker() {
     setOpen(false);
   }
 
-  const regularTemplates: PageTemplate[] = ["blank", "lined", "dotted", "grid"];
-
   return (
     <div
       style={{ position: "absolute", bottom: 56, left: 8, zIndex: 500 }}
       onPointerDown={(e) => e.stopPropagation()}
     >
       {open && (
-        <div className="mb-1 overflow-hidden rounded-lg border border-[#d8d8ce] bg-white shadow-lg">
-          <div className="border-b border-[#d8d8ce] px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#777970]">
-              Template
+        <div className="mb-1 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg">
+          {/* Light section */}
+          <div className="border-b border-[var(--color-border)] px-3 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">
+              Light
             </p>
             <div className="mt-2 grid grid-cols-4 gap-1">
-              {regularTemplates.map((t) => (
+              {LIGHT_TEMPLATES.map((t) => (
                 <button
                   key={t}
                   onClick={() => apply(t)}
-                  className={`flex flex-col items-center gap-1 rounded-md p-2 text-xs transition hover:bg-[#f0f0eb] ${current === t ? "bg-[#eef5ef] font-semibold text-[#2f604b]" : "text-[#4d4f47]"}`}
+                  className={`flex flex-col items-center gap-1 rounded-md p-2 text-xs transition hover:bg-[var(--color-surface-mid)] ${current === t ? "bg-[var(--color-secondary-dim)] font-semibold text-[var(--color-secondary)]" : "text-[var(--color-muted)]"}`}
                 >
                   <TemplateIcon template={t} />
                   {TEMPLATE_LABELS[t]}
@@ -292,8 +482,27 @@ function TemplatePicker() {
               ))}
             </div>
           </div>
+          {/* Dark section */}
+          <div className="border-b border-[var(--color-border)] px-3 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">
+              Dark
+            </p>
+            <div className="mt-2 grid grid-cols-4 gap-1">
+              {DARK_TEMPLATES.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => apply(t)}
+                  className={`flex flex-col items-center gap-1 rounded-md p-2 text-xs transition hover:bg-[var(--color-surface-mid)] ${current === t ? "bg-[var(--color-secondary-dim)] font-semibold text-[var(--color-secondary)]" : "text-[var(--color-muted)]"}`}
+                >
+                  <TemplateIcon template={t} />
+                  {TEMPLATE_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Cover section */}
           <div className="px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#777970]">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">
               Cover
             </p>
             <div className="mt-2 flex gap-1">
@@ -302,8 +511,8 @@ function TemplatePicker() {
                   key={t}
                   onClick={() => apply(t)}
                   title={TEMPLATE_LABELS[t]}
-                  className={`h-8 w-8 rounded-md transition hover:scale-110 ${current === t ? "ring-2 ring-[#2f604b] ring-offset-1" : ""}`}
-                  style={{ background: COVER_BG[t] }}
+                  className={`h-8 w-8 rounded-md transition hover:scale-110 ${current === t ? "ring-2 ring-[var(--color-secondary)] ring-offset-1" : ""}`}
+                  style={{ background: COVER_COLORS_MAP[t] }}
                 />
               ))}
             </div>
@@ -312,7 +521,7 @@ function TemplatePicker() {
       )}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-md border border-[#d8d8ce] bg-white px-2.5 py-1.5 text-xs font-medium text-[#4d4f47] shadow-sm transition hover:bg-[#f7f7f2]"
+        className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:bg-[var(--color-surface-mid)]"
       >
         <TemplateIcon template={current} size={14} />
         {TEMPLATE_LABELS[current]}
@@ -321,7 +530,7 @@ function TemplatePicker() {
   );
 }
 
-const COVER_BG: Record<string, string> = {
+const COVER_COLORS_MAP: Record<string, string> = {
   "cover-blue": "#1e40af",
   "cover-green": "#166534",
   "cover-rose": "#9f1239",
@@ -330,53 +539,305 @@ const COVER_BG: Record<string, string> = {
 
 function TemplateIcon({ template, size = 16 }: { template: PageTemplate; size?: number }) {
   const s = size;
-  const cover = COVER_TEMPLATES.includes(template);
-  if (cover) {
+
+  if (COVER_TEMPLATES.includes(template)) {
     return (
       <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-        <rect width={16} height={10} rx={1} fill={COVER_BG[template] ?? "#1e40af"} />
+        <rect width={16} height={10} rx={1} fill={COVER_COLORS_MAP[template] ?? "#1e40af"} />
       </svg>
     );
   }
-  if (template === "lined") {
+
+  const dark = DARK_TEMPLATES.includes(template);
+  const bg = dark ? "#1a1a1a" : "white";
+  const border = dark ? "rgba(255,255,255,0.25)" : "#d1d5db";
+  const lineStroke = dark ? "rgba(255,255,255,0.18)" : "#cbd5e1";
+  const dotFill = dark ? "rgba(255,255,255,0.3)" : "#94a3b8";
+  const baseName = dark ? template.replace("-dark", "") : template;
+
+  if (baseName === "lined") {
     return (
       <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-        <rect width={16} height={10} rx={1} fill="white" stroke="#d1d5db" strokeWidth={0.5} />
+        <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
         {[2.5, 5, 7.5].map((y) => (
-          <line key={y} x1={2} y1={y} x2={14} y2={y} stroke="#cbd5e1" strokeWidth={0.8} />
+          <line key={y} x1={2} y1={y} x2={14} y2={y} stroke={lineStroke} strokeWidth={0.8} />
         ))}
       </svg>
     );
   }
-  if (template === "dotted") {
+  if (baseName === "dotted") {
     return (
       <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-        <rect width={16} height={10} rx={1} fill="white" stroke="#d1d5db" strokeWidth={0.5} />
+        <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
         {[3, 7, 11].flatMap((x) =>
           [2.5, 5, 7.5].map((y) => (
-            <circle key={`${x}-${y}`} cx={x} cy={y} r={0.7} fill="#94a3b8" />
+            <circle key={`${x}-${y}`} cx={x} cy={y} r={0.7} fill={dotFill} />
           )),
         )}
       </svg>
     );
   }
-  if (template === "grid") {
+  if (baseName === "grid") {
     return (
       <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-        <rect width={16} height={10} rx={1} fill="white" stroke="#d1d5db" strokeWidth={0.5} />
+        <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
         {[4, 8, 12].map((x) => (
-          <line key={`v${x}`} x1={x} y1={0} x2={x} y2={10} stroke="#cbd5e1" strokeWidth={0.5} />
+          <line key={`v${x}`} x1={x} y1={0} x2={x} y2={10} stroke={lineStroke} strokeWidth={0.5} />
         ))}
         {[2.5, 5, 7.5].map((y) => (
-          <line key={`h${y}`} x1={0} y1={y} x2={16} y2={y} stroke="#cbd5e1" strokeWidth={0.5} />
+          <line key={`h${y}`} x1={0} y1={y} x2={16} y2={y} stroke={lineStroke} strokeWidth={0.5} />
         ))}
       </svg>
     );
   }
-  // blank
+  // blank (light or dark)
   return (
     <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-      <rect width={16} height={10} rx={1} fill="white" stroke="#d1d5db" strokeWidth={0.5} />
+      <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
+    </svg>
+  );
+}
+
+// ── Custom style panel (P4 + P6) ─────────────────────────────────────────────
+
+const COLOR_ITEMS: ReadonlyArray<{ readonly value: TLDefaultColorStyle; readonly icon: string }> = [
+  { value: "black", icon: "color" },
+  { value: "grey", icon: "color" },
+  { value: "light-violet", icon: "color" },
+  { value: "violet", icon: "color" },
+  { value: "blue", icon: "color" },
+  { value: "light-blue", icon: "color" },
+  { value: "yellow", icon: "color" },
+  { value: "orange", icon: "color" },
+  { value: "green", icon: "color" },
+  { value: "light-green", icon: "color" },
+  { value: "light-red", icon: "color" },
+  { value: "red", icon: "color" },
+];
+
+const FILL_ITEMS: ReadonlyArray<{ readonly value: TLDefaultFillStyle; readonly icon: string }> = [
+  { value: "none", icon: "fill-none" },
+  { value: "semi", icon: "fill-semi" },
+  { value: "solid", icon: "fill-solid" },
+  { value: "pattern", icon: "fill-pattern" },
+];
+
+const SIZE_STROKE_WEIGHTS: Record<TLDefaultSizeStyle, number> = { s: 1.5, m: 3, l: 5.5, xl: 9 };
+const SIZE_ORDER: TLDefaultSizeStyle[] = ["s", "m", "l", "xl"];
+const DASH_ORDER: TLDefaultDashStyle[] = ["draw", "solid", "dashed", "dotted"];
+
+function ScribblStylePanel(props: TLUiStylePanelProps) {
+  return (
+    <DefaultStylePanel {...props}>
+      <ScribblStylePanelContent />
+    </DefaultStylePanel>
+  );
+}
+
+function ScribblStylePanelContent() {
+  const editor = useEditor();
+  const isDarkMode = useIsDarkMode();
+  const styles = useRelevantStyles();
+
+  const handleStyleChange = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (style: any, value: any) => {
+      editor.run(() => {
+        if (editor.isIn("select")) {
+          editor.setStyleForSelectedShapes(style, value);
+        }
+        editor.setStyleForNextShapes(style, value);
+        editor.updateInstanceState({ isChangingStyle: true });
+      });
+    },
+    [editor],
+  );
+
+  if (!styles) return null;
+
+  const theme = getDefaultColorTheme({ isDarkMode });
+  const color = styles.get(DefaultColorStyle);
+  const fill = styles.get(DefaultFillStyle);
+  const dash = styles.get(DefaultDashStyle);
+  const size = styles.get(DefaultSizeStyle);
+  const geo = styles.get(GeoShapeGeoStyle);
+  const arrowheadEnd = styles.get(ArrowShapeArrowheadEndStyle);
+  const arrowheadStart = styles.get(ArrowShapeArrowheadStartStyle);
+  const spline = styles.get(LineShapeSplineStyle);
+  const font = styles.get(DefaultFontStyle);
+
+  const showPickers = fill !== undefined || dash !== undefined || size !== undefined;
+  const showGeoSection = geo !== undefined || arrowheadEnd !== undefined || arrowheadStart !== undefined || spline !== undefined;
+
+  return (
+    <>
+      <div tabIndex={-1} className="tlui-style-panel__section__common" aria-label="style panel styles" data-testid="style.panel">
+        {color !== undefined && (
+          <TldrawUiButtonPicker
+            title="Color"
+            uiType="color"
+            style={DefaultColorStyle}
+            items={COLOR_ITEMS}
+            value={color}
+            onValueChange={handleStyleChange}
+            theme={theme}
+          />
+        )}
+        <OpacitySlider />
+      </div>
+      {showPickers && (
+        <div className="tlui-style-panel__section" aria-label="style panel styles">
+          {fill !== undefined && (
+            <TldrawUiButtonPicker
+              title="Fill"
+              uiType="fill"
+              style={DefaultFillStyle}
+              items={FILL_ITEMS}
+              value={fill}
+              onValueChange={handleStyleChange}
+              theme={theme}
+            />
+          )}
+          {dash !== undefined && (
+            <ScribblDashRow
+              value={dash.type === "shared" ? dash.value : undefined}
+              onChange={(v) => handleStyleChange(DefaultDashStyle, v)}
+            />
+          )}
+          {size !== undefined && (
+            <ScribblSizeRow
+              value={size.type === "shared" ? size.value : undefined}
+              onChange={(v) => handleStyleChange(DefaultSizeStyle, v)}
+            />
+          )}
+        </div>
+      )}
+      {font !== undefined && (
+        <TextStylePickerSet theme={theme} styles={styles} />
+      )}
+      {showGeoSection && (
+        <div className="tlui-style-panel__section" aria-label="style panel styles">
+          <GeoStylePickerSet styles={styles} />
+          <ArrowheadStylePickerSet styles={styles} />
+          <SplineStylePickerSet styles={styles} />
+        </div>
+      )}
+    </>
+  );
+}
+
+function ScribblSizeRow({
+  value,
+  onChange,
+}: {
+  value: TLDefaultSizeStyle | undefined;
+  onChange: (v: TLDefaultSizeStyle) => void;
+}) {
+  return (
+    <div className="tlui-style-panel__row" style={{ gap: 2, padding: "2px 0" }}>
+      {SIZE_ORDER.map((s) => {
+        const active = value === s;
+        return (
+          <button
+            key={s}
+            title={s.toUpperCase()}
+            onClick={() => onChange(s)}
+            style={{
+              flex: 1,
+              height: 28,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 4,
+              background: active ? "var(--color-surface-highest)" : "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+              <line
+                x1={4} y1={8} x2={24} y2={8}
+                stroke="currentColor"
+                strokeWidth={SIZE_STROKE_WEIGHTS[s]}
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ScribblDashRow({
+  value,
+  onChange,
+}: {
+  value: TLDefaultDashStyle | undefined;
+  onChange: (v: TLDefaultDashStyle) => void;
+}) {
+  return (
+    <div className="tlui-style-panel__row" style={{ gap: 2, padding: "2px 0" }}>
+      {DASH_ORDER.map((d) => {
+        const active = value === d;
+        return (
+          <button
+            key={d}
+            title={d}
+            onClick={() => onChange(d)}
+            style={{
+              flex: 1,
+              height: 28,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 4,
+              background: active ? "var(--color-surface-highest)" : "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            <DashIcon type={d} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DashIcon({ type }: { type: TLDefaultDashStyle }) {
+  if (type === "draw") {
+    return (
+      <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+        <path
+          d="M4,8 C7,5 9,11 12,8 C15,5 17,11 20,8 C22,6 24,8 24,8"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+  if (type === "solid") {
+    return (
+      <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+        <line x1={4} y1={8} x2={24} y2={8} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "dashed") {
+    return (
+      <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+        <line x1={4} y1={8} x2={24} y2={8} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeDasharray="6 3" />
+      </svg>
+    );
+  }
+  return (
+    <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+      <line x1={4} y1={8} x2={24} y2={8} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeDasharray="2 4" />
     </svg>
   );
 }
@@ -420,6 +881,29 @@ export function TldrawWhiteboardEditor({
     initialSnapshot,
   });
   const [titleValue, setTitleValue] = useState(title);
+
+  const [penSlots, setPenSlots] = useState<[PenSlot, PenSlot, PenSlot]>(() => {
+    if (typeof window === "undefined") return DEFAULT_PEN_SLOTS;
+    try {
+      const stored = localStorage.getItem(`scribbl:pen-slots:${noteId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length === 3) return parsed as [PenSlot, PenSlot, PenSlot];
+      }
+    } catch {}
+    return DEFAULT_PEN_SLOTS;
+  });
+
+  const setSlot = useCallback((idx: number, updated: PenSlot) => {
+    setPenSlots((prev) => {
+      const next: [PenSlot, PenSlot, PenSlot] = [prev[0], prev[1], prev[2]];
+      next[idx] = updated;
+      try {
+        localStorage.setItem(`scribbl:pen-slots:${noteId}`, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, [noteId]);
 
   const yMeta = useMemo(
     () => getYjsProviderForRoom(room).getYDoc().getMap<string>("note-meta"),
@@ -603,6 +1087,8 @@ export function TldrawWhiteboardEditor({
 
       if (!canEditRef.current) {
         editor.updateInstanceState({ isReadonly: true });
+      } else {
+        editor.setCurrentTool("draw");
       }
 
       // Block image/file uploads for plans that don't support asset uploads.
@@ -651,13 +1137,15 @@ export function TldrawWhiteboardEditor({
 
   const canvas = (
     <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets, onRegisterExportPdf: registerExportPdf }}>
-      <TldrawCanvas
-        key={`${noteId}:${variant}`}
-        store={storeWithStatus}
-        shapeUtils={SHAPE_UTILS}
-        onMount={handleMount}
-        components={TLDRAW_COMPONENTS}
-      />
+      <PenSlotCtx.Provider value={{ penSlots, setSlot }}>
+        <TldrawCanvas
+          key={`${noteId}:${variant}`}
+          store={storeWithStatus}
+          shapeUtils={SHAPE_UTILS}
+          onMount={handleMount}
+          components={TLDRAW_COMPONENTS}
+        />
+      </PenSlotCtx.Provider>
     </ExportCtx.Provider>
   );
 
