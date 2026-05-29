@@ -102,6 +102,24 @@ const ExportCtx = createContext<ExportCtxValue>({
   onRegisterExportPdf: null,
 });
 
+type PenSlot = { color: TLDefaultColorStyle; size: TLDefaultSizeStyle };
+
+const DEFAULT_PEN_SLOTS: [PenSlot, PenSlot, PenSlot] = [
+  { color: "black", size: "m" },
+  { color: "blue", size: "s" },
+  { color: "red", size: "l" },
+];
+
+type PenSlotCtxValue = {
+  penSlots: [PenSlot, PenSlot, PenSlot];
+  setSlot: (idx: number, slot: PenSlot) => void;
+};
+
+const PenSlotCtx = createContext<PenSlotCtxValue>({
+  penSlots: DEFAULT_PEN_SLOTS,
+  setSlot: () => {},
+});
+
 // ── Custom main menu / export submenu — all formats export ALL pages, JSON is removed
 
 function CustomMainMenu(props: TLUiMainMenuProps) {
@@ -234,11 +252,28 @@ function ScribblToolbar() {
   const breakpoint = useBreakpoint();
   const isReadonlyMode = useReadonly();
   const { canUploadAssets } = useContext(ExportCtx);
+  const { penSlots, setSlot } = useContext(PenSlotCtx);
+  const editor = useEditor();
+  const [activeSlotIdx, setActiveSlotIdx] = useState<number | null>(null);
+  const currentToolId = useValue("scribbl-current-tool", () => editor.getCurrentToolId(), [editor]);
 
   return (
     <div className="tlui-toolbar">
       <div className="tlui-toolbar__inner">
         <div className="tlui-toolbar__left">
+          {!isReadonlyMode && (
+            <div style={{ display: "flex", gap: 2, padding: "0 4px", alignItems: "center" }}>
+              {penSlots.map((slot, idx) => (
+                <PenSlotButton
+                  key={idx}
+                  slot={slot}
+                  isActive={currentToolId === "draw" && activeSlotIdx === idx}
+                  onActivate={() => setActiveSlotIdx(idx)}
+                  onUpdateSlot={(updated: PenSlot) => setSlot(idx, updated)}
+                />
+              ))}
+            </div>
+          )}
           <OverflowingToolbar>
             {canUploadAssets ? (
               <DefaultToolbarContent />
@@ -264,6 +299,133 @@ function ScribblToolbar() {
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+// ── Pen slot buttons ──────────────────────────────────────────────────────────
+
+function PenSlotButton({
+  slot,
+  isActive,
+  onActivate,
+  onUpdateSlot,
+}: {
+  slot: PenSlot;
+  isActive: boolean;
+  onActivate: () => void;
+  onUpdateSlot: (slot: PenSlot) => void;
+}) {
+  const editor = useEditor();
+  const isDarkMode = useIsDarkMode();
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const theme = getDefaultColorTheme({ isDarkMode });
+  const hexColor = (theme as unknown as Record<string, { solid: string }>)[slot.color]?.solid ?? "#000";
+
+  function activate() {
+    editor.setCurrentTool("draw");
+    editor.setStyleForNextShapes(DefaultColorStyle, slot.color);
+    editor.setStyleForNextShapes(DefaultSizeStyle, slot.size);
+    onActivate();
+  }
+
+  return (
+    <div style={{ position: "relative" }} onPointerDown={(e) => e.stopPropagation()}>
+      {popoverOpen && (
+        <>
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 590 }}
+            onPointerDown={() => setPopoverOpen(false)}
+          />
+          <div
+            style={{
+              position: "absolute",
+              bottom: "calc(100% + 8px)",
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 600,
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 8,
+              padding: 8,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+              width: 184,
+            }}
+          >
+            <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-subtle)", margin: "0 0 6px" }}>Color</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 3, marginBottom: 10 }}>
+              {(["black", "grey", "red", "light-red", "orange", "yellow", "green", "light-green", "blue", "light-blue", "violet", "light-violet"] as TLDefaultColorStyle[]).map((c) => {
+                const hex = (getDefaultColorTheme({ isDarkMode }) as unknown as Record<string, { solid: string }>)[c]?.solid ?? "#000";
+                return (
+                  <button
+                    key={c}
+                    onClick={() => onUpdateSlot({ ...slot, color: c })}
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: "50%",
+                      background: hex,
+                      border: "none",
+                      outline: slot.color === c ? "2px solid var(--color-secondary)" : "2px solid transparent",
+                      outlineOffset: 1,
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-subtle)", margin: "0 0 6px" }}>Size</p>
+            <div style={{ display: "flex", gap: 3 }}>
+              {SIZE_ORDER.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => onUpdateSlot({ ...slot, size: s })}
+                  style={{
+                    flex: 1,
+                    height: 28,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 4,
+                    background: slot.size === s ? "var(--color-surface-highest)" : "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                >
+                  <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+                    <line x1={4} y1={8} x2={24} y2={8} stroke={hexColor} strokeWidth={SIZE_STROKE_WEIGHTS[s]} strokeLinecap="round" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+      <button
+        title="Double-tap to edit"
+        onClick={activate}
+        onDoubleClick={(e) => { e.preventDefault(); setPopoverOpen((v) => !v); }}
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 6,
+          border: "none",
+          outline: isActive ? "2px solid var(--color-secondary)" : "none",
+          outlineOffset: 1,
+          background: "transparent",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+        }}
+      >
+        <svg width={20} height={20} viewBox="0 0 20 20" fill="none" style={{ display: "block" }}>
+          <line x1={4} y1={15} x2={16} y2={5} stroke={hexColor} strokeWidth={SIZE_STROKE_WEIGHTS[slot.size] + 0.5} strokeLinecap="round" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -720,6 +882,29 @@ export function TldrawWhiteboardEditor({
   });
   const [titleValue, setTitleValue] = useState(title);
 
+  const [penSlots, setPenSlots] = useState<[PenSlot, PenSlot, PenSlot]>(() => {
+    if (typeof window === "undefined") return DEFAULT_PEN_SLOTS;
+    try {
+      const stored = localStorage.getItem(`scribbl:pen-slots:${noteId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length === 3) return parsed as [PenSlot, PenSlot, PenSlot];
+      }
+    } catch {}
+    return DEFAULT_PEN_SLOTS;
+  });
+
+  const setSlot = useCallback((idx: number, updated: PenSlot) => {
+    setPenSlots((prev) => {
+      const next: [PenSlot, PenSlot, PenSlot] = [prev[0], prev[1], prev[2]];
+      next[idx] = updated;
+      try {
+        localStorage.setItem(`scribbl:pen-slots:${noteId}`, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, [noteId]);
+
   const yMeta = useMemo(
     () => getYjsProviderForRoom(room).getYDoc().getMap<string>("note-meta"),
     [room],
@@ -952,13 +1137,15 @@ export function TldrawWhiteboardEditor({
 
   const canvas = (
     <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets, onRegisterExportPdf: registerExportPdf }}>
-      <TldrawCanvas
-        key={`${noteId}:${variant}`}
-        store={storeWithStatus}
-        shapeUtils={SHAPE_UTILS}
-        onMount={handleMount}
-        components={TLDRAW_COMPONENTS}
-      />
+      <PenSlotCtx.Provider value={{ penSlots, setSlot }}>
+        <TldrawCanvas
+          key={`${noteId}:${variant}`}
+          store={storeWithStatus}
+          shapeUtils={SHAPE_UTILS}
+          onMount={handleMount}
+          components={TLDRAW_COMPONENTS}
+        />
+      </PenSlotCtx.Provider>
     </ExportCtx.Provider>
   );
 
