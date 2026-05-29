@@ -4,35 +4,14 @@ import "tldraw/tldraw.css";
 import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
-  ArrowheadStylePickerSet,
-  ArrowToolbarItem,
   DefaultMainMenu,
-  DefaultStylePanel,
-  DefaultToolbarContent,
-  DrawToolbarItem,
   EditSubmenu,
-  EraserToolbarItem,
   ExtrasGroup,
-  GeoStylePickerSet,
-  HandToolbarItem,
-  HighlightToolbarItem,
-  LaserToolbarItem,
-  MobileStylePanel,
-  NoteToolbarItem,
-  OpacitySlider,
-  OverflowingToolbar,
-  PORTRAIT_BREAKPOINT,
   PreferencesGroup,
-  SelectToolbarItem,
-  SplineStylePickerSet,
-  TextStylePickerSet,
-  TextToolbarItem,
   TldrawUiMenuGroup,
   TldrawUiMenuItem,
   TldrawUiMenuSubmenu,
-  TldrawUiButtonPicker,
   ViewSubmenu,
-  useBreakpoint,
   useEditor,
   useExportAs,
   useReadonly,
@@ -44,18 +23,13 @@ import {
   type TLPageId,
   type TLShapeId,
   type TLUiMainMenuProps,
-  type TLUiStylePanelProps,
 } from "tldraw";
 import {
-  ArrowShapeArrowheadEndStyle,
-  ArrowShapeArrowheadStartStyle,
   DefaultColorStyle,
   DefaultDashStyle,
   DefaultFillStyle,
-  DefaultFontStyle,
   DefaultSizeStyle,
   GeoShapeGeoStyle,
-  LineShapeSplineStyle,
   getDefaultColorTheme,
   type TLDefaultColorStyle,
   type TLDefaultSizeStyle,
@@ -94,7 +68,6 @@ type ExportCtxValue = {
   canUploadAssets: boolean;
   onRegisterExportPdf: ((fn: (() => Promise<void>) | null) => void) | null;
 };
-// Context that passes per-session flags into the tldraw component tree.
 const ExportCtx = createContext<ExportCtxValue>({
   title: "",
   canExportPdf: true,
@@ -120,7 +93,7 @@ const PenSlotCtx = createContext<PenSlotCtxValue>({
   setSlot: () => {},
 });
 
-// ── Custom main menu / export submenu — all formats export ALL pages, JSON is removed
+// ── Custom main menu ──────────────────────────────────────────────────────────
 
 function CustomMainMenu(props: TLUiMainMenuProps) {
   return (
@@ -152,7 +125,6 @@ function CustomExportMenu() {
         const ids = [...editor.getCurrentPageShapeIds()];
         const name = pages.length > 1 ? `${title || "whiteboard"} - Page ${i + 1}` : (title || "whiteboard");
         exportAs(ids, format, name);
-        // Brief pause between downloads so the browser doesn't block them
         if (i < pages.length - 1) await new Promise((r) => setTimeout(r, 350));
       }
     } finally {
@@ -170,7 +142,6 @@ function CustomExportMenu() {
     }
   }
 
-  // Keep the outer header button wired to this handler (which has the live useEditor() instance).
   const handlePdfRef = useRef(handlePdf);
   handlePdfRef.current = handlePdf;
   useEffect(() => {
@@ -213,7 +184,7 @@ const TLDRAW_COMPONENTS = {
   InFrontOfTheCanvas: TemplatePicker,
   MainMenu: CustomMainMenu,
   MenuPanel: ScribblMenuPanel,
-  StylePanel: ScribblStylePanel,
+  StylePanel: null,
   Toolbar: ScribblToolbar,
 } satisfies TLComponents;
 
@@ -227,12 +198,11 @@ const TldrawCanvas = dynamic(async () => (await import("tldraw")).Tldraw, {
 });
 
 function ScribblMenuPanel() {
-  const breakpoint = useBreakpoint();
   const { MainMenu, QuickActions, ActionsMenu, PageMenu } = useTldrawUiComponents();
   const editor = useEditor();
   const isSinglePageMode = useValue("scribbl-is-single-page-mode", () => editor.options.maxPages <= 1, [editor]);
 
-  if (!MainMenu && !PageMenu && !QuickActions && !ActionsMenu && breakpoint < 6) {
+  if (!MainMenu && !PageMenu && !QuickActions && !ActionsMenu) {
     return null;
   }
 
@@ -248,64 +218,277 @@ function ScribblMenuPanel() {
   );
 }
 
-function ScribblToolbar() {
-  const breakpoint = useBreakpoint();
-  const isReadonlyMode = useReadonly();
-  const { canUploadAssets } = useContext(ExportCtx);
-  const { penSlots, setSlot } = useContext(PenSlotCtx);
-  const editor = useEditor();
-  const [activeSlotIdx, setActiveSlotIdx] = useState<number | null>(null);
-  const currentToolId = useValue("scribbl-current-tool", () => editor.getCurrentToolId(), [editor]);
+// ── Unified pill toolbar ──────────────────────────────────────────────────────
 
+const COLOR_VALUES: TLDefaultColorStyle[] = [
+  "black", "grey", "red", "light-red", "orange", "yellow",
+  "green", "light-green", "blue", "light-blue", "violet", "light-violet",
+];
+
+const SIZE_DOT_DIAMETERS: Record<TLDefaultSizeStyle, number> = { s: 5, m: 8, l: 12, xl: 17 };
+const SIZE_ORDER: TLDefaultSizeStyle[] = ["s", "m", "l", "xl"];
+const DASH_ORDER: TLDefaultDashStyle[] = ["draw", "solid", "dashed", "dotted"];
+
+function SizeDot({ size, active }: { size: TLDefaultSizeStyle; active: boolean }) {
+  const d = SIZE_DOT_DIAMETERS[size];
   return (
-    <div className="tlui-toolbar">
-      <div className="tlui-toolbar__inner">
-        <div className="tlui-toolbar__left">
-          {!isReadonlyMode && (
-            <div style={{ display: "flex", gap: 2, padding: "0 4px", alignItems: "center" }}>
-              {penSlots.map((slot, idx) => (
-                <PenSlotButton
-                  key={idx}
-                  slot={slot}
-                  isActive={currentToolId === "draw" && activeSlotIdx === idx}
-                  onActivate={() => setActiveSlotIdx(idx)}
-                  onUpdateSlot={(updated: PenSlot) => setSlot(idx, updated)}
-                />
-              ))}
-            </div>
-          )}
-          <OverflowingToolbar>
-            {canUploadAssets ? (
-              <DefaultToolbarContent />
-            ) : (
-              <>
-                <DrawToolbarItem />
-                <SelectToolbarItem />
-                <HandToolbarItem />
-                <EraserToolbarItem />
-                <ArrowToolbarItem />
-                <TextToolbarItem />
-                <NoteToolbarItem />
-                <HighlightToolbarItem />
-                <LaserToolbarItem />
-                {/* AssetToolbarItem intentionally omitted — image uploads gated to Pro */}
-              </>
-            )}
-          </OverflowingToolbar>
-        </div>
-        {breakpoint < PORTRAIT_BREAKPOINT.TABLET_SM && !isReadonlyMode ? (
-          <div className="tlui-toolbar__tools">
-            <MobileStylePanel />
-          </div>
-        ) : null}
-      </div>
+    <span
+      style={{
+        display: "block",
+        width: d,
+        height: d,
+        borderRadius: "50%",
+        background: active ? "var(--color-secondary)" : "currentColor",
+        opacity: active ? 1 : 0.55,
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
+function DashIcon({ type }: { type: TLDefaultDashStyle }) {
+  if (type === "draw") {
+    return (
+      <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+        <path d="M4,8 C7,5 9,11 12,8 C15,5 17,11 20,8 C22,6 24,8 24,8" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "solid") {
+    return (
+      <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+        <line x1={4} y1={8} x2={24} y2={8} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "dashed") {
+    return (
+      <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+        <line x1={4} y1={8} x2={24} y2={8} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeDasharray="6 3" />
+      </svg>
+    );
+  }
+  return (
+    <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+      <line x1={4} y1={8} x2={24} y2={8} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeDasharray="2 4" />
+    </svg>
+  );
+}
+
+// Tool icon SVGs (18×18 viewBox)
+function ToolIcon({ tool }: { tool: string }) {
+  const props = { width: 18, height: 18, viewBox: "0 0 18 18", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, style: { display: "block" as const } };
+  if (tool === "draw") return (
+    <svg {...props}>
+      <path d="M2,14 C5,8 8,18 11,12 C14,6 15,14 18,10" />
+    </svg>
+  );
+  if (tool === "select") return (
+    <svg {...props} stroke="none">
+      <path d="M3,3 L3,15 L7,11 L10,17 L12,16 L9,10 L14,10 Z" fill="currentColor" />
+    </svg>
+  );
+  if (tool === "hand") return (
+    <svg {...props}>
+      <path d="M9,16 L9,7 M6,16 L6,8 M12,16 L12,7 M15,14 L15,9 C15,7.3 13,7 13,9 M3,14 C3,10 6,10 6,8" />
+    </svg>
+  );
+  if (tool === "eraser") return (
+    <svg {...props}>
+      <path d="M4,14 L10,4 L16,8 L10,18" />
+      <line x1={2} y1={16} x2={16} y2={16} />
+    </svg>
+  );
+  if (tool === "arrow") return (
+    <svg {...props}>
+      <line x1={4} y1={14} x2={14} y2={6} />
+      <path d="M9,6 L14,6 L14,11" />
+    </svg>
+  );
+  if (tool === "text") return (
+    <svg {...props}>
+      <line x1={4} y1={6} x2={14} y2={6} />
+      <line x1={9} y1={6} x2={9} y2={16} />
+      <line x1={6} y1={16} x2={12} y2={16} />
+    </svg>
+  );
+  if (tool === "note") return (
+    <svg {...props}>
+      <path d="M3,3 h12 v10 l-4,4 H3 Z" />
+      <path d="M11,15 v-4 h4" />
+    </svg>
+  );
+  if (tool === "geo") return (
+    <svg {...props}>
+      <path d="M9,3 L15,9 L9,15 L3,9 Z" />
+    </svg>
+  );
+  if (tool === "highlight") return (
+    <svg {...props}>
+      <path d="M5,16 L5,8 L9,4 L13,8 L13,16 Z" />
+      <line x1={5} y1={14} x2={13} y2={14} strokeWidth={2.5} />
+    </svg>
+  );
+  if (tool === "laser") return (
+    <svg {...props}>
+      <line x1={3} y1={15} x2={11} y2={7} />
+      <line x1={13} y1={5} x2={15} y2={3} />
+      <path d="M9,3 L15,9" />
+    </svg>
+  );
+  if (tool === "overflow") return (
+    <svg {...props} stroke="none">
+      <circle cx={4} cy={9} r={1.2} fill="currentColor" />
+      <circle cx={9} cy={9} r={1.2} fill="currentColor" />
+      <circle cx={14} cy={9} r={1.2} fill="currentColor" />
+    </svg>
+  );
+  return null;
+}
+
+const PILL_STYLE: React.CSSProperties = {
+  position: "fixed",
+  bottom: 16,
+  left: "50%",
+  transform: "translateX(-50%)",
+  zIndex: 500,
+  background: "var(--color-surface)",
+  border: "1px solid var(--color-border)",
+  borderRadius: 999,
+  boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+  padding: "6px 10px",
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+};
+
+const DIVIDER: React.CSSProperties = {
+  width: 1,
+  height: 20,
+  background: "var(--color-border)",
+  margin: "0 4px",
+  flexShrink: 0,
+};
+
+function TBButton({
+  active,
+  onClick,
+  title,
+  children,
+}: {
+  active?: boolean;
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: 6,
+        border: "none",
+        background: active ? "var(--color-surface-highest)" : "transparent",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 0,
+        color: "var(--color-text)",
+        flexShrink: 0,
+      }}
+      onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "var(--color-surface-mid)"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = active ? "var(--color-surface-highest)" : "transparent"; }}
+    >
+      {children}
+    </button>
+  );
+}
+
+const GEO_OPTIONS = [
+  "rectangle", "ellipse", "triangle", "diamond",
+  "star", "hexagon", "pentagon", "rhombus",
+  "oval", "cross", "arrow-right", "arrow-left",
+  "arrow-up", "arrow-down", "x-box", "check-box",
+] as const;
+type GeoOption = typeof GEO_OPTIONS[number];
+
+function GeoPreview({ geo }: { geo: GeoOption }) {
+  const s = { display: "block" as const };
+  if (geo === "rectangle") return <svg width={18} height={14} viewBox="0 0 18 14" fill="none" stroke="currentColor" strokeWidth={1.4} style={s}><rect x={1} y={1} width={16} height={12} rx={1} /></svg>;
+  if (geo === "ellipse") return <svg width={18} height={14} viewBox="0 0 18 14" fill="none" stroke="currentColor" strokeWidth={1.4} style={s}><ellipse cx={9} cy={7} rx={8} ry={6} /></svg>;
+  if (geo === "triangle") return <svg width={18} height={14} viewBox="0 0 18 14" fill="none" stroke="currentColor" strokeWidth={1.4} style={s}><path d="M9,1 L17,13 L1,13 Z" /></svg>;
+  if (geo === "diamond") return <svg width={18} height={14} viewBox="0 0 18 14" fill="none" stroke="currentColor" strokeWidth={1.4} style={s}><path d="M9,1 L17,7 L9,13 L1,7 Z" /></svg>;
+  if (geo === "star") return <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.4} style={s}><path d="M9,2 L10.8,7 L16,7 L11.6,10.2 L13.4,15.2 L9,12 L4.6,15.2 L6.4,10.2 L2,7 L7.2,7 Z" /></svg>;
+  if (geo === "hexagon") return <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.4} style={s}><path d="M9,1 L16,5 L16,13 L9,17 L2,13 L2,5 Z" /></svg>;
+  if (geo === "pentagon") return <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.4} style={s}><path d="M9,1 L17,7 L14,16 L4,16 L1,7 Z" /></svg>;
+  if (geo === "rhombus") return <svg width={18} height={14} viewBox="0 0 18 14" fill="none" stroke="currentColor" strokeWidth={1.4} style={s}><path d="M4,7 L9,1 L14,7 L9,13 Z" /></svg>;
+  if (geo === "oval") return <svg width={20} height={12} viewBox="0 0 20 12" fill="none" stroke="currentColor" strokeWidth={1.4} style={s}><rect x={1} y={1} width={18} height={10} rx={5} /></svg>;
+  if (geo === "cross") return <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.4} style={s}><path d="M9,2 L9,16 M2,9 L16,9" /></svg>;
+  // fallback for arrow types and others
+  return <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.4} style={s}><rect x={2} y={2} width={14} height={14} rx={2} /></svg>;
+}
+
+function ColorPicker({
+  value,
+  onChange,
+}: {
+  value: TLDefaultColorStyle | undefined;
+  onChange: (c: TLDefaultColorStyle) => void;
+}) {
+  const isDarkMode = useIsDarkMode();
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 3 }}>
+      {COLOR_VALUES.map((c) => {
+        const hex = (getDefaultColorTheme({ isDarkMode }) as unknown as Record<string, { solid: string }>)[c]?.solid ?? "#000";
+        return (
+          <button
+            key={c}
+            onClick={() => onChange(c)}
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: "50%",
+              background: hex,
+              border: "none",
+              outline: value === c ? "2px solid var(--color-secondary)" : "2px solid transparent",
+              outlineOffset: 1,
+              cursor: "pointer",
+              padding: 0,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
 
-// ── Pen slot buttons ──────────────────────────────────────────────────────────
+const POPOVER_STYLE: React.CSSProperties = {
+  position: "absolute",
+  bottom: "calc(100% + 8px)",
+  left: "50%",
+  transform: "translateX(-50%)",
+  zIndex: 600,
+  background: "var(--color-surface)",
+  border: "1px solid var(--color-border)",
+  borderRadius: 8,
+  padding: 8,
+  boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+};
 
-function PenSlotButton({
+function PopoverSection({ label }: { label: string }) {
+  return (
+    <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-subtle)", margin: "6px 0 4px" }}>
+      {label}
+    </p>
+  );
+}
+
+// ── Pen slot circle ───────────────────────────────────────────────────────────
+
+function PenSlotCircle({
   slot,
   isActive,
   onActivate,
@@ -329,53 +512,23 @@ function PenSlotButton({
     onActivate();
   }
 
+  function handleClick() {
+    if (isActive) {
+      setPopoverOpen((v) => !v);
+    } else {
+      activate();
+    }
+  }
+
   return (
     <div style={{ position: "relative" }} onPointerDown={(e) => e.stopPropagation()}>
       {popoverOpen && (
         <>
-          <div
-            style={{ position: "fixed", inset: 0, zIndex: 590 }}
-            onPointerDown={() => setPopoverOpen(false)}
-          />
-          <div
-            style={{
-              position: "absolute",
-              bottom: "calc(100% + 8px)",
-              left: "50%",
-              transform: "translateX(-50%)",
-              zIndex: 600,
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-              borderRadius: 8,
-              padding: 8,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-              width: 184,
-            }}
-          >
-            <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-subtle)", margin: "0 0 6px" }}>Color</p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 3, marginBottom: 10 }}>
-              {(["black", "grey", "red", "light-red", "orange", "yellow", "green", "light-green", "blue", "light-blue", "violet", "light-violet"] as TLDefaultColorStyle[]).map((c) => {
-                const hex = (getDefaultColorTheme({ isDarkMode }) as unknown as Record<string, { solid: string }>)[c]?.solid ?? "#000";
-                return (
-                  <button
-                    key={c}
-                    onClick={() => onUpdateSlot({ ...slot, color: c })}
-                    style={{
-                      width: 22,
-                      height: 22,
-                      borderRadius: "50%",
-                      background: hex,
-                      border: "none",
-                      outline: slot.color === c ? "2px solid var(--color-secondary)" : "2px solid transparent",
-                      outlineOffset: 1,
-                      cursor: "pointer",
-                      padding: 0,
-                    }}
-                  />
-                );
-              })}
-            </div>
-            <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-subtle)", margin: "0 0 6px" }}>Size</p>
+          <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setPopoverOpen(false)} />
+          <div style={{ ...POPOVER_STYLE, width: 184 }}>
+            <PopoverSection label="Color" />
+            <ColorPicker value={slot.color} onChange={(c) => onUpdateSlot({ ...slot, color: c })} />
+            <PopoverSection label="Size" />
             <div style={{ display: "flex", gap: 3 }}>
               {SIZE_ORDER.map((s) => (
                 <button
@@ -383,7 +536,7 @@ function PenSlotButton({
                   onClick={() => onUpdateSlot({ ...slot, size: s })}
                   style={{
                     flex: 1,
-                    height: 28,
+                    height: 32,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -394,9 +547,7 @@ function PenSlotButton({
                     padding: 0,
                   }}
                 >
-                  <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
-                    <line x1={4} y1={8} x2={24} y2={8} stroke={hexColor} strokeWidth={SIZE_STROKE_WEIGHTS[s]} strokeLinecap="round" />
-                  </svg>
+                  <SizeDot size={s} active={slot.size === s} />
                 </button>
               ))}
             </div>
@@ -404,40 +555,479 @@ function PenSlotButton({
         </>
       )}
       <button
-        title="Double-tap to edit"
-        onClick={activate}
-        onDoubleClick={(e) => { e.preventDefault(); setPopoverOpen((v) => !v); }}
+        title={isActive ? "Edit pen" : "Activate pen"}
+        onClick={handleClick}
         style={{
-          width: 32,
-          height: 32,
-          borderRadius: 6,
+          width: 28,
+          height: 28,
+          borderRadius: "50%",
           border: "none",
           outline: isActive ? "2px solid var(--color-secondary)" : "none",
-          outlineOffset: 1,
-          background: "transparent",
+          outlineOffset: 2,
+          background: hexColor,
           cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 0,
+          flexShrink: 0,
         }}
-      >
-        <svg width={20} height={20} viewBox="0 0 20 20" fill="none" style={{ display: "block" }}>
-          <line x1={4} y1={15} x2={16} y2={5} stroke={hexColor} strokeWidth={SIZE_STROKE_WEIGHTS[slot.size] + 0.5} strokeLinecap="round" />
-        </svg>
-      </button>
+      />
     </div>
   );
 }
 
-// ── Template picker (rendered inside the tldraw canvas via InFrontOfTheCanvas)
+// ── Style controls (right section) ───────────────────────────────────────────
+
+function StyleControls() {
+  const editor = useEditor();
+  const isDarkMode = useIsDarkMode();
+  const styles = useRelevantStyles();
+  const [colorOpen, setColorOpen] = useState(false);
+  const [tuneOpen, setTuneOpen] = useState(false);
+
+  const handleStyleChange = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (style: any, value: any) => {
+      editor.run(() => {
+        if (editor.isIn("select")) editor.setStyleForSelectedShapes(style, value);
+        editor.setStyleForNextShapes(style, value);
+        editor.updateInstanceState({ isChangingStyle: true });
+      });
+    },
+    [editor],
+  );
+
+  if (!styles) return null;
+
+  const theme = getDefaultColorTheme({ isDarkMode });
+  const color = styles.get(DefaultColorStyle);
+  const fill = styles.get(DefaultFillStyle);
+  const dash = styles.get(DefaultDashStyle);
+  const size = styles.get(DefaultSizeStyle);
+
+  const hasAny = color !== undefined || size !== undefined || dash !== undefined || fill !== undefined;
+  if (!hasAny) return null;
+
+  const currentColorHex = color !== undefined && color.type === "shared"
+    ? (theme as unknown as Record<string, { solid: string }>)[color.value]?.solid ?? "#000"
+    : "#888";
+
+  const currentSize = size?.type === "shared" ? size.value : undefined;
+  const currentDash = dash?.type === "shared" ? dash.value : undefined;
+  const currentFill = fill?.type === "shared" ? fill.value : undefined;
+  const currentColor = color?.type === "shared" ? color.value : undefined;
+
+  const opacityOptions = [20, 40, 60, 80, 100] as const;
+  const opacity = styles.get({ type: "shared", id: "opacity" } as never);
+
+  return (
+    <>
+      <div style={DIVIDER} />
+
+      {/* Color swatch */}
+      {color !== undefined && (
+        <div style={{ position: "relative" }} onPointerDown={(e) => e.stopPropagation()}>
+          {colorOpen && (
+            <>
+              <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setColorOpen(false)} />
+              <div style={{ ...POPOVER_STYLE, width: 168 }}>
+                <ColorPicker value={currentColor} onChange={(c) => { handleStyleChange(DefaultColorStyle, c); }} />
+              </div>
+            </>
+          )}
+          <button
+            title="Color"
+            onClick={() => setColorOpen((v) => !v)}
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: "50%",
+              border: "1px solid var(--color-border)",
+              background: currentColorHex,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          />
+        </div>
+      )}
+
+      {/* Size dots */}
+      {size !== undefined && SIZE_ORDER.map((s) => (
+        <button
+          key={s}
+          title={s.toUpperCase()}
+          onClick={() => handleStyleChange(DefaultSizeStyle, s)}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 4,
+            border: "none",
+            background: currentSize === s ? "var(--color-surface-highest)" : "transparent",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 0,
+            flexShrink: 0,
+          }}
+        >
+          <SizeDot size={s} active={currentSize === s} />
+        </button>
+      ))}
+
+      {/* Tune button */}
+      {(dash !== undefined || fill !== undefined) && (
+        <div style={{ position: "relative" }} onPointerDown={(e) => e.stopPropagation()}>
+          {tuneOpen && (
+            <>
+              <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setTuneOpen(false)} />
+              <div style={{ ...POPOVER_STYLE, width: 200, right: 0, left: "auto", transform: "none" }}>
+                {/* Opacity */}
+                <PopoverSection label="Opacity" />
+                <div style={{ display: "flex", gap: 3 }}>
+                  {opacityOptions.map((pct) => {
+                    const val = pct / 100;
+                    const isActive = opacity !== undefined && opacity.type === "shared" && Math.round((opacity.value as number) * 100) === pct;
+                    return (
+                      <button
+                        key={pct}
+                        title={`${pct}%`}
+                        onClick={() => handleStyleChange({ type: "shared", id: "opacity" }, val)}
+                        style={{
+                          flex: 1,
+                          height: 28,
+                          borderRadius: "50%",
+                          border: "1px solid var(--color-border)",
+                          background: isActive ? "var(--color-secondary)" : "transparent",
+                          color: isActive ? "white" : "var(--color-text)",
+                          cursor: "pointer",
+                          fontSize: 9,
+                          fontWeight: 600,
+                          padding: 0,
+                        }}
+                      >
+                        {pct}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Dash */}
+                {dash !== undefined && (
+                  <>
+                    <PopoverSection label="Stroke" />
+                    <div style={{ display: "flex", gap: 2 }}>
+                      {DASH_ORDER.map((d) => (
+                        <button
+                          key={d}
+                          title={d}
+                          onClick={() => handleStyleChange(DefaultDashStyle, d)}
+                          style={{
+                            flex: 1,
+                            height: 28,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: 4,
+                            background: currentDash === d ? "var(--color-surface-highest)" : "transparent",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                        >
+                          <DashIcon type={d} />
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Fill */}
+                {fill !== undefined && (
+                  <>
+                    <PopoverSection label="Fill" />
+                    <div style={{ display: "flex", gap: 2 }}>
+                      {(["none", "semi", "solid", "pattern"] as TLDefaultFillStyle[]).map((f) => {
+                        const isActive = currentFill === f;
+                        return (
+                          <button
+                            key={f}
+                            title={f}
+                            onClick={() => handleStyleChange(DefaultFillStyle, f)}
+                            style={{
+                              flex: 1,
+                              height: 28,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 4,
+                              background: isActive ? "var(--color-surface-highest)" : "transparent",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: 0,
+                            }}
+                          >
+                            <FillIcon type={f} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+          <TBButton title="Stroke & fill" active={tuneOpen} onClick={() => setTuneOpen((v) => !v)}>
+            <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" style={{ display: "block" }}>
+              <line x1={3} y1={5} x2={15} y2={5} />
+              <line x1={3} y1={9} x2={15} y2={9} />
+              <line x1={3} y1={13} x2={15} y2={13} />
+            </svg>
+          </TBButton>
+        </div>
+      )}
+    </>
+  );
+}
+
+function FillIcon({ type }: { type: TLDefaultFillStyle }) {
+  if (type === "none") return (
+    <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.4} style={{ display: "block" }}>
+      <rect x={2} y={2} width={14} height={14} rx={2} />
+    </svg>
+  );
+  if (type === "semi") return (
+    <svg width={18} height={18} viewBox="0 0 18 18" style={{ display: "block" }}>
+      <rect x={2} y={2} width={14} height={14} rx={2} fill="currentColor" opacity={0.3} />
+      <rect x={2} y={2} width={14} height={14} rx={2} fill="none" stroke="currentColor" strokeWidth={1.4} />
+    </svg>
+  );
+  if (type === "solid") return (
+    <svg width={18} height={18} viewBox="0 0 18 18" style={{ display: "block" }}>
+      <rect x={2} y={2} width={14} height={14} rx={2} fill="currentColor" />
+    </svg>
+  );
+  // pattern
+  return (
+    <svg width={18} height={18} viewBox="0 0 18 18" style={{ display: "block" }}>
+      <rect x={2} y={2} width={14} height={14} rx={2} fill="none" stroke="currentColor" strokeWidth={1.4} />
+      <line x1={5} y1={5} x2={13} y2={13} stroke="currentColor" strokeWidth={1} />
+      <line x1={8} y1={4} x2={14} y2={10} stroke="currentColor" strokeWidth={1} />
+      <line x1={4} y1={8} x2={10} y2={14} stroke="currentColor" strokeWidth={1} />
+    </svg>
+  );
+}
+
+// ── Main pill toolbar ─────────────────────────────────────────────────────────
+
+function ScribblToolbar() {
+  const isReadonlyMode = useReadonly();
+  const { penSlots, setSlot } = useContext(PenSlotCtx);
+  const editor = useEditor();
+
+  const [activeSlotIdx, setActiveSlotIdx] = useState<number | null>(null);
+  const [geoOpen, setGeoOpen] = useState(false);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return localStorage.getItem("scribbl:toolbar-collapsed") === "true"; } catch { return false; }
+  });
+
+  const currentToolId = useValue("scribbl-current-tool", () => editor.getCurrentToolId(), [editor]);
+
+  // Deactivate pen slot when a non-draw tool is active
+  useEffect(() => {
+    if (currentToolId !== "draw") setActiveSlotIdx(null);
+  }, [currentToolId]);
+
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v;
+      try { localStorage.setItem("scribbl:toolbar-collapsed", String(next)); } catch {}
+      return next;
+    });
+  }
+
+  function activateTool(toolId: string) {
+    editor.setCurrentTool(toolId);
+  }
+
+  function activateSlot(idx: number) {
+    const slot = penSlots[idx];
+    editor.setCurrentTool("draw");
+    editor.setStyleForNextShapes(DefaultColorStyle, slot.color);
+    editor.setStyleForNextShapes(DefaultSizeStyle, slot.size);
+    setActiveSlotIdx(idx);
+  }
+
+  if (isReadonlyMode) return null;
+
+  const chevronBtn = (
+    <TBButton title={collapsed ? "Expand toolbar" : "Collapse toolbar"} onClick={toggleCollapsed}>
+      <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
+        {collapsed
+          ? <path d="M5,11 L9,7 L13,11" />
+          : <path d="M5,7 L9,11 L13,7" />}
+      </svg>
+    </TBButton>
+  );
+
+  // Collapsed state: pen slots + chevron only
+  if (collapsed) {
+    return (
+      <div style={PILL_STYLE} onPointerDown={(e) => e.stopPropagation()}>
+        {penSlots.map((slot, idx) => (
+          <PenSlotCircle
+            key={idx}
+            slot={slot}
+            isActive={currentToolId === "draw" && activeSlotIdx === idx}
+            onActivate={() => activateSlot(idx)}
+            onUpdateSlot={(updated) => setSlot(idx, updated)}
+          />
+        ))}
+        <div style={DIVIDER} />
+        {chevronBtn}
+      </div>
+    );
+  }
+
+  const tools = [
+    { id: "draw", label: "Draw" },
+    { id: "select", label: "Select" },
+    { id: "hand", label: "Hand" },
+    { id: "eraser", label: "Eraser" },
+    { id: "arrow", label: "Arrow" },
+    { id: "text", label: "Text" },
+    { id: "note", label: "Note" },
+    { id: "geo", label: "Shapes" },
+  ] as const;
+
+  const isGeoPicker = currentToolId === "geo";
+
+  return (
+    <div style={PILL_STYLE} onPointerDown={(e) => e.stopPropagation()}>
+      {/* Pen slots */}
+      {penSlots.map((slot, idx) => (
+        <PenSlotCircle
+          key={idx}
+          slot={slot}
+          isActive={currentToolId === "draw" && activeSlotIdx === idx}
+          onActivate={() => activateSlot(idx)}
+          onUpdateSlot={(updated) => setSlot(idx, updated)}
+        />
+      ))}
+
+      <div style={DIVIDER} />
+
+      {/* Tool buttons */}
+      {tools.map(({ id, label }) => {
+        if (id === "geo") {
+          return (
+            <div key="geo" style={{ position: "relative" }} onPointerDown={(e) => e.stopPropagation()}>
+              {geoOpen && (
+                <>
+                  <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setGeoOpen(false)} />
+                  <div style={{
+                    ...POPOVER_STYLE,
+                    width: 160,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                  }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4 }}>
+                      {GEO_OPTIONS.map((geo) => (
+                        <button
+                          key={geo}
+                          title={geo}
+                          onClick={() => {
+                            editor.setCurrentTool("geo");
+                            editor.setStyleForNextShapes(GeoShapeGeoStyle, geo);
+                            setGeoOpen(false);
+                          }}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: 4,
+                            border: "none",
+                            background: "transparent",
+                            cursor: "pointer",
+                            padding: 0,
+                            color: "var(--color-text)",
+                          }}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--color-surface-mid)"; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                        >
+                          <GeoPreview geo={geo} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+              <TBButton
+                title="Shapes"
+                active={isGeoPicker}
+                onClick={() => {
+                  if (isGeoPicker) {
+                    setGeoOpen((v) => !v);
+                  } else {
+                    editor.setCurrentTool("geo");
+                    setGeoOpen(false);
+                  }
+                }}
+              >
+                <ToolIcon tool="geo" />
+              </TBButton>
+            </div>
+          );
+        }
+        return (
+          <TBButton key={id} title={label} active={currentToolId === id} onClick={() => activateTool(id)}>
+            <ToolIcon tool={id} />
+          </TBButton>
+        );
+      })}
+
+      {/* Overflow: Highlight + Laser */}
+      <div style={{ position: "relative" }} onPointerDown={(e) => e.stopPropagation()}>
+        {overflowOpen && (
+          <>
+            <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setOverflowOpen(false)} />
+            <div style={{ ...POPOVER_STYLE, display: "flex", gap: 4, padding: 6 }}>
+              <TBButton title="Highlight" active={currentToolId === "highlight"} onClick={() => { activateTool("highlight"); setOverflowOpen(false); }}>
+                <ToolIcon tool="highlight" />
+              </TBButton>
+              <TBButton title="Laser" active={currentToolId === "laser"} onClick={() => { activateTool("laser"); setOverflowOpen(false); }}>
+                <ToolIcon tool="laser" />
+              </TBButton>
+            </div>
+          </>
+        )}
+        <TBButton
+          title="More tools"
+          active={overflowOpen || currentToolId === "highlight" || currentToolId === "laser"}
+          onClick={() => setOverflowOpen((v) => !v)}
+        >
+          <ToolIcon tool="overflow" />
+        </TBButton>
+      </div>
+
+      {/* Style controls */}
+      <StyleControls />
+
+      <div style={DIVIDER} />
+
+      {/* Collapse chevron */}
+      {chevronBtn}
+    </div>
+  );
+}
+
+// ── Template picker ───────────────────────────────────────────────────────────
 
 function TemplatePicker() {
   const editor = useEditor();
   const [open, setOpen] = useState(false);
 
-  // useValue subscribes to the tldraw store so this re-runs whenever shapes change,
-  // including when handleMount creates the background shape after mount.
   const bgShape = useValue(
     "page-bg-shape",
     () =>
@@ -452,7 +1042,6 @@ function TemplatePicker() {
 
   function apply(t: PageTemplate) {
     if (!bgShape) return;
-    // Use store.put directly — editor.updateShape can silently skip locked shapes.
     editor.store.put([{ ...bgShape, props: { ...bgShape.props, template: t } }]);
     setOpen(false);
   }
@@ -464,11 +1053,8 @@ function TemplatePicker() {
     >
       {open && (
         <div className="mb-1 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg">
-          {/* Light section */}
           <div className="border-b border-[var(--color-border)] px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">
-              Light
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">Light</p>
             <div className="mt-2 grid grid-cols-4 gap-1">
               {LIGHT_TEMPLATES.map((t) => (
                 <button
@@ -482,11 +1068,8 @@ function TemplatePicker() {
               ))}
             </div>
           </div>
-          {/* Dark section */}
           <div className="border-b border-[var(--color-border)] px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">
-              Dark
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">Dark</p>
             <div className="mt-2 grid grid-cols-4 gap-1">
               {DARK_TEMPLATES.map((t) => (
                 <button
@@ -500,11 +1083,8 @@ function TemplatePicker() {
               ))}
             </div>
           </div>
-          {/* Cover section */}
           <div className="px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">
-              Cover
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">Cover</p>
             <div className="mt-2 flex gap-1">
               {COVER_TEMPLATES.map((t) => (
                 <button
@@ -590,7 +1170,6 @@ function TemplateIcon({ template, size = 16 }: { template: PageTemplate; size?: 
       </svg>
     );
   }
-  // blank (light or dark)
   return (
     <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
       <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
@@ -598,251 +1177,7 @@ function TemplateIcon({ template, size = 16 }: { template: PageTemplate; size?: 
   );
 }
 
-// ── Custom style panel (P4 + P6) ─────────────────────────────────────────────
-
-const COLOR_ITEMS: ReadonlyArray<{ readonly value: TLDefaultColorStyle; readonly icon: string }> = [
-  { value: "black", icon: "color" },
-  { value: "grey", icon: "color" },
-  { value: "light-violet", icon: "color" },
-  { value: "violet", icon: "color" },
-  { value: "blue", icon: "color" },
-  { value: "light-blue", icon: "color" },
-  { value: "yellow", icon: "color" },
-  { value: "orange", icon: "color" },
-  { value: "green", icon: "color" },
-  { value: "light-green", icon: "color" },
-  { value: "light-red", icon: "color" },
-  { value: "red", icon: "color" },
-];
-
-const FILL_ITEMS: ReadonlyArray<{ readonly value: TLDefaultFillStyle; readonly icon: string }> = [
-  { value: "none", icon: "fill-none" },
-  { value: "semi", icon: "fill-semi" },
-  { value: "solid", icon: "fill-solid" },
-  { value: "pattern", icon: "fill-pattern" },
-];
-
-const SIZE_STROKE_WEIGHTS: Record<TLDefaultSizeStyle, number> = { s: 1.5, m: 3, l: 5.5, xl: 9 };
-const SIZE_ORDER: TLDefaultSizeStyle[] = ["s", "m", "l", "xl"];
-const DASH_ORDER: TLDefaultDashStyle[] = ["draw", "solid", "dashed", "dotted"];
-
-function ScribblStylePanel(props: TLUiStylePanelProps) {
-  return (
-    <DefaultStylePanel {...props}>
-      <ScribblStylePanelContent />
-    </DefaultStylePanel>
-  );
-}
-
-function ScribblStylePanelContent() {
-  const editor = useEditor();
-  const isDarkMode = useIsDarkMode();
-  const styles = useRelevantStyles();
-
-  const handleStyleChange = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (style: any, value: any) => {
-      editor.run(() => {
-        if (editor.isIn("select")) {
-          editor.setStyleForSelectedShapes(style, value);
-        }
-        editor.setStyleForNextShapes(style, value);
-        editor.updateInstanceState({ isChangingStyle: true });
-      });
-    },
-    [editor],
-  );
-
-  if (!styles) return null;
-
-  const theme = getDefaultColorTheme({ isDarkMode });
-  const color = styles.get(DefaultColorStyle);
-  const fill = styles.get(DefaultFillStyle);
-  const dash = styles.get(DefaultDashStyle);
-  const size = styles.get(DefaultSizeStyle);
-  const geo = styles.get(GeoShapeGeoStyle);
-  const arrowheadEnd = styles.get(ArrowShapeArrowheadEndStyle);
-  const arrowheadStart = styles.get(ArrowShapeArrowheadStartStyle);
-  const spline = styles.get(LineShapeSplineStyle);
-  const font = styles.get(DefaultFontStyle);
-
-  const showPickers = fill !== undefined || dash !== undefined || size !== undefined;
-  const showGeoSection = geo !== undefined || arrowheadEnd !== undefined || arrowheadStart !== undefined || spline !== undefined;
-
-  return (
-    <>
-      <div tabIndex={-1} className="tlui-style-panel__section__common" aria-label="style panel styles" data-testid="style.panel">
-        {color !== undefined && (
-          <TldrawUiButtonPicker
-            title="Color"
-            uiType="color"
-            style={DefaultColorStyle}
-            items={COLOR_ITEMS}
-            value={color}
-            onValueChange={handleStyleChange}
-            theme={theme}
-          />
-        )}
-        <OpacitySlider />
-      </div>
-      {showPickers && (
-        <div className="tlui-style-panel__section" aria-label="style panel styles">
-          {fill !== undefined && (
-            <TldrawUiButtonPicker
-              title="Fill"
-              uiType="fill"
-              style={DefaultFillStyle}
-              items={FILL_ITEMS}
-              value={fill}
-              onValueChange={handleStyleChange}
-              theme={theme}
-            />
-          )}
-          {dash !== undefined && (
-            <ScribblDashRow
-              value={dash.type === "shared" ? dash.value : undefined}
-              onChange={(v) => handleStyleChange(DefaultDashStyle, v)}
-            />
-          )}
-          {size !== undefined && (
-            <ScribblSizeRow
-              value={size.type === "shared" ? size.value : undefined}
-              onChange={(v) => handleStyleChange(DefaultSizeStyle, v)}
-            />
-          )}
-        </div>
-      )}
-      {font !== undefined && (
-        <TextStylePickerSet theme={theme} styles={styles} />
-      )}
-      {showGeoSection && (
-        <div className="tlui-style-panel__section" aria-label="style panel styles">
-          <GeoStylePickerSet styles={styles} />
-          <ArrowheadStylePickerSet styles={styles} />
-          <SplineStylePickerSet styles={styles} />
-        </div>
-      )}
-    </>
-  );
-}
-
-function ScribblSizeRow({
-  value,
-  onChange,
-}: {
-  value: TLDefaultSizeStyle | undefined;
-  onChange: (v: TLDefaultSizeStyle) => void;
-}) {
-  return (
-    <div className="tlui-style-panel__row" style={{ gap: 2, padding: "2px 0" }}>
-      {SIZE_ORDER.map((s) => {
-        const active = value === s;
-        return (
-          <button
-            key={s}
-            title={s.toUpperCase()}
-            onClick={() => onChange(s)}
-            style={{
-              flex: 1,
-              height: 28,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 4,
-              background: active ? "var(--color-surface-highest)" : "transparent",
-              border: "none",
-              cursor: "pointer",
-              padding: 0,
-            }}
-          >
-            <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
-              <line
-                x1={4} y1={8} x2={24} y2={8}
-                stroke="currentColor"
-                strokeWidth={SIZE_STROKE_WEIGHTS[s]}
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function ScribblDashRow({
-  value,
-  onChange,
-}: {
-  value: TLDefaultDashStyle | undefined;
-  onChange: (v: TLDefaultDashStyle) => void;
-}) {
-  return (
-    <div className="tlui-style-panel__row" style={{ gap: 2, padding: "2px 0" }}>
-      {DASH_ORDER.map((d) => {
-        const active = value === d;
-        return (
-          <button
-            key={d}
-            title={d}
-            onClick={() => onChange(d)}
-            style={{
-              flex: 1,
-              height: 28,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 4,
-              background: active ? "var(--color-surface-highest)" : "transparent",
-              border: "none",
-              cursor: "pointer",
-              padding: 0,
-            }}
-          >
-            <DashIcon type={d} />
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function DashIcon({ type }: { type: TLDefaultDashStyle }) {
-  if (type === "draw") {
-    return (
-      <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
-        <path
-          d="M4,8 C7,5 9,11 12,8 C15,5 17,11 20,8 C22,6 24,8 24,8"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.5}
-          strokeLinecap="round"
-        />
-      </svg>
-    );
-  }
-  if (type === "solid") {
-    return (
-      <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
-        <line x1={4} y1={8} x2={24} y2={8} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (type === "dashed") {
-    return (
-      <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
-        <line x1={4} y1={8} x2={24} y2={8} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeDasharray="6 3" />
-      </svg>
-    );
-  }
-  return (
-    <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
-      <line x1={4} y1={8} x2={24} y2={8} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeDasharray="2 4" />
-    </svg>
-  );
-}
-
-// ── Main editor component
+// ── Main editor component ─────────────────────────────────────────────────────
 
 export function TldrawWhiteboardEditor({
   workspaceId,
@@ -910,7 +1245,6 @@ export function TldrawWhiteboardEditor({
     [room],
   );
 
-  // Seed title into Yjs on first open if no peer has set it yet (wait for sync)
   useEffect(() => {
     const provider = getYjsProviderForRoom(room);
     function seed() {
@@ -922,7 +1256,6 @@ export function TldrawWhiteboardEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yMeta, room]);
 
-  // Sync remote title changes into local state
   useEffect(() => {
     function onMeta() {
       const remote = yMeta.get("title") ?? "";
@@ -931,6 +1264,7 @@ export function TldrawWhiteboardEditor({
     yMeta.observe(onMeta);
     return () => yMeta.unobserve(onMeta);
   }, [yMeta]);
+
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [isPending, startTransition] = useTransition();
   const [linkCopied, setLinkCopied] = useState(false);
@@ -944,7 +1278,6 @@ export function TldrawWhiteboardEditor({
   const latestSaveIdRef = useRef(0);
   const hasPendingSaveRef = useRef(false);
   const titleValueRef = useRef(titleValue);
-  // Refs so that the one-time onMount closure always calls the latest versions.
   const canEditRef = useRef(canEdit);
   const canUploadAssetsRef = useRef(canUploadAssets);
   const queueAutosaveRef = useRef<() => void>(() => {});
@@ -953,17 +1286,9 @@ export function TldrawWhiteboardEditor({
     exportPdfFnRef.current = fn;
   }, []);
 
-  useEffect(() => {
-    titleValueRef.current = titleValue;
-  }, [titleValue]);
-
-  useEffect(() => {
-    canEditRef.current = canEdit;
-  }, [canEdit]);
-
-  useEffect(() => {
-    canUploadAssetsRef.current = canUploadAssets;
-  }, [canUploadAssets]);
+  useEffect(() => { titleValueRef.current = titleValue; }, [titleValue]);
+  useEffect(() => { canEditRef.current = canEdit; }, [canEdit]);
+  useEffect(() => { canUploadAssetsRef.current = canUploadAssets; }, [canUploadAssets]);
 
   const buildFormData = useCallback(() => {
     if (!editorRef.current) return null;
@@ -1008,9 +1333,7 @@ export function TldrawWhiteboardEditor({
     timeoutRef.current = setTimeout(saveNow, 900);
   }, [canEdit, saveNow]);
 
-  useEffect(() => {
-    queueAutosaveRef.current = queueAutosave;
-  }, [queueAutosave]);
+  useEffect(() => { queueAutosaveRef.current = queueAutosave; }, [queueAutosave]);
 
   const flushPendingSave = useCallback(() => {
     if (!canEdit || !hasPendingSaveRef.current) return;
@@ -1040,7 +1363,6 @@ export function TldrawWhiteboardEditor({
     (editor: Editor) => {
       editorRef.current = editor;
 
-      // Fixed landscape page — constrain camera to page bounds
       editor.setCameraOptions({
         constraints: {
           bounds: { x: 0, y: 0, w: PAGE_W, h: PAGE_H },
@@ -1052,28 +1374,20 @@ export function TldrawWhiteboardEditor({
         },
       });
 
-      // Ensure every page has a locked background shape
       for (const page of editor.getPages()) {
         ensurePageBackground(editor, page.id);
       }
 
-      // Auto-init background when a new page is added
       const unsubPage = editor.sideEffects.registerAfterCreateHandler(
         "page",
-        (page) => {
-          ensurePageBackground(editor, page.id);
-        },
+        (page) => { ensurePageBackground(editor, page.id); },
       );
 
-      // Prevent page-background shapes from being deleted
       const unsubDelete = editor.sideEffects.registerBeforeDeleteHandler(
         "shape",
-        (shape) => {
-          if (shape.type === "page-background") return false;
-        },
+        (shape) => { if (shape.type === "page-background") return false; },
       );
 
-      // Keep page-background shapes locked
       const unsubChange = editor.sideEffects.registerBeforeChangeHandler(
         "shape",
         (_prev, next) => {
@@ -1085,30 +1399,41 @@ export function TldrawWhiteboardEditor({
         },
       );
 
+      // Sync dark mode toggle to page background template
+      let prevDark = editor.user.getIsDarkMode();
+      const unsubTheme = editor.store.listen(
+        () => {
+          const dark = editor.user.getIsDarkMode();
+          if (dark === prevDark) return;
+          prevDark = dark;
+          const bgShape = editor.getCurrentPageShapes().find((s) => s.type === "page-background") as PageBackgroundShape | undefined;
+          if (!bgShape) return;
+          const t = bgShape.props.template as string;
+          const lightToDark: Record<string, string> = { blank: "blank-dark", lined: "lined-dark", dotted: "dotted-dark", grid: "grid-dark" };
+          const darkToLight: Record<string, string> = { "blank-dark": "blank", "lined-dark": "lined", "dotted-dark": "dotted", "grid-dark": "grid" };
+          const newTemplate = dark ? (lightToDark[t] ?? t) : (darkToLight[t] ?? t);
+          if (newTemplate !== t) editor.store.put([{ ...bgShape, props: { ...bgShape.props, template: newTemplate } }]);
+        },
+        { source: "all" },
+      );
+
       if (!canEditRef.current) {
         editor.updateInstanceState({ isReadonly: true });
       } else {
         editor.setCurrentTool("draw");
       }
 
-      // Block image/file uploads for plans that don't support asset uploads.
-      // Overriding the external content handlers stops both drag-and-drop
-      // and clipboard paste of images/blobs.
       if (!canUploadAssetsRef.current) {
         editor.registerExternalContentHandler("files", () => {});
       }
 
       const unsubStore = editor.store.listen(
-        () => {
-          queueAutosaveRef.current();
-        },
+        () => { queueAutosaveRef.current(); },
         { source: "user", scope: "document" },
       );
 
       const unsubZoom = editor.store.listen(
-        () => {
-          zoomUpdateRef.current(Math.round(editor.getZoomLevel() * 100));
-        },
+        () => { zoomUpdateRef.current(Math.round(editor.getZoomLevel() * 100)); },
         { source: "all" },
       );
 
@@ -1116,6 +1441,7 @@ export function TldrawWhiteboardEditor({
         unsubPage();
         unsubDelete();
         unsubChange();
+        unsubTheme();
         unsubStore();
         unsubZoom();
       };
@@ -1149,20 +1475,16 @@ export function TldrawWhiteboardEditor({
     </ExportCtx.Provider>
   );
 
-  // ── Goodnotes / fullscreen variant ────────────────────────────────────────
   if (variant === "goodnotes") {
     return (
       <div className="flex h-full min-h-0 flex-col">
-        {/* Header */}
         <div className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5">
-          {/* Pencil icon */}
           <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-secondary)]">
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
               <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
           </div>
-          {/* Title + autosave status */}
           <div className="min-w-0 flex-1">
             {canEdit ? (
               <input
@@ -1178,11 +1500,9 @@ export function TldrawWhiteboardEditor({
               {getStatusText(isPending ? "saving" : saveState)}
             </p>
           </div>
-          {/* Visibility control */}
           {canChangeVisibility && noteVisibility && (
             <VisibilityDropdown workspaceId={workspaceId} noteId={noteId} current={noteVisibility} />
           )}
-          {/* Presence avatars */}
           {others.length > 0 && (
             <div className="flex -space-x-1.5">
               {others.slice(0, 4).map((other) => {
@@ -1208,7 +1528,6 @@ export function TldrawWhiteboardEditor({
               )}
             </div>
           )}
-          {/* Export PDF */}
           {canExportPdf && (
             <button
               type="button"
@@ -1230,7 +1549,6 @@ export function TldrawWhiteboardEditor({
               {busyHeaderPdf ? "Exporting…" : "Export PDF"}
             </button>
           )}
-          {/* Share */}
           <button
             type="button"
             onClick={handleShare}
@@ -1242,7 +1560,6 @@ export function TldrawWhiteboardEditor({
           >
             {linkCopied ? "Copied!" : "Share"}
           </button>
-          {/* Collapse — icon only, matches text editor */}
           {onCollapse && (
             <button
               type="button"
@@ -1257,21 +1574,17 @@ export function TldrawWhiteboardEditor({
           )}
         </div>
 
-        {/* Canvas */}
         <div className="min-h-0 flex-1 overflow-hidden">
           {canvas}
         </div>
 
-        {/* View-only banner */}
         {!canEdit && (
           <div className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface-low)] px-5 py-2 text-xs text-[var(--color-muted)]">
             View-only — only the owner or collaborative editors can make changes.
           </div>
         )}
 
-        {/* Footer */}
         <div className="flex h-10 shrink-0 items-center justify-between border-t border-[var(--color-border)] bg-[var(--color-surface)] px-5">
-          {/* Left: save status */}
           <div className="flex items-center gap-1.5 font-mono text-xs text-[var(--color-subtle)]">
             <span className={`size-1.5 rounded-full ${
               (isPending ? "saving" : saveState) === "saved" || (isPending ? "saving" : saveState) === "idle"
@@ -1282,7 +1595,6 @@ export function TldrawWhiteboardEditor({
             }`} />
             {getStatusText(isPending ? "saving" : saveState)}
           </div>
-          {/* Right: zoom + save */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-0.5 font-mono text-xs text-[var(--color-subtle)]">
               <button
@@ -1315,7 +1627,6 @@ export function TldrawWhiteboardEditor({
     );
   }
 
-  // ── Card variant (unchanged) ──────────────────────────────────────────────
   return (
     <div className="grid gap-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1354,7 +1665,6 @@ function ensurePageBackground(editor: Editor, pageId: TLPageId) {
   const bgId = getPageBackgroundShapeId(pageId as string) as TLShapeId;
   if (editor.getShape(bgId)) return;
 
-  // createShapeId produces `shape:${string}` — use the pre-built id
   editor.createShape({
     id: bgId,
     parentId: pageId,
@@ -1369,15 +1679,10 @@ function ensurePageBackground(editor: Editor, pageId: TLPageId) {
 
 function getStatusText(saveState: SaveState) {
   switch (saveState) {
-    case "dirty":
-      return "Unsaved changes";
-    case "saving":
-      return "Saving...";
-    case "saved":
-      return "Saved";
-    case "error":
-      return "Could not save. Try again.";
-    default:
-      return "Autosaves after each drawing change.";
+    case "dirty": return "Unsaved changes";
+    case "saving": return "Saving...";
+    case "saved": return "Saved";
+    case "error": return "Could not save. Try again.";
+    default: return "Autosaves after each drawing change.";
   }
 }
