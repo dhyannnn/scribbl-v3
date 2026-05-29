@@ -381,10 +381,16 @@ function TBButton({
   title: string;
   children: React.ReactNode;
 }) {
+  const isDarkMode = useIsDarkMode();
+  const textColor = isDarkMode ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.8)";
   return (
     <button
       title={title}
-      onClick={onClick}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        e.nativeEvent.stopImmediatePropagation();
+        onClick();
+      }}
       style={{
         width: 32,
         height: 32,
@@ -396,7 +402,7 @@ function TBButton({
         alignItems: "center",
         justifyContent: "center",
         padding: 0,
-        color: "var(--color-text)",
+        color: textColor,
         flexShrink: 0,
       }}
       onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "var(--color-surface-mid)"; }}
@@ -446,7 +452,11 @@ function ColorPicker({
         return (
           <button
             key={c}
-            onClick={() => onChange(c)}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.nativeEvent.stopImmediatePropagation();
+              onChange(c);
+            }}
             style={{
               width: 22,
               height: 22,
@@ -533,7 +543,11 @@ function PenSlotCircle({
               {SIZE_ORDER.map((s) => (
                 <button
                   key={s}
-                  onClick={() => onUpdateSlot({ ...slot, size: s })}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    e.nativeEvent.stopImmediatePropagation();
+                    onUpdateSlot({ ...slot, size: s });
+                  }}
                   style={{
                     flex: 1,
                     height: 32,
@@ -556,7 +570,11 @@ function PenSlotCircle({
       )}
       <button
         title={isActive ? "Edit pen" : "Activate pen"}
-        onClick={handleClick}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          e.nativeEvent.stopImmediatePropagation();
+          handleClick();
+        }}
         style={{
           width: 28,
           height: 28,
@@ -634,7 +652,11 @@ function StyleControls() {
           )}
           <button
             title="Color"
-            onClick={() => setColorOpen((v) => !v)}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.nativeEvent.stopImmediatePropagation();
+              setColorOpen((v) => !v);
+            }}
             style={{
               width: 28,
               height: 28,
@@ -653,7 +675,11 @@ function StyleControls() {
         <button
           key={s}
           title={s.toUpperCase()}
-          onClick={() => handleStyleChange(DefaultSizeStyle, s)}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            e.nativeEvent.stopImmediatePropagation();
+            handleStyleChange(DefaultSizeStyle, s);
+          }}
           style={{
             width: 28,
             height: 28,
@@ -689,7 +715,11 @@ function StyleControls() {
                       <button
                         key={pct}
                         title={`${pct}%`}
-                        onClick={() => handleStyleChange({ type: "shared", id: "opacity" }, val)}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          e.nativeEvent.stopImmediatePropagation();
+                          handleStyleChange({ type: "shared", id: "opacity" }, val);
+                        }}
                         style={{
                           flex: 1,
                           height: 28,
@@ -718,7 +748,11 @@ function StyleControls() {
                         <button
                           key={d}
                           title={d}
-                          onClick={() => handleStyleChange(DefaultDashStyle, d)}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            e.nativeEvent.stopImmediatePropagation();
+                            handleStyleChange(DefaultDashStyle, d);
+                          }}
                           style={{
                             flex: 1,
                             height: 28,
@@ -750,7 +784,11 @@ function StyleControls() {
                           <button
                             key={f}
                             title={f}
-                            onClick={() => handleStyleChange(DefaultFillStyle, f)}
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              e.nativeEvent.stopImmediatePropagation();
+                              handleStyleChange(DefaultFillStyle, f);
+                            }}
                             style={{
                               flex: 1,
                               height: 28,
@@ -935,7 +973,9 @@ function ScribblToolbar() {
                         <button
                           key={geo}
                           title={geo}
-                          onClick={() => {
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            e.nativeEvent.stopImmediatePropagation();
                             editor.setCurrentTool("geo");
                             editor.setStyleForNextShapes(GeoShapeGeoStyle, geo);
                             setGeoOpen(false);
