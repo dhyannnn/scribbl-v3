@@ -215,15 +215,15 @@ function ScribblToolbar() {
               <DefaultToolbarContent />
             ) : (
               <>
+                <DrawToolbarItem />
                 <SelectToolbarItem />
                 <HandToolbarItem />
-                <DrawToolbarItem />
-                <HighlightToolbarItem />
                 <EraserToolbarItem />
-                <LaserToolbarItem />
                 <ArrowToolbarItem />
                 <TextToolbarItem />
                 <NoteToolbarItem />
+                <HighlightToolbarItem />
+                <LaserToolbarItem />
                 {/* AssetToolbarItem intentionally omitted — image uploads gated to Pro */}
               </>
             )}
@@ -603,6 +603,8 @@ export function TldrawWhiteboardEditor({
 
       if (!canEditRef.current) {
         editor.updateInstanceState({ isReadonly: true });
+      } else {
+        editor.setCurrentTool("draw");
       }
 
       // Block image/file uploads for plans that don't support asset uploads.
