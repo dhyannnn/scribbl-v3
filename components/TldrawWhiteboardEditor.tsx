@@ -4,31 +4,39 @@ import "tldraw/tldraw.css";
 import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
+  ArrowheadStylePickerSet,
   ArrowToolbarItem,
   DefaultMainMenu,
+  DefaultStylePanel,
   DefaultToolbarContent,
   DrawToolbarItem,
   EditSubmenu,
   EraserToolbarItem,
   ExtrasGroup,
+  GeoStylePickerSet,
   HandToolbarItem,
   HighlightToolbarItem,
   LaserToolbarItem,
   MobileStylePanel,
   NoteToolbarItem,
+  OpacitySlider,
   OverflowingToolbar,
   PORTRAIT_BREAKPOINT,
   PreferencesGroup,
   SelectToolbarItem,
+  SplineStylePickerSet,
+  TextStylePickerSet,
   TextToolbarItem,
   TldrawUiMenuGroup,
   TldrawUiMenuItem,
   TldrawUiMenuSubmenu,
+  TldrawUiButtonPicker,
   ViewSubmenu,
   useBreakpoint,
   useEditor,
   useExportAs,
   useReadonly,
+  useRelevantStyles,
   useTldrawUiComponents,
   useValue,
   type Editor,
@@ -36,7 +44,25 @@ import {
   type TLPageId,
   type TLShapeId,
   type TLUiMainMenuProps,
+  type TLUiStylePanelProps,
 } from "tldraw";
+import {
+  ArrowShapeArrowheadEndStyle,
+  ArrowShapeArrowheadStartStyle,
+  DefaultColorStyle,
+  DefaultDashStyle,
+  DefaultFillStyle,
+  DefaultFontStyle,
+  DefaultSizeStyle,
+  GeoShapeGeoStyle,
+  LineShapeSplineStyle,
+  getDefaultColorTheme,
+  type TLDefaultColorStyle,
+  type TLDefaultSizeStyle,
+  type TLDefaultDashStyle,
+  type TLDefaultFillStyle,
+} from "@tldraw/tlschema";
+import { useIsDarkMode } from "@tldraw/editor";
 import { getYjsProviderForRoom } from "@liveblocks/yjs";
 import { useOthers, useRoom } from "@liveblocks/react/suspense";
 import { VisibilityDropdown } from "@/components/VisibilityDropdown";
@@ -169,6 +195,7 @@ const TLDRAW_COMPONENTS = {
   InFrontOfTheCanvas: TemplatePicker,
   MainMenu: CustomMainMenu,
   MenuPanel: ScribblMenuPanel,
+  StylePanel: ScribblStylePanel,
   Toolbar: ScribblToolbar,
 } satisfies TLComponents;
 
@@ -405,6 +432,250 @@ function TemplateIcon({ template, size = 16 }: { template: PageTemplate; size?: 
   return (
     <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
       <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
+    </svg>
+  );
+}
+
+// ── Custom style panel (P4 + P6) ─────────────────────────────────────────────
+
+const COLOR_ITEMS: ReadonlyArray<{ readonly value: TLDefaultColorStyle; readonly icon: string }> = [
+  { value: "black", icon: "color" },
+  { value: "grey", icon: "color" },
+  { value: "light-violet", icon: "color" },
+  { value: "violet", icon: "color" },
+  { value: "blue", icon: "color" },
+  { value: "light-blue", icon: "color" },
+  { value: "yellow", icon: "color" },
+  { value: "orange", icon: "color" },
+  { value: "green", icon: "color" },
+  { value: "light-green", icon: "color" },
+  { value: "light-red", icon: "color" },
+  { value: "red", icon: "color" },
+];
+
+const FILL_ITEMS: ReadonlyArray<{ readonly value: TLDefaultFillStyle; readonly icon: string }> = [
+  { value: "none", icon: "fill-none" },
+  { value: "semi", icon: "fill-semi" },
+  { value: "solid", icon: "fill-solid" },
+  { value: "pattern", icon: "fill-pattern" },
+];
+
+const SIZE_STROKE_WEIGHTS: Record<TLDefaultSizeStyle, number> = { s: 1.5, m: 3, l: 5.5, xl: 9 };
+const SIZE_ORDER: TLDefaultSizeStyle[] = ["s", "m", "l", "xl"];
+const DASH_ORDER: TLDefaultDashStyle[] = ["draw", "solid", "dashed", "dotted"];
+
+function ScribblStylePanel(props: TLUiStylePanelProps) {
+  return (
+    <DefaultStylePanel {...props}>
+      <ScribblStylePanelContent />
+    </DefaultStylePanel>
+  );
+}
+
+function ScribblStylePanelContent() {
+  const editor = useEditor();
+  const isDarkMode = useIsDarkMode();
+  const styles = useRelevantStyles();
+
+  const handleStyleChange = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (style: any, value: any) => {
+      editor.run(() => {
+        if (editor.isIn("select")) {
+          editor.setStyleForSelectedShapes(style, value);
+        }
+        editor.setStyleForNextShapes(style, value);
+        editor.updateInstanceState({ isChangingStyle: true });
+      });
+    },
+    [editor],
+  );
+
+  if (!styles) return null;
+
+  const theme = getDefaultColorTheme({ isDarkMode });
+  const color = styles.get(DefaultColorStyle);
+  const fill = styles.get(DefaultFillStyle);
+  const dash = styles.get(DefaultDashStyle);
+  const size = styles.get(DefaultSizeStyle);
+  const geo = styles.get(GeoShapeGeoStyle);
+  const arrowheadEnd = styles.get(ArrowShapeArrowheadEndStyle);
+  const arrowheadStart = styles.get(ArrowShapeArrowheadStartStyle);
+  const spline = styles.get(LineShapeSplineStyle);
+  const font = styles.get(DefaultFontStyle);
+
+  const showPickers = fill !== undefined || dash !== undefined || size !== undefined;
+  const showGeoSection = geo !== undefined || arrowheadEnd !== undefined || arrowheadStart !== undefined || spline !== undefined;
+
+  return (
+    <>
+      <div tabIndex={-1} className="tlui-style-panel__section__common" aria-label="style panel styles" data-testid="style.panel">
+        {color !== undefined && (
+          <TldrawUiButtonPicker
+            title="Color"
+            uiType="color"
+            style={DefaultColorStyle}
+            items={COLOR_ITEMS}
+            value={color}
+            onValueChange={handleStyleChange}
+            theme={theme}
+          />
+        )}
+        <OpacitySlider />
+      </div>
+      {showPickers && (
+        <div className="tlui-style-panel__section" aria-label="style panel styles">
+          {fill !== undefined && (
+            <TldrawUiButtonPicker
+              title="Fill"
+              uiType="fill"
+              style={DefaultFillStyle}
+              items={FILL_ITEMS}
+              value={fill}
+              onValueChange={handleStyleChange}
+              theme={theme}
+            />
+          )}
+          {dash !== undefined && (
+            <ScribblDashRow
+              value={dash.type === "shared" ? dash.value : undefined}
+              onChange={(v) => handleStyleChange(DefaultDashStyle, v)}
+            />
+          )}
+          {size !== undefined && (
+            <ScribblSizeRow
+              value={size.type === "shared" ? size.value : undefined}
+              onChange={(v) => handleStyleChange(DefaultSizeStyle, v)}
+            />
+          )}
+        </div>
+      )}
+      {font !== undefined && (
+        <TextStylePickerSet theme={theme} styles={styles} />
+      )}
+      {showGeoSection && (
+        <div className="tlui-style-panel__section" aria-label="style panel styles">
+          <GeoStylePickerSet styles={styles} />
+          <ArrowheadStylePickerSet styles={styles} />
+          <SplineStylePickerSet styles={styles} />
+        </div>
+      )}
+    </>
+  );
+}
+
+function ScribblSizeRow({
+  value,
+  onChange,
+}: {
+  value: TLDefaultSizeStyle | undefined;
+  onChange: (v: TLDefaultSizeStyle) => void;
+}) {
+  return (
+    <div className="tlui-style-panel__row" style={{ gap: 2, padding: "2px 0" }}>
+      {SIZE_ORDER.map((s) => {
+        const active = value === s;
+        return (
+          <button
+            key={s}
+            title={s.toUpperCase()}
+            onClick={() => onChange(s)}
+            style={{
+              flex: 1,
+              height: 28,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 4,
+              background: active ? "var(--color-surface-highest)" : "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+              <line
+                x1={4} y1={8} x2={24} y2={8}
+                stroke="currentColor"
+                strokeWidth={SIZE_STROKE_WEIGHTS[s]}
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ScribblDashRow({
+  value,
+  onChange,
+}: {
+  value: TLDefaultDashStyle | undefined;
+  onChange: (v: TLDefaultDashStyle) => void;
+}) {
+  return (
+    <div className="tlui-style-panel__row" style={{ gap: 2, padding: "2px 0" }}>
+      {DASH_ORDER.map((d) => {
+        const active = value === d;
+        return (
+          <button
+            key={d}
+            title={d}
+            onClick={() => onChange(d)}
+            style={{
+              flex: 1,
+              height: 28,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 4,
+              background: active ? "var(--color-surface-highest)" : "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            <DashIcon type={d} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DashIcon({ type }: { type: TLDefaultDashStyle }) {
+  if (type === "draw") {
+    return (
+      <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+        <path
+          d="M4,8 C7,5 9,11 12,8 C15,5 17,11 20,8 C22,6 24,8 24,8"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+  if (type === "solid") {
+    return (
+      <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+        <line x1={4} y1={8} x2={24} y2={8} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "dashed") {
+    return (
+      <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+        <line x1={4} y1={8} x2={24} y2={8} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeDasharray="6 3" />
+      </svg>
+    );
+  }
+  return (
+    <svg width={28} height={16} viewBox="0 0 28 16" style={{ display: "block" }}>
+      <line x1={4} y1={8} x2={24} y2={8} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeDasharray="2 4" />
     </svg>
   );
 }
