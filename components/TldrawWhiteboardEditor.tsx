@@ -45,6 +45,8 @@ import { noteTitleMaxLength } from "@/lib/note-title";
 import { useTldrawYjsStore } from "@/components/tldraw-yjs-store";
 import {
   COVER_TEMPLATES,
+  DARK_TEMPLATES,
+  LIGHT_TEMPLATES,
   getPageBackgroundShapeId,
   PAGE_H,
   PAGE_W,
@@ -266,25 +268,24 @@ function TemplatePicker() {
     setOpen(false);
   }
 
-  const regularTemplates: PageTemplate[] = ["blank", "lined", "dotted", "grid"];
-
   return (
     <div
       style={{ position: "absolute", bottom: 56, left: 8, zIndex: 500 }}
       onPointerDown={(e) => e.stopPropagation()}
     >
       {open && (
-        <div className="mb-1 overflow-hidden rounded-lg border border-[#d8d8ce] bg-white shadow-lg">
-          <div className="border-b border-[#d8d8ce] px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#777970]">
-              Template
+        <div className="mb-1 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg">
+          {/* Light section */}
+          <div className="border-b border-[var(--color-border)] px-3 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">
+              Light
             </p>
             <div className="mt-2 grid grid-cols-4 gap-1">
-              {regularTemplates.map((t) => (
+              {LIGHT_TEMPLATES.map((t) => (
                 <button
                   key={t}
                   onClick={() => apply(t)}
-                  className={`flex flex-col items-center gap-1 rounded-md p-2 text-xs transition hover:bg-[#f0f0eb] ${current === t ? "bg-[#eef5ef] font-semibold text-[#2f604b]" : "text-[#4d4f47]"}`}
+                  className={`flex flex-col items-center gap-1 rounded-md p-2 text-xs transition hover:bg-[var(--color-surface-mid)] ${current === t ? "bg-[var(--color-secondary-dim)] font-semibold text-[var(--color-secondary)]" : "text-[var(--color-muted)]"}`}
                 >
                   <TemplateIcon template={t} />
                   {TEMPLATE_LABELS[t]}
@@ -292,8 +293,27 @@ function TemplatePicker() {
               ))}
             </div>
           </div>
+          {/* Dark section */}
+          <div className="border-b border-[var(--color-border)] px-3 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">
+              Dark
+            </p>
+            <div className="mt-2 grid grid-cols-4 gap-1">
+              {DARK_TEMPLATES.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => apply(t)}
+                  className={`flex flex-col items-center gap-1 rounded-md p-2 text-xs transition hover:bg-[var(--color-surface-mid)] ${current === t ? "bg-[var(--color-secondary-dim)] font-semibold text-[var(--color-secondary)]" : "text-[var(--color-muted)]"}`}
+                >
+                  <TemplateIcon template={t} />
+                  {TEMPLATE_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Cover section */}
           <div className="px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#777970]">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">
               Cover
             </p>
             <div className="mt-2 flex gap-1">
@@ -302,8 +322,8 @@ function TemplatePicker() {
                   key={t}
                   onClick={() => apply(t)}
                   title={TEMPLATE_LABELS[t]}
-                  className={`h-8 w-8 rounded-md transition hover:scale-110 ${current === t ? "ring-2 ring-[#2f604b] ring-offset-1" : ""}`}
-                  style={{ background: COVER_BG[t] }}
+                  className={`h-8 w-8 rounded-md transition hover:scale-110 ${current === t ? "ring-2 ring-[var(--color-secondary)] ring-offset-1" : ""}`}
+                  style={{ background: COVER_COLORS_MAP[t] }}
                 />
               ))}
             </div>
@@ -312,7 +332,7 @@ function TemplatePicker() {
       )}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-md border border-[#d8d8ce] bg-white px-2.5 py-1.5 text-xs font-medium text-[#4d4f47] shadow-sm transition hover:bg-[#f7f7f2]"
+        className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:bg-[var(--color-surface-mid)]"
       >
         <TemplateIcon template={current} size={14} />
         {TEMPLATE_LABELS[current]}
@@ -321,7 +341,7 @@ function TemplatePicker() {
   );
 }
 
-const COVER_BG: Record<string, string> = {
+const COVER_COLORS_MAP: Record<string, string> = {
   "cover-blue": "#1e40af",
   "cover-green": "#166534",
   "cover-rose": "#9f1239",
@@ -330,53 +350,61 @@ const COVER_BG: Record<string, string> = {
 
 function TemplateIcon({ template, size = 16 }: { template: PageTemplate; size?: number }) {
   const s = size;
-  const cover = COVER_TEMPLATES.includes(template);
-  if (cover) {
+
+  if (COVER_TEMPLATES.includes(template)) {
     return (
       <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-        <rect width={16} height={10} rx={1} fill={COVER_BG[template] ?? "#1e40af"} />
+        <rect width={16} height={10} rx={1} fill={COVER_COLORS_MAP[template] ?? "#1e40af"} />
       </svg>
     );
   }
-  if (template === "lined") {
+
+  const dark = DARK_TEMPLATES.includes(template);
+  const bg = dark ? "#1a1a1a" : "white";
+  const border = dark ? "rgba(255,255,255,0.25)" : "#d1d5db";
+  const lineStroke = dark ? "rgba(255,255,255,0.18)" : "#cbd5e1";
+  const dotFill = dark ? "rgba(255,255,255,0.3)" : "#94a3b8";
+  const baseName = dark ? template.replace("-dark", "") : template;
+
+  if (baseName === "lined") {
     return (
       <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-        <rect width={16} height={10} rx={1} fill="white" stroke="#d1d5db" strokeWidth={0.5} />
+        <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
         {[2.5, 5, 7.5].map((y) => (
-          <line key={y} x1={2} y1={y} x2={14} y2={y} stroke="#cbd5e1" strokeWidth={0.8} />
+          <line key={y} x1={2} y1={y} x2={14} y2={y} stroke={lineStroke} strokeWidth={0.8} />
         ))}
       </svg>
     );
   }
-  if (template === "dotted") {
+  if (baseName === "dotted") {
     return (
       <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-        <rect width={16} height={10} rx={1} fill="white" stroke="#d1d5db" strokeWidth={0.5} />
+        <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
         {[3, 7, 11].flatMap((x) =>
           [2.5, 5, 7.5].map((y) => (
-            <circle key={`${x}-${y}`} cx={x} cy={y} r={0.7} fill="#94a3b8" />
+            <circle key={`${x}-${y}`} cx={x} cy={y} r={0.7} fill={dotFill} />
           )),
         )}
       </svg>
     );
   }
-  if (template === "grid") {
+  if (baseName === "grid") {
     return (
       <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-        <rect width={16} height={10} rx={1} fill="white" stroke="#d1d5db" strokeWidth={0.5} />
+        <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
         {[4, 8, 12].map((x) => (
-          <line key={`v${x}`} x1={x} y1={0} x2={x} y2={10} stroke="#cbd5e1" strokeWidth={0.5} />
+          <line key={`v${x}`} x1={x} y1={0} x2={x} y2={10} stroke={lineStroke} strokeWidth={0.5} />
         ))}
         {[2.5, 5, 7.5].map((y) => (
-          <line key={`h${y}`} x1={0} y1={y} x2={16} y2={y} stroke="#cbd5e1" strokeWidth={0.5} />
+          <line key={`h${y}`} x1={0} y1={y} x2={16} y2={y} stroke={lineStroke} strokeWidth={0.5} />
         ))}
       </svg>
     );
   }
-  // blank
+  // blank (light or dark)
   return (
     <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-      <rect width={16} height={10} rx={1} fill="white" stroke="#d1d5db" strokeWidth={0.5} />
+      <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
     </svg>
   );
 }
