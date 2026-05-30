@@ -162,8 +162,8 @@ function TemplateContent({
 function PageBackground({ template, w, h }: { template: PageTemplate; w: number; h: number }) {
   const dark = isDarkTemplate(template) || isCoverTemplate(template);
   const glow = dark
-    ? "drop-shadow(0 4px 40px rgba(0,0,0,0.55)) drop-shadow(0 0 1px rgba(255,255,255,0.07))"
-    : "drop-shadow(0 4px 28px rgba(0,0,0,0.13)) drop-shadow(0 1px 6px rgba(0,0,0,0.07))";
+    ? "drop-shadow(0 8px 60px rgba(0,0,0,0.85)) drop-shadow(0 2px 10px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(91,156,246,0.18)) drop-shadow(0 0 2px rgba(255,255,255,0.14))"
+    : "drop-shadow(0 8px 40px rgba(0,0,0,0.22)) drop-shadow(0 20px 60px rgba(0,0,0,0.10)) drop-shadow(0 0 40px rgba(33,112,228,0.07))";
 
   return (
     <TemplateContent
