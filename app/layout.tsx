@@ -29,23 +29,27 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://scribblapp.ca"),
-  title: "Scribbl",
-  description: "Collaborative workspaces for teams, classes, and projects.",
-  icons: {
-    icon: "/scribbl-logo.png",
-    apple: "/scribbl-logo.png",
+  title: {
+    default: "Scribbl — Collaborative Workspaces for Teams & Students",
+    template: "%s | Scribbl",
   },
+  description: "Scribbl is an all-in-one collaborative workspace — notes, whiteboards, meetings, chat, and files in one place. Built for teams, students, and classrooms.",
+  keywords: ["collaborative workspace", "team notes", "online whiteboard", "collaborative notes", "student workspace", "team meetings", "scribbl"],
   openGraph: {
-    title: "Scribbl",
-    description: "Collaborative workspaces for teams, classes, and projects.",
+    title: "Scribbl — Collaborative Workspaces for Teams & Students",
+    description: "Scribbl is an all-in-one collaborative workspace — notes, whiteboards, meetings, chat, and files in one place.",
     url: "https://scribblapp.ca",
     siteName: "Scribbl",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Scribbl",
-    description: "Collaborative workspaces for teams, classes, and projects.",
+    title: "Scribbl — Collaborative Workspaces for Teams & Students",
+    description: "Scribbl is an all-in-one collaborative workspace — notes, whiteboards, meetings, chat, and files in one place.",
+  },
+  icons: {
+    icon: "/scribbl-logo.png",
+    apple: "/scribbl-logo.png",
   },
 };
 

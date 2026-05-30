@@ -1,5 +1,14 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Scribbl — Collaborative Workspaces for Teams & Students",
+  description: "Scribbl is an all-in-one collaborative workspace — notes, whiteboards, meetings, chat, and files in one place. Built for teams, students, and classrooms.",
+  alternates: {
+    canonical: "https://scribblapp.ca",
+  },
+};
 import { LocalTime } from "@/components/LocalTime";
 import { LandingPage } from "@/components/LandingPage";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -18,7 +27,30 @@ export default async function Home({
   searchParams: Promise<{ workspace?: string }>;
 }) {
   const currentUser = await getCurrentUser();
-  if (!currentUser) return <LandingPage />;
+  if (!currentUser) return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "Scribbl",
+            url: "https://scribblapp.ca",
+            description: "All-in-one collaborative workspace — notes, whiteboards, meetings, chat, and files in one place.",
+            applicationCategory: "ProductivityApplication",
+            operatingSystem: "Web",
+            offers: {
+              "@type": "Offer",
+              price: "0",
+              priceCurrency: "CAD",
+            },
+          }),
+        }}
+      />
+      <LandingPage />
+    </>
+  );
 
   const { workspace: workspaceStatus } = await searchParams;
   const now = new Date();
