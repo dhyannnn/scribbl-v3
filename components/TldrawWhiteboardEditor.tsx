@@ -34,11 +34,11 @@ import {
   DefaultFontStyle,
   DefaultHorizontalAlignStyle,
   DefaultSizeStyle,
+  DefaultTextAlignStyle,
   GeoShapeGeoStyle,
   getDefaultColorTheme,
   type TLDefaultColorStyle,
   type TLDefaultFontStyle,
-  type TLDefaultHorizontalAlignStyle,
   type TLDefaultSizeStyle,
   type TLDefaultDashStyle,
   type TLDefaultFillStyle,
@@ -618,7 +618,7 @@ const FONT_OPTIONS: { value: TLDefaultFontStyle; label: string; family: string }
   { value: "mono", label: "Monospace",   family: "'tldraw_mono', monospace" },
 ];
 
-const ALIGN_OPTIONS: { value: TLDefaultHorizontalAlignStyle; title: string; icon: React.ReactNode }[] = [
+const ALIGN_OPTIONS: { value: "start" | "middle" | "end"; title: string; icon: React.ReactNode }[] = [
   {
     value: "start", title: "Align left",
     icon: <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" style={{ display: "block" }}>
@@ -674,7 +674,9 @@ function StyleControls() {
   const dash = styles.get(DefaultDashStyle);
   const size = styles.get(DefaultSizeStyle);
   const font = styles.get(DefaultFontStyle);
-  const align = styles.get(DefaultHorizontalAlignStyle);
+  const hAlign = styles.get(DefaultHorizontalAlignStyle);
+  const tAlign = styles.get(DefaultTextAlignStyle);
+  const align = hAlign ?? tAlign;
 
   const hasAny = color !== undefined || size !== undefined || dash !== undefined || fill !== undefined || font !== undefined || align !== undefined;
   if (!hasAny) return null;
@@ -794,7 +796,10 @@ function StyleControls() {
           key={value}
           title={title}
           active={currentAlign === value || (!currentAlign && value === "middle")}
-          onClick={() => handleStyleChange(DefaultHorizontalAlignStyle, value)}
+          onClick={() => {
+            if (hAlign !== undefined) handleStyleChange(DefaultHorizontalAlignStyle, value);
+            if (tAlign !== undefined) handleStyleChange(DefaultTextAlignStyle, value);
+          }}
         >
           {icon}
         </TBButton>
