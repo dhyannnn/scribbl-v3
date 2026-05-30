@@ -900,7 +900,13 @@ function ScribblToolbar() {
             slot={slot}
             isActive={currentToolId === "draw" && activeSlotIdx === idx}
             onActivate={() => activateSlot(idx)}
-            onUpdateSlot={(updated) => setSlot(idx, updated)}
+            onUpdateSlot={(updated) => {
+                setSlot(idx, updated);
+                if (idx === activeSlotIdx) {
+                  editor.setStyleForNextShapes(DefaultColorStyle, updated.color);
+                  editor.setStyleForNextShapes(DefaultSizeStyle, updated.size);
+                }
+              }}
           />
         ))}
         <Divider />
