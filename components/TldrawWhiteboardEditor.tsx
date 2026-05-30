@@ -3,6 +3,7 @@
 import "tldraw/tldraw.css";
 import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import {
   DefaultMainMenu,
   EditSubmenu,
@@ -346,28 +347,31 @@ function ToolIcon({ tool }: { tool: string }) {
   return null;
 }
 
-const PILL_STYLE: React.CSSProperties = {
+function usePillColors() {
+  const isDark = useIsDarkMode();
+  return useMemo(() => ({
+    bg:        isDark ? "#1e1e1e"                  : "#f8f9fa",
+    border:    isDark ? "rgba(255,255,255,0.12)"   : "rgba(0,0,0,0.10)",
+    hover:     isDark ? "rgba(255,255,255,0.08)"   : "rgba(0,0,0,0.06)",
+    active:    isDark ? "rgba(255,255,255,0.16)"   : "rgba(0,0,0,0.10)",
+    divider:   isDark ? "rgba(255,255,255,0.10)"   : "rgba(0,0,0,0.10)",
+    text:      isDark ? "rgba(255,255,255,0.85)"   : "rgba(0,0,0,0.80)",
+    popoverBg: isDark ? "#1e1e1e"                  : "#ffffff",
+    shadow:    isDark ? "0 4px 16px rgba(0,0,0,0.4)" : "0 4px 16px rgba(0,0,0,0.12)",
+  }), [isDark]);
+}
+
+const PILL_BASE: React.CSSProperties = {
   position: "fixed",
   bottom: 16,
   left: "50%",
   transform: "translateX(-50%)",
   zIndex: 500,
-  background: "var(--color-surface)",
-  border: "1px solid var(--color-border)",
   borderRadius: 999,
-  boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
   padding: "6px 10px",
   display: "flex",
   alignItems: "center",
   gap: 4,
-};
-
-const DIVIDER: React.CSSProperties = {
-  width: 1,
-  height: 20,
-  background: "var(--color-border)",
-  margin: "0 4px",
-  flexShrink: 0,
 };
 
 function TBButton({
@@ -381,32 +385,28 @@ function TBButton({
   title: string;
   children: React.ReactNode;
 }) {
-  const isDarkMode = useIsDarkMode();
-  const textColor = isDarkMode ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.8)";
+  const c = usePillColors();
   return (
     <button
       title={title}
-      onPointerDown={(e) => {
-        e.stopPropagation();
-        e.nativeEvent.stopImmediatePropagation();
-        onClick();
-      }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={onClick}
       style={{
         width: 32,
         height: 32,
         borderRadius: 6,
         border: "none",
-        background: active ? "var(--color-surface-highest)" : "transparent",
+        background: active ? c.active : "transparent",
         cursor: "pointer",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: 0,
-        color: textColor,
+        color: c.text,
         flexShrink: 0,
       }}
-      onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "var(--color-surface-mid)"; }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = active ? "var(--color-surface-highest)" : "transparent"; }}
+      onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = c.hover; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = active ? c.active : "transparent"; }}
     >
       {children}
     </button>
@@ -452,11 +452,8 @@ function ColorPicker({
         return (
           <button
             key={c}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              e.nativeEvent.stopImmediatePropagation();
-              onChange(c);
-            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => onChange(c)}
             style={{
               width: 22,
               height: 22,
@@ -475,22 +472,34 @@ function ColorPicker({
   );
 }
 
-const POPOVER_STYLE: React.CSSProperties = {
+const POPOVER_BASE: React.CSSProperties = {
   position: "absolute",
   bottom: "calc(100% + 8px)",
   left: "50%",
   transform: "translateX(-50%)",
   zIndex: 600,
-  background: "var(--color-surface)",
-  border: "1px solid var(--color-border)",
   borderRadius: 8,
   padding: 8,
-  boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
 };
 
+function usePopoverStyle(overrides?: React.CSSProperties): React.CSSProperties {
+  const c = usePillColors();
+  return useMemo(
+    () => ({ ...POPOVER_BASE, background: c.popoverBg, border: `1px solid ${c.border}`, boxShadow: c.shadow, ...overrides }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [c.popoverBg, c.border, c.shadow],
+  );
+}
+
+function Divider() {
+  const c = usePillColors();
+  return <div style={{ width: 1, height: 20, background: c.divider, margin: "0 4px", flexShrink: 0 }} />;
+}
+
 function PopoverSection({ label }: { label: string }) {
+  const c = usePillColors();
   return (
-    <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-subtle)", margin: "6px 0 4px" }}>
+    <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: c.text, opacity: 0.5, margin: "6px 0 4px" }}>
       {label}
     </p>
   );
@@ -512,6 +521,8 @@ function PenSlotCircle({
   const editor = useEditor();
   const isDarkMode = useIsDarkMode();
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const c = usePillColors();
+  const popoverStyle = usePopoverStyle({ width: 184 });
   const theme = getDefaultColorTheme({ isDarkMode });
   const hexColor = (theme as unknown as Record<string, { solid: string }>)[slot.color]?.solid ?? "#000";
 
@@ -535,19 +546,16 @@ function PenSlotCircle({
       {popoverOpen && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setPopoverOpen(false)} />
-          <div style={{ ...POPOVER_STYLE, width: 184 }}>
+          <div style={popoverStyle}>
             <PopoverSection label="Color" />
-            <ColorPicker value={slot.color} onChange={(c) => onUpdateSlot({ ...slot, color: c })} />
+            <ColorPicker value={slot.color} onChange={(col) => onUpdateSlot({ ...slot, color: col })} />
             <PopoverSection label="Size" />
             <div style={{ display: "flex", gap: 3 }}>
               {SIZE_ORDER.map((s) => (
                 <button
                   key={s}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    e.nativeEvent.stopImmediatePropagation();
-                    onUpdateSlot({ ...slot, size: s });
-                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => onUpdateSlot({ ...slot, size: s })}
                   style={{
                     flex: 1,
                     height: 32,
@@ -555,7 +563,7 @@ function PenSlotCircle({
                     alignItems: "center",
                     justifyContent: "center",
                     borderRadius: 4,
-                    background: slot.size === s ? "var(--color-surface-highest)" : "transparent",
+                    background: slot.size === s ? c.active : "transparent",
                     border: "none",
                     cursor: "pointer",
                     padding: 0,
@@ -570,11 +578,8 @@ function PenSlotCircle({
       )}
       <button
         title={isActive ? "Edit pen" : "Activate pen"}
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          e.nativeEvent.stopImmediatePropagation();
-          handleClick();
-        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={handleClick}
         style={{
           width: 28,
           height: 28,
@@ -599,6 +604,9 @@ function StyleControls() {
   const styles = useRelevantStyles();
   const [colorOpen, setColorOpen] = useState(false);
   const [tuneOpen, setTuneOpen] = useState(false);
+  const c = usePillColors();
+  const colorPopoverStyle = usePopoverStyle({ width: 168 });
+  const tunePopoverStyle = usePopoverStyle({ width: 200, right: 0, left: "auto", transform: "none" });
 
   const handleStyleChange = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -637,7 +645,7 @@ function StyleControls() {
 
   return (
     <>
-      <div style={DIVIDER} />
+      <Divider />
 
       {/* Color swatch */}
       {color !== undefined && (
@@ -645,23 +653,20 @@ function StyleControls() {
           {colorOpen && (
             <>
               <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setColorOpen(false)} />
-              <div style={{ ...POPOVER_STYLE, width: 168 }}>
-                <ColorPicker value={currentColor} onChange={(c) => { handleStyleChange(DefaultColorStyle, c); }} />
+              <div style={colorPopoverStyle}>
+                <ColorPicker value={currentColor} onChange={(cv) => { handleStyleChange(DefaultColorStyle, cv); }} />
               </div>
             </>
           )}
           <button
             title="Color"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              e.nativeEvent.stopImmediatePropagation();
-              setColorOpen((v) => !v);
-            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setColorOpen((v) => !v)}
             style={{
               width: 28,
               height: 28,
               borderRadius: "50%",
-              border: "1px solid var(--color-border)",
+              border: `1px solid ${c.border}`,
               background: currentColorHex,
               cursor: "pointer",
               flexShrink: 0,
@@ -675,23 +680,21 @@ function StyleControls() {
         <button
           key={s}
           title={s.toUpperCase()}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            e.nativeEvent.stopImmediatePropagation();
-            handleStyleChange(DefaultSizeStyle, s);
-          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => handleStyleChange(DefaultSizeStyle, s)}
           style={{
             width: 28,
             height: 28,
             borderRadius: 4,
             border: "none",
-            background: currentSize === s ? "var(--color-surface-highest)" : "transparent",
+            background: currentSize === s ? c.active : "transparent",
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             padding: 0,
             flexShrink: 0,
+            color: c.text,
           }}
         >
           <SizeDot size={s} active={currentSize === s} />
@@ -704,8 +707,7 @@ function StyleControls() {
           {tuneOpen && (
             <>
               <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setTuneOpen(false)} />
-              <div style={{ ...POPOVER_STYLE, width: 200, right: 0, left: "auto", transform: "none" }}>
-                {/* Opacity */}
+              <div style={tunePopoverStyle}>
                 <PopoverSection label="Opacity" />
                 <div style={{ display: "flex", gap: 3 }}>
                   {opacityOptions.map((pct) => {
@@ -715,18 +717,15 @@ function StyleControls() {
                       <button
                         key={pct}
                         title={`${pct}%`}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          e.nativeEvent.stopImmediatePropagation();
-                          handleStyleChange({ type: "shared", id: "opacity" }, val);
-                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => handleStyleChange({ type: "shared", id: "opacity" }, val)}
                         style={{
                           flex: 1,
                           height: 28,
                           borderRadius: "50%",
-                          border: "1px solid var(--color-border)",
+                          border: `1px solid ${c.border}`,
                           background: isActive ? "var(--color-secondary)" : "transparent",
-                          color: isActive ? "white" : "var(--color-text)",
+                          color: isActive ? "white" : c.text,
                           cursor: "pointer",
                           fontSize: 9,
                           fontWeight: 600,
@@ -738,8 +737,6 @@ function StyleControls() {
                     );
                   })}
                 </div>
-
-                {/* Dash */}
                 {dash !== undefined && (
                   <>
                     <PopoverSection label="Stroke" />
@@ -748,22 +745,12 @@ function StyleControls() {
                         <button
                           key={d}
                           title={d}
-                          onPointerDown={(e) => {
-                            e.stopPropagation();
-                            e.nativeEvent.stopImmediatePropagation();
-                            handleStyleChange(DefaultDashStyle, d);
-                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={() => handleStyleChange(DefaultDashStyle, d)}
                           style={{
-                            flex: 1,
-                            height: 28,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            borderRadius: 4,
-                            background: currentDash === d ? "var(--color-surface-highest)" : "transparent",
-                            border: "none",
-                            cursor: "pointer",
-                            padding: 0,
+                            flex: 1, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+                            borderRadius: 4, background: currentDash === d ? c.active : "transparent",
+                            border: "none", cursor: "pointer", padding: 0, color: c.text,
                           }}
                         >
                           <DashIcon type={d} />
@@ -772,40 +759,25 @@ function StyleControls() {
                     </div>
                   </>
                 )}
-
-                {/* Fill */}
                 {fill !== undefined && (
                   <>
                     <PopoverSection label="Fill" />
                     <div style={{ display: "flex", gap: 2 }}>
-                      {(["none", "semi", "solid", "pattern"] as TLDefaultFillStyle[]).map((f) => {
-                        const isActive = currentFill === f;
-                        return (
-                          <button
-                            key={f}
-                            title={f}
-                            onPointerDown={(e) => {
-                              e.stopPropagation();
-                              e.nativeEvent.stopImmediatePropagation();
-                              handleStyleChange(DefaultFillStyle, f);
-                            }}
-                            style={{
-                              flex: 1,
-                              height: 28,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              borderRadius: 4,
-                              background: isActive ? "var(--color-surface-highest)" : "transparent",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: 0,
-                            }}
-                          >
-                            <FillIcon type={f} />
-                          </button>
-                        );
-                      })}
+                      {(["none", "semi", "solid", "pattern"] as TLDefaultFillStyle[]).map((f) => (
+                        <button
+                          key={f}
+                          title={f}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={() => handleStyleChange(DefaultFillStyle, f)}
+                          style={{
+                            flex: 1, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+                            borderRadius: 4, background: currentFill === f ? c.active : "transparent",
+                            border: "none", cursor: "pointer", padding: 0, color: c.text,
+                          }}
+                        >
+                          <FillIcon type={f} />
+                        </button>
+                      ))}
                     </div>
                   </>
                 )}
@@ -895,6 +867,17 @@ function ScribblToolbar() {
     setActiveSlotIdx(idx);
   }
 
+  const c = usePillColors();
+  const geoPopoverStyle = usePopoverStyle({ width: 160, left: "50%", transform: "translateX(-50%)" });
+  const overflowPopoverStyle = usePopoverStyle({ display: "flex", gap: 4, padding: 6 });
+
+  const pillStyle: React.CSSProperties = {
+    ...PILL_BASE,
+    background: c.bg,
+    border: `1px solid ${c.border}`,
+    boxShadow: c.shadow,
+  };
+
   if (isReadonlyMode) return null;
 
   const chevronBtn = (
@@ -909,8 +892,8 @@ function ScribblToolbar() {
 
   // Collapsed state: pen slots + chevron only
   if (collapsed) {
-    return (
-      <div style={PILL_STYLE} onPointerDown={(e) => e.stopPropagation()}>
+    return createPortal(
+      <div style={pillStyle} onPointerDown={(e) => e.stopPropagation()}>
         {penSlots.map((slot, idx) => (
           <PenSlotCircle
             key={idx}
@@ -920,9 +903,10 @@ function ScribblToolbar() {
             onUpdateSlot={(updated) => setSlot(idx, updated)}
           />
         ))}
-        <div style={DIVIDER} />
+        <Divider />
         {chevronBtn}
-      </div>
+      </div>,
+      document.body,
     );
   }
 
@@ -939,8 +923,8 @@ function ScribblToolbar() {
 
   const isGeoPicker = currentToolId === "geo";
 
-  return (
-    <div style={PILL_STYLE} onPointerDown={(e) => e.stopPropagation()}>
+  return createPortal(
+    <div style={pillStyle} onPointerDown={(e) => e.stopPropagation()}>
       {/* Pen slots */}
       {penSlots.map((slot, idx) => (
         <PenSlotCircle
@@ -952,34 +936,28 @@ function ScribblToolbar() {
         />
       ))}
 
-      <div style={DIVIDER} />
+      <Divider />
 
       {/* Tool buttons */}
       {tools.map(({ id, label }) => {
         if (id === "geo") {
           return (
-            <div key="geo" style={{ position: "relative" }} onPointerDown={(e) => e.stopPropagation()}>
+            <div key="geo" style={{ position: "relative" }}>
               {geoOpen && (
                 <>
                   <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setGeoOpen(false)} />
-                  <div style={{
-                    ...POPOVER_STYLE,
-                    width: 160,
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                  }}>
+                  <div style={geoPopoverStyle}>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4 }}>
                       {GEO_OPTIONS.map((geo) => (
                         <button
                           key={geo}
                           title={geo}
-                          onPointerDown={(e) => {
-                            e.stopPropagation();
-                            e.nativeEvent.stopImmediatePropagation();
+                          onClick={() => {
                             editor.setCurrentTool("geo");
                             editor.setStyleForNextShapes(GeoShapeGeoStyle, geo);
                             setGeoOpen(false);
                           }}
+                          onPointerDown={(e) => e.stopPropagation()}
                           style={{
                             width: 32,
                             height: 32,
@@ -991,9 +969,9 @@ function ScribblToolbar() {
                             background: "transparent",
                             cursor: "pointer",
                             padding: 0,
-                            color: "var(--color-text)",
+                            color: c.text,
                           }}
-                          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--color-surface-mid)"; }}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = c.hover; }}
                           onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
                         >
                           <GeoPreview geo={geo} />
@@ -1028,11 +1006,11 @@ function ScribblToolbar() {
       })}
 
       {/* Overflow: Highlight + Laser */}
-      <div style={{ position: "relative" }} onPointerDown={(e) => e.stopPropagation()}>
+      <div style={{ position: "relative" }}>
         {overflowOpen && (
           <>
             <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setOverflowOpen(false)} />
-            <div style={{ ...POPOVER_STYLE, display: "flex", gap: 4, padding: 6 }}>
+            <div style={overflowPopoverStyle}>
               <TBButton title="Highlight" active={currentToolId === "highlight"} onClick={() => { activateTool("highlight"); setOverflowOpen(false); }}>
                 <ToolIcon tool="highlight" />
               </TBButton>
@@ -1054,11 +1032,12 @@ function ScribblToolbar() {
       {/* Style controls */}
       <StyleControls />
 
-      <div style={DIVIDER} />
+      <Divider />
 
       {/* Collapse chevron */}
       {chevronBtn}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1402,6 +1381,8 @@ export function TldrawWhiteboardEditor({
   const handleMount = useCallback(
     (editor: Editor) => {
       editorRef.current = editor;
+
+      editor.user.updateUserPreferences({ colorScheme: "system" });
 
       editor.setCameraOptions({
         constraints: {
