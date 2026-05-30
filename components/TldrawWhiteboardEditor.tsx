@@ -13,6 +13,7 @@ import {
   TldrawUiMenuItem,
   TldrawUiMenuSubmenu,
   ViewSubmenu,
+  useActions,
   useEditor,
   useExportAs,
   useReadonly,
@@ -831,6 +832,8 @@ function ScribblToolbar() {
   const isReadonlyMode = useReadonly();
   const { penSlots, setSlot } = useContext(PenSlotCtx);
   const editor = useEditor();
+  const { canUploadAssets } = useContext(ExportCtx);
+  const actions = useActions();
 
   const [activeSlotIdx, setActiveSlotIdx] = useState<number | null>(null);
   const [geoOpen, setGeoOpen] = useState(false);
@@ -1035,6 +1038,17 @@ function ScribblToolbar() {
         </TBButton>
       </div>
 
+      {/* Image upload */}
+      {canUploadAssets && (
+        <TBButton title="Upload image" onClick={() => actions["insert-media"]?.onSelect("toolbar")}>
+          <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
+            <rect x={1.5} y={3.5} width={15} height={11} rx={1.5} />
+            <circle cx={6} cy={7.5} r={1.3} />
+            <path d="M1.5,12.5 L5.5,8.5 L8.5,11.5 L11,9 L16.5,14.5" />
+          </svg>
+        </TBButton>
+      )}
+
       {/* Style controls */}
       <StyleControls />
 
@@ -1049,8 +1063,42 @@ function ScribblToolbar() {
 
 // ── Template picker ───────────────────────────────────────────────────────────
 
+type PillColors = ReturnType<typeof usePillColors>;
+
+function TemplateTile({
+  template, active, c, onClick,
+}: { template: PageTemplate; active: boolean; c: PillColors; onClick: () => void }) {
+  return (
+    <button
+      title={TEMPLATE_LABELS[template]}
+      onClick={onClick}
+      onPointerDown={(e) => e.stopPropagation()}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 4,
+        padding: "5px 3px 4px",
+        borderRadius: 8,
+        border: `1.5px solid ${active ? c.text : "transparent"}`,
+        background: active ? c.active : "transparent",
+        cursor: "pointer",
+        outline: "none",
+      }}
+      onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = c.hover; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = active ? c.active : "transparent"; }}
+    >
+      <TemplateIcon template={template} size={40} />
+      <span style={{ fontSize: 9, fontWeight: 500, color: c.text, opacity: active ? 1 : 0.55, letterSpacing: "0.01em", lineHeight: 1 }}>
+        {TEMPLATE_LABELS[template]}
+      </span>
+    </button>
+  );
+}
+
 function TemplatePicker() {
   const editor = useEditor();
+  const c = usePillColors();
   const [open, setOpen] = useState(false);
 
   const bgShape = useValue(
@@ -1071,62 +1119,97 @@ function TemplatePicker() {
     setOpen(false);
   }
 
+  const sectionLabel: React.CSSProperties = {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.07em",
+    textTransform: "uppercase",
+    color: c.text,
+    opacity: 0.38,
+    marginBottom: 7,
+  };
+
   return (
     <div
       style={{ position: "absolute", bottom: 56, left: 8, zIndex: 500 }}
       onPointerDown={(e) => e.stopPropagation()}
     >
       {open && (
-        <div className="mb-1 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg">
-          <div className="border-b border-[var(--color-border)] px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">Light</p>
-            <div className="mt-2 grid grid-cols-4 gap-1">
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setOpen(false)} />
+          <div style={{
+            position: "absolute",
+            bottom: "calc(100% + 8px)",
+            left: 0,
+            zIndex: 600,
+            background: c.popoverBg,
+            border: `1px solid ${c.border}`,
+            boxShadow: c.shadow,
+            borderRadius: 14,
+            padding: 12,
+            width: 216,
+          }}>
+            <p style={sectionLabel}>Light</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, marginBottom: 10 }}>
               {LIGHT_TEMPLATES.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => apply(t)}
-                  className={`flex flex-col items-center gap-1 rounded-md p-2 text-xs transition hover:bg-[var(--color-surface-mid)] ${current === t ? "bg-[var(--color-secondary-dim)] font-semibold text-[var(--color-secondary)]" : "text-[var(--color-muted)]"}`}
-                >
-                  <TemplateIcon template={t} />
-                  {TEMPLATE_LABELS[t]}
-                </button>
+                <TemplateTile key={t} template={t} active={current === t} c={c} onClick={() => apply(t)} />
               ))}
             </div>
-          </div>
-          <div className="border-b border-[var(--color-border)] px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">Dark</p>
-            <div className="mt-2 grid grid-cols-4 gap-1">
+            <div style={{ height: 1, background: c.divider, margin: "0 0 10px" }} />
+            <p style={sectionLabel}>Dark</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, marginBottom: 10 }}>
               {DARK_TEMPLATES.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => apply(t)}
-                  className={`flex flex-col items-center gap-1 rounded-md p-2 text-xs transition hover:bg-[var(--color-surface-mid)] ${current === t ? "bg-[var(--color-secondary-dim)] font-semibold text-[var(--color-secondary)]" : "text-[var(--color-muted)]"}`}
-                >
-                  <TemplateIcon template={t} />
-                  {TEMPLATE_LABELS[t]}
-                </button>
+                <TemplateTile key={t} template={t} active={current === t} c={c} onClick={() => apply(t)} />
               ))}
             </div>
-          </div>
-          <div className="px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-subtle)]">Cover</p>
-            <div className="mt-2 flex gap-1">
+            <div style={{ height: 1, background: c.divider, margin: "0 0 10px" }} />
+            <p style={sectionLabel}>Cover</p>
+            <div style={{ display: "flex", gap: 6 }}>
               {COVER_TEMPLATES.map((t) => (
                 <button
                   key={t}
-                  onClick={() => apply(t)}
                   title={TEMPLATE_LABELS[t]}
-                  className={`h-8 w-8 rounded-md transition hover:scale-110 ${current === t ? "ring-2 ring-[var(--color-secondary)] ring-offset-1" : ""}`}
-                  style={{ background: COVER_COLORS_MAP[t] }}
+                  onClick={() => apply(t)}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  style={{
+                    flex: 1,
+                    height: 28,
+                    borderRadius: 7,
+                    border: `2px solid ${current === t ? c.text : "transparent"}`,
+                    background: COVER_COLORS_MAP[t],
+                    cursor: "pointer",
+                    outline: "none",
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.06)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
                 />
               ))}
             </div>
           </div>
-        </div>
+        </>
       )}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:bg-[var(--color-surface-mid)]"
+        onPointerDown={(e) => e.stopPropagation()}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "5px 12px 5px 9px",
+          borderRadius: 999,
+          border: `1px solid ${c.border}`,
+          background: c.bg,
+          boxShadow: c.shadow,
+          color: c.text,
+          fontSize: 12,
+          fontWeight: 500,
+          cursor: "pointer",
+          letterSpacing: "0.01em",
+          whiteSpace: "nowrap",
+          outline: "none",
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = c.hover; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = c.bg; }}
       >
         <TemplateIcon template={current} size={14} />
         {TEMPLATE_LABELS[current]}
