@@ -1388,7 +1388,14 @@ export function TldrawWhiteboardEditor({
     (editor: Editor) => {
       editorRef.current = editor;
 
-      editor.user.updateUserPreferences({ colorScheme: "system" });
+      const isScribblDark = document.documentElement.getAttribute("data-theme") === "dark";
+      editor.user.updateUserPreferences({ colorScheme: isScribblDark ? "dark" : "light" });
+
+      function onScribblTheme(e: Event) {
+        const dark = (e as CustomEvent<{ dark: boolean }>).detail.dark;
+        editor.user.updateUserPreferences({ colorScheme: dark ? "dark" : "light" });
+      }
+      window.addEventListener("scribbl:theme", onScribblTheme);
 
       editor.setCameraOptions({
         constraints: {
@@ -1471,6 +1478,7 @@ export function TldrawWhiteboardEditor({
         unsubTheme();
         unsubStore();
         unsubZoom();
+        window.removeEventListener("scribbl:theme", onScribblTheme);
       };
     },
     [],
