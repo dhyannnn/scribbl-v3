@@ -1088,7 +1088,7 @@ function TemplateTile({
       onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = c.hover; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = active ? c.active : "transparent"; }}
     >
-      <TemplateIcon template={template} size={40} />
+      <TemplateIcon template={template} size={36} />
       <span style={{ fontSize: 9, fontWeight: 500, color: c.text, opacity: active ? 1 : 0.55, letterSpacing: "0.01em", lineHeight: 1 }}>
         {TEMPLATE_LABELS[template]}
       </span>
