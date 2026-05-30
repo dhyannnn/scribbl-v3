@@ -1,6 +1,7 @@
 "use client";
 
 import "tldraw/tldraw.css";
+import "@/lib/tldraw/tldraw-overrides.css";
 import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
