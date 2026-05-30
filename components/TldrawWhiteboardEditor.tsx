@@ -31,10 +31,14 @@ import {
   DefaultColorStyle,
   DefaultDashStyle,
   DefaultFillStyle,
+  DefaultFontStyle,
+  DefaultHorizontalAlignStyle,
   DefaultSizeStyle,
   GeoShapeGeoStyle,
   getDefaultColorTheme,
   type TLDefaultColorStyle,
+  type TLDefaultFontStyle,
+  type TLDefaultHorizontalAlignStyle,
   type TLDefaultSizeStyle,
   type TLDefaultDashStyle,
   type TLDefaultFillStyle,
@@ -306,6 +310,13 @@ function ToolIcon({ tool }: { tool: string }) {
     <svg {...props}>
       <line x1={4} y1={14} x2={14} y2={6} />
       <path d="M9,6 L14,6 L14,11" />
+    </svg>
+  );
+  if (tool === "line") return (
+    <svg {...props}>
+      <line x1={3} y1={15} x2={15} y2={3} />
+      <circle cx={3} cy={15} r={1.8} fill="currentColor" stroke="none" />
+      <circle cx={15} cy={3} r={1.8} fill="currentColor" stroke="none" />
     </svg>
   );
   if (tool === "text") return (
@@ -600,14 +611,47 @@ function PenSlotCircle({
 
 // ── Style controls (right section) ───────────────────────────────────────────
 
+const FONT_OPTIONS: { value: TLDefaultFontStyle; label: string; family: string }[] = [
+  { value: "draw", label: "Handwritten", family: "'tldraw_draw', sans-serif" },
+  { value: "sans", label: "Sans serif",  family: "'tldraw_sans', sans-serif" },
+  { value: "serif", label: "Serif",      family: "'tldraw_serif', serif" },
+  { value: "mono", label: "Monospace",   family: "'tldraw_mono', monospace" },
+];
+
+const ALIGN_OPTIONS: { value: TLDefaultHorizontalAlignStyle; title: string; icon: React.ReactNode }[] = [
+  {
+    value: "start", title: "Align left",
+    icon: <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" style={{ display: "block" }}>
+      <line x1={2} y1={4} x2={14} y2={4} /><line x1={2} y1={7} x2={10} y2={7} />
+      <line x1={2} y1={10} x2={14} y2={10} /><line x1={2} y1={13} x2={8} y2={13} />
+    </svg>,
+  },
+  {
+    value: "middle", title: "Align center",
+    icon: <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" style={{ display: "block" }}>
+      <line x1={2} y1={4} x2={14} y2={4} /><line x1={4} y1={7} x2={12} y2={7} />
+      <line x1={2} y1={10} x2={14} y2={10} /><line x1={5} y1={13} x2={11} y2={13} />
+    </svg>,
+  },
+  {
+    value: "end", title: "Align right",
+    icon: <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" style={{ display: "block" }}>
+      <line x1={2} y1={4} x2={14} y2={4} /><line x1={6} y1={7} x2={14} y2={7} />
+      <line x1={2} y1={10} x2={14} y2={10} /><line x1={8} y1={13} x2={14} y2={13} />
+    </svg>,
+  },
+];
+
 function StyleControls() {
   const editor = useEditor();
   const isDarkMode = useIsDarkMode();
   const styles = useRelevantStyles();
   const [colorOpen, setColorOpen] = useState(false);
+  const [fontOpen, setFontOpen] = useState(false);
   const [tuneOpen, setTuneOpen] = useState(false);
   const c = usePillColors();
   const colorPopoverStyle = usePopoverStyle({ width: 168 });
+  const fontPopoverStyle = usePopoverStyle({ width: 164 });
   const tunePopoverStyle = usePopoverStyle({ width: 200, right: 0, left: "auto", transform: "none" });
 
   const handleStyleChange = useCallback(
@@ -629,8 +673,10 @@ function StyleControls() {
   const fill = styles.get(DefaultFillStyle);
   const dash = styles.get(DefaultDashStyle);
   const size = styles.get(DefaultSizeStyle);
+  const font = styles.get(DefaultFontStyle);
+  const align = styles.get(DefaultHorizontalAlignStyle);
 
-  const hasAny = color !== undefined || size !== undefined || dash !== undefined || fill !== undefined;
+  const hasAny = color !== undefined || size !== undefined || dash !== undefined || fill !== undefined || font !== undefined || align !== undefined;
   if (!hasAny) return null;
 
   const currentColorHex = color !== undefined && color.type === "shared"
@@ -641,6 +687,8 @@ function StyleControls() {
   const currentDash = dash?.type === "shared" ? dash.value : undefined;
   const currentFill = fill?.type === "shared" ? fill.value : undefined;
   const currentColor = color?.type === "shared" ? color.value : undefined;
+  const currentFont = font?.type === "shared" ? font.value : undefined;
+  const currentAlign = align?.type === "shared" ? align.value : undefined;
 
   const opacityOptions = [20, 40, 60, 80, 100] as const;
   const opacity = styles.get({ type: "shared", id: "opacity" } as never);
@@ -701,6 +749,55 @@ function StyleControls() {
         >
           <SizeDot size={s} active={currentSize === s} />
         </button>
+      ))}
+
+      {/* Font picker */}
+      {font !== undefined && (
+        <div style={{ position: "relative" }} onPointerDown={(e) => e.stopPropagation()}>
+          {fontOpen && (
+            <>
+              <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setFontOpen(false)} />
+              <div style={fontPopoverStyle}>
+                {FONT_OPTIONS.map(({ value, label, family }) => (
+                  <button
+                    key={value}
+                    title={label}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => { handleStyleChange(DefaultFontStyle, value); setFontOpen(false); }}
+                    style={{
+                      display: "flex", alignItems: "center", width: "100%", padding: "6px 8px",
+                      borderRadius: 6, border: "none", background: currentFont === value ? c.active : "transparent",
+                      cursor: "pointer", color: c.text, textAlign: "left", gap: 8,
+                    }}
+                    onMouseEnter={(e) => { if (currentFont !== value) (e.currentTarget as HTMLButtonElement).style.background = c.hover; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = currentFont === value ? c.active : "transparent"; }}
+                  >
+                    <span style={{ fontFamily: family, fontSize: 15, lineHeight: 1, flexShrink: 0 }}>Aa</span>
+                    <span style={{ fontSize: 11, opacity: 0.75 }}>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <TBButton title="Font" active={fontOpen} onClick={() => setFontOpen((v) => !v)}>
+            <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
+              <path d="M3,15 L9,3 L15,15" />
+              <line x1={5.5} y1={10} x2={12.5} y2={10} />
+            </svg>
+          </TBButton>
+        </div>
+      )}
+
+      {/* Alignment buttons */}
+      {align !== undefined && ALIGN_OPTIONS.map(({ value, title, icon }) => (
+        <TBButton
+          key={value}
+          title={title}
+          active={currentAlign === value || (!currentAlign && value === "middle")}
+          onClick={() => handleStyleChange(DefaultHorizontalAlignStyle, value)}
+        >
+          {icon}
+        </TBButton>
       ))}
 
       {/* Tune button */}
@@ -837,6 +934,7 @@ function ScribblToolbar() {
   const actions = useActions();
 
   const [activeSlotIdx, setActiveSlotIdx] = useState<number | null>(null);
+  const [arrowOpen, setArrowOpen] = useState(false);
   const [geoOpen, setGeoOpen] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -872,6 +970,7 @@ function ScribblToolbar() {
   }
 
   const c = usePillColors();
+  const arrowPopoverStyle = usePopoverStyle({ display: "flex", gap: 4, padding: 6 });
   const geoPopoverStyle = usePopoverStyle({ width: 160, left: "50%", transform: "translateX(-50%)" });
   const overflowPopoverStyle = usePopoverStyle({ display: "flex", gap: 4, padding: 6 });
 
@@ -950,6 +1049,40 @@ function ScribblToolbar() {
 
       {/* Tool buttons */}
       {tools.map(({ id, label }) => {
+        if (id === "arrow") {
+          const isArrowType = currentToolId === "arrow" || currentToolId === "line";
+          return (
+            <div key="arrow" style={{ position: "relative" }}>
+              {arrowOpen && (
+                <>
+                  <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setArrowOpen(false)} />
+                  <div style={arrowPopoverStyle}>
+                    <TBButton title="Arrow" active={currentToolId === "arrow"} onClick={() => { activateTool("arrow"); setArrowOpen(false); }}>
+                      <ToolIcon tool="arrow" />
+                    </TBButton>
+                    <TBButton title="Line" active={currentToolId === "line"} onClick={() => { activateTool("line"); setArrowOpen(false); }}>
+                      <ToolIcon tool="line" />
+                    </TBButton>
+                  </div>
+                </>
+              )}
+              <TBButton
+                title={label}
+                active={isArrowType}
+                onClick={() => {
+                  if (isArrowType) {
+                    setArrowOpen((v) => !v);
+                  } else {
+                    editor.setCurrentTool("arrow");
+                    setArrowOpen(false);
+                  }
+                }}
+              >
+                <ToolIcon tool={currentToolId === "line" ? "line" : "arrow"} />
+              </TBButton>
+            </div>
+          );
+        }
         if (id === "geo") {
           return (
             <div key="geo" style={{ position: "relative" }}>
