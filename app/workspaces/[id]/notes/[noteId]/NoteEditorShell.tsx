@@ -5,6 +5,7 @@ import { LiveblocksRoom } from "@/components/LiveblocksRoom";
 import { TextNoteEditor } from "@/components/TextNoteEditor";
 import { TldrawWhiteboardEditor } from "@/components/TldrawWhiteboardEditor";
 import { createNoteRoomId } from "@/lib/liveblocks-room";
+import { type MentionMember } from "@/lib/tiptap/mention";
 import { saveTextNote, saveWhiteboardNote } from "../actions";
 
 type Props = {
@@ -19,6 +20,7 @@ type Props = {
   canExportPdf?: boolean;
   canUploadAssets?: boolean;
   tldrawSnapshot: unknown;
+  members?: MentionMember[];
 };
 
 export function NoteEditorShell({
@@ -33,6 +35,7 @@ export function NoteEditorShell({
   canExportPdf = true,
   canUploadAssets = true,
   tldrawSnapshot,
+  members = [],
 }: Props) {
   const [expanded, setExpanded] = useState(true);
   const roomId = createNoteRoomId(workspaceId, noteId);
@@ -75,6 +78,7 @@ export function NoteEditorShell({
                 canChangeVisibility={canChangeVisibility}
                 variant="document"
                 onCollapse={() => setExpanded(false)}
+                members={members}
               />
             ) : (
               <TldrawWhiteboardEditor
@@ -122,6 +126,7 @@ export function NoteEditorShell({
             contentJson={contentJson}
             saveAction={saveTextNote}
             canEdit={canEdit}
+            members={members}
           />
         ) : (
           <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">

@@ -55,6 +55,11 @@ export default async function NoteEditorPage({ params }: PageProps) {
             select: {
               userId: true,
               role: true,
+              user: {
+                select: {
+                  displayName: true,
+                },
+              },
             },
           },
         },
@@ -218,6 +223,7 @@ export default async function NoteEditorPage({ params }: PageProps) {
           canExportPdf={note.workspace?.plan !== "FREE"}
           canUploadAssets={note.workspace?.plan !== "FREE"}
           tldrawSnapshot={tldrawSnapshot}
+          members={note.workspace.members.map((m) => ({ id: m.userId, name: m.user.displayName }))}
         />
       </div>
     </main>

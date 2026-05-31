@@ -272,6 +272,33 @@ export async function saveTextNote(formData: FormData) {
     },
   });
 
+  // Fire NOTE_MENTION notifications for any @mentioned users (skip if already notified and unread)
+  const mentionedUserIds = extractMentionIds(parsedContent);
+  if (mentionedUserIds.length > 0) {
+    const href = `/workspaces/${workspaceId}/notes/${noteId}`;
+    const eligibleIds = mentionedUserIds.filter((uid) => uid !== currentUser.id);
+    if (eligibleIds.length > 0) {
+      const already = await prisma.notification.findMany({
+        where: { userId: { in: eligibleIds }, actorUserId: currentUser.id, type: "NOTE_MENTION", href, readAt: null },
+        select: { userId: true },
+      });
+      const alreadySet = new Set(already.map((n) => n.userId));
+      const newIds = eligibleIds.filter((uid) => !alreadySet.has(uid));
+      if (newIds.length > 0) {
+        await prisma.notification.createMany({
+          data: newIds.map((uid) => ({
+            userId: uid,
+            workspaceId,
+            actorUserId: currentUser.id,
+            type: "NOTE_MENTION",
+            title: `${currentUser.displayName} mentioned you in "${title}"`,
+            href,
+          })),
+        });
+      }
+    }
+  }
+
   revalidatePath(`/workspaces/${workspaceId}`);
   revalidatePath(`/workspaces/${workspaceId}/notes`);
   revalidatePath(`/workspaces/${workspaceId}/notes/${noteId}`);
@@ -619,6 +646,24 @@ export async function updateNoteVisibility(formData: FormData) {
   revalidatePath(`/workspaces/${workspaceId}/notes`);
   revalidatePath(`/workspaces/${workspaceId}/notes/${noteId}`);
   revalidatePath("/");
+}
+
+function extractMentionIds(content: unknown): string[] {
+  const ids: string[] = [];
+  function walk(node: unknown) {
+    if (!node || typeof node !== "object") return;
+    const n = node as Record<string, unknown>;
+    if (n.type === "mention" && typeof n.attrs === "object" && n.attrs !== null) {
+      const id = (n.attrs as Record<string, unknown>).id;
+      if (typeof id === "string" && id) ids.push(id);
+    }
+    if (Array.isArray(n.content)) n.content.forEach(walk);
+  }
+  if (content && typeof content === "object") {
+    const c = content as Record<string, unknown>;
+    walk(c.content ?? content);
+  }
+  return [...new Set(ids)];
 }
 
 function canEditNote(
