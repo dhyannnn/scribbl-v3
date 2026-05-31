@@ -41,6 +41,8 @@ import { MeetingChatPanel } from "./MeetingChatPanel";
 import { ActiveMeetingBridge } from "./ActiveMeetingBridge";
 import { VideoRejoinBanner } from "./VideoRejoinBanner";
 import {
+  admitAllToMeeting,
+  admitToMeeting,
   attachFileToMeeting,
   attachNoteToMeeting,
   lowerParticipantHand,
@@ -440,6 +442,15 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
   const unattachedNotes = attachableNotes.filter((note) => !attachedNoteIds.has(note.id));
   const unattachedFiles = attachableFiles.filter((file) => !attachedFileIds.has(file.id));
   const hasAttachableArtifacts = unattachedNotes.length > 0 || unattachedFiles.length > 0;
+  const HEARTBEAT_TIMEOUT_MS = 30_000;
+  const waitingUsers = (canManageMeeting && meeting.waitingRoom && isSessionOpen)
+    ? await prisma.meetingWaitingUser.findMany({
+        where: { meetingId, lastHeartbeatAt: { gte: new Date(Date.now() - HEARTBEAT_TIMEOUT_MS) } },
+        select: { userId: true, displayName: true, avatarUrl: true, requestedAt: true },
+        orderBy: { requestedAt: "asc" },
+      })
+    : [];
+
   const activeRecording = meeting.recordings.find((recording) =>
     ["STARTING", "ACTIVE", "STOPPING"].includes(recording.status),
   );
@@ -486,8 +497,18 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
   return (
     <main data-meeting-hub-main className="min-h-screen overflow-x-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
       <MeetingRouteRefresher />
-      {(raisedHandParticipants.length > 0 || pendingRequests.length > 0) ? (
+      {(raisedHandParticipants.length > 0 || pendingRequests.length > 0 || waitingUsers.length > 0) ? (
         <div className="sticky top-0 z-40 flex flex-col gap-0 divide-y divide-[var(--color-warning-dim)] border-b border-[var(--color-warning-dim)] bg-[var(--color-warning-dim)]">
+          {waitingUsers.length > 0 ? (
+            <div className="flex items-center justify-between gap-3 px-5 py-2 sm:px-8 lg:px-10">
+              <p className="text-sm font-semibold text-[var(--color-warning)]">
+                ⏳ {waitingUsers.length} {waitingUsers.length === 1 ? "person" : "people"} waiting to be admitted
+              </p>
+              <a href="#meeting-waiting-room" className="shrink-0 text-sm font-medium text-[var(--color-warning)] underline underline-offset-2">
+                View
+              </a>
+            </div>
+          ) : null}
           {raisedHandParticipants.length > 0 ? (
             <div className="flex items-center justify-between gap-3 px-5 py-2 sm:px-8 lg:px-10">
               <p className="text-sm font-semibold text-[var(--color-warning)]">
@@ -774,6 +795,13 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                   </p>
                 </div>
               </div>
+              {waitingUsers.length > 0 ? (
+                <WaitingRoomHubPanel
+                  workspaceId={id}
+                  meetingId={meeting.id}
+                  waitingUsers={waitingUsers}
+                />
+              ) : null}
               {pendingRequests.length > 0 ? (
                 <PendingPermissionRequestsPanel
                   workspaceId={id}
@@ -1266,6 +1294,60 @@ function PermissionOverrideButton({
         {label}
       </PermissionSubmitButton>
     </form>
+  );
+}
+
+function WaitingRoomHubPanel({
+  meetingId,
+  waitingUsers,
+  workspaceId,
+}: {
+  meetingId: string;
+  waitingUsers: Array<{ userId: string; displayName: string; avatarUrl: string | null; requestedAt: Date }>;
+  workspaceId: string;
+}) {
+  return (
+    <div id="meeting-waiting-room" className="mt-4 rounded-xl border border-[var(--color-warning-dim)] bg-[var(--color-warning-dim)] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-[var(--color-warning)]">
+          ⏳ {waitingUsers.length} {waitingUsers.length === 1 ? "person" : "people"} in waiting room
+        </p>
+        <form action={admitAllToMeeting}>
+          <input type="hidden" name="workspaceId" value={workspaceId} />
+          <input type="hidden" name="meetingId" value={meetingId} />
+          <PendingSubmitButton
+            pendingLabel="Admitting…"
+            className="min-h-7 rounded-md border border-[#83a88b] bg-[#dff4e5] px-2.5 text-xs font-semibold text-[#1d6a3b] transition hover:bg-[#cbead4] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Admit all
+          </PendingSubmitButton>
+        </form>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {waitingUsers.map((user) => (
+          <div
+            key={user.userId}
+            className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-secondary-dim)] text-xs font-semibold text-[var(--color-secondary)]">
+              {user.displayName.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("")}
+            </div>
+            <p className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--color-text)]">{user.displayName}</p>
+            <form action={admitToMeeting}>
+              <input type="hidden" name="workspaceId" value={workspaceId} />
+              <input type="hidden" name="meetingId" value={meetingId} />
+              <input type="hidden" name="userId" value={user.userId} />
+              <PendingSubmitButton
+                pendingLabel="Admitting…"
+                className="min-h-7 rounded-md border border-[#83a88b] bg-[#dff4e5] px-2.5 text-xs font-semibold text-[#1d6a3b] transition hover:bg-[#cbead4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Admit
+              </PendingSubmitButton>
+            </form>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
