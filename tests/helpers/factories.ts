@@ -100,6 +100,7 @@ export function makeMeeting(workspaceId: string, createdByUserId: string, overri
     recurrence: null,
     seriesIndex: null,
     recurrenceEndsAt: null,
+    waitingRoom: false,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

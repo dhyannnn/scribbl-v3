@@ -670,6 +670,19 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 />
               </label>
 
+              <label className="lg:col-span-4 flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 py-3 cursor-pointer hover:bg-[var(--color-surface-mid)] transition">
+                <input
+                  type="checkbox"
+                  name="waitingRoom"
+                  defaultChecked={meeting.waitingRoom}
+                  className="h-4 w-4 rounded accent-[var(--color-secondary)]"
+                />
+                <div>
+                  <p className="text-sm font-medium text-[var(--color-text)]">Waiting room</p>
+                  <p className="text-xs text-[var(--color-muted)]">Host admits participants before they enter</p>
+                </div>
+              </label>
+
               {/* Series edit scope — only shown for recurring meetings */}
               {meeting.seriesId ? (
                 <div className="lg:col-span-4 flex flex-col gap-2 rounded-2xl border border-[var(--color-secondary-dim)] bg-[var(--color-secondary-dim)] p-4">
