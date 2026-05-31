@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { NavLink } from "@/components/NavLink";
+import { StatusPickerAvatar } from "@/components/StatusPickerAvatar";
 
 type WorkspaceSidebarProps = {
   workspaceId: string;
@@ -290,28 +291,18 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
       {/* User */}
       <div className="border-t border-[var(--color-border)] p-4">
         <div className="flex items-center gap-1">
-          <Link
-            href={`/profile/${currentUser.id}`}
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-[var(--color-surface-mid)]"
-          >
-            {currentUser.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={currentUser.avatarUrl}
-                alt={currentUser.displayName}
-                className="h-8 w-8 shrink-0 rounded-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-secondary)] text-xs font-semibold text-white">
-                {currentUser.displayName.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <div className="min-w-0">
+          <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5">
+            <StatusPickerAvatar
+              initialStatus={currentUser.status}
+              name={currentUser.displayName}
+              avatarUrl={currentUser.avatarUrl}
+              sizeClassName="h-8 w-8"
+            />
+            <Link href={`/profile/${currentUser.id}`} className="min-w-0 flex-1 transition hover:opacity-75">
               <p className="truncate text-sm font-medium text-[var(--color-text)]">{currentUser.displayName}</p>
               <p className="truncate text-xs text-[var(--color-muted)]">{currentUser.email}</p>
-            </div>
-          </Link>
+            </Link>
+          </div>
           <Link
             href="/account"
             title="Account settings"

@@ -73,6 +73,7 @@ import {
   stopMeetingRecording,
   syncMeetingRecordingStatus,
 } from "../actions";
+import { updateUserStatus } from "@/app/actions/status";
 
 type MeetingVideoRoomProps = {
   workspaceId: string;
@@ -142,9 +143,12 @@ export function MeetingVideoRoom({
       window.clearTimeout(leaveTimeoutRef.current);
     }
 
-    leaveTimeoutRef.current = window.setTimeout(() => {
+    leaveTimeoutRef.current = window.setTimeout(async () => {
       leaveTimeoutRef.current = null;
-      void markCurrentUserVideoLeft(workspaceId, meetingId, clientSessionId);
+      await markCurrentUserVideoLeft(workspaceId, meetingId, clientSessionId);
+      if (document.hidden) {
+        void updateUserStatus("AWAY");
+      }
     }, 1200);
   }, [meetingId, workspaceId]);
 
