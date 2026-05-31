@@ -1568,6 +1568,76 @@ export async function raiseHand(formData: FormData) {
   revalidateMeetingPaths(workspaceId, meetingId);
 }
 
+export async function admitToMeeting(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const meetingId = String(formData.get("meetingId") ?? "");
+  const userId = String(formData.get("userId") ?? "");
+
+  if (!workspaceId || !meetingId || !userId) return;
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return;
+
+  const meeting = await prisma.meeting.findFirst({
+    where: { id: meetingId, workspaceId },
+    select: {
+      createdByUserId: true,
+      workspace: { select: { members: { where: { userId: currentUser.id, status: "ACTIVE" }, select: { role: true }, take: 1 } } },
+    },
+  });
+  if (!meeting) return;
+
+  const role = meeting.workspace?.members[0]?.role;
+  if (!role) return;
+
+  if (!canModerateMeeting({ currentUserId: currentUser.id, meetingCreatedByUserId: meeting.createdByUserId, currentUserRole: role })) return;
+
+  await prisma.$transaction([
+    prisma.meetingAdmission.upsert({
+      where: { meetingId_userId: { meetingId, userId } },
+      create: { meetingId, userId },
+      update: { admittedAt: new Date() },
+    }),
+    prisma.meetingWaitingUser.deleteMany({ where: { meetingId, userId } }),
+  ]);
+}
+
+export async function admitAllToMeeting(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const meetingId = String(formData.get("meetingId") ?? "");
+
+  if (!workspaceId || !meetingId) return;
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return;
+
+  const meeting = await prisma.meeting.findFirst({
+    where: { id: meetingId, workspaceId },
+    select: {
+      createdByUserId: true,
+      workspace: { select: { members: { where: { userId: currentUser.id, status: "ACTIVE" }, select: { role: true }, take: 1 } } },
+      waitingUsers: { select: { userId: true } },
+    },
+  });
+  if (!meeting) return;
+
+  const role = meeting.workspace?.members[0]?.role;
+  if (!role) return;
+
+  if (!canModerateMeeting({ currentUserId: currentUser.id, meetingCreatedByUserId: meeting.createdByUserId, currentUserRole: role })) return;
+
+  const userIds = meeting.waitingUsers.map((w) => w.userId);
+  if (userIds.length === 0) return;
+
+  await prisma.$transaction([
+    prisma.meetingAdmission.createMany({
+      data: userIds.map((userId) => ({ meetingId, userId })),
+      skipDuplicates: true,
+    }),
+    prisma.meetingWaitingUser.deleteMany({ where: { meetingId } }),
+  ]);
+}
+
 export async function lowerOwnHand(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
   const meetingId = String(formData.get("meetingId") ?? "");

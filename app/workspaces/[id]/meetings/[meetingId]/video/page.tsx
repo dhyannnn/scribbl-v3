@@ -10,6 +10,7 @@ import {
 import { createChatRoomId } from "@/lib/liveblocks-room";
 import {
   canManageMeetingParticipantPermissions,
+  canModerateMeeting,
   getMeetingVideoPermissions,
   type MeetingPermissionOverrideInput,
 } from "@/lib/meeting-permissions";
@@ -249,6 +250,11 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
     }),
     handRaised,
   };
+  const canModerate = canModerateMeeting({
+    currentUserId: currentUser.id,
+    meetingCreatedByUserId: meeting.createdByUserId,
+    currentUserRole: currentMembership.role,
+  });
   const canModerateChat = currentMembership.role === "OWNER" || currentMembership.role === "ADMIN";
   const pendingRequests = meeting.permissionOverrides.filter(
     (override) =>
@@ -336,6 +342,8 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
         hubHref={`/workspaces/${id}/meetings/${meeting.id}`}
         canRecord={meeting.workspace.plan !== "FREE"}
         disabled={!isVideoOpen}
+        waitingRoom={meeting.waitingRoom}
+        canModerate={canModerate}
         recordingStatusMessage={getRecordingStatusMessage(recordingStatus)}
         recording={{
           activeRecording,

@@ -88,6 +88,7 @@ type MeetingVideoRoomProps = {
   onAfterLeave?: () => void;
   raisedHandCount?: number;
   accessRequestCount?: number;
+  waitingCount?: number;
 };
 
 type TokenResponse = {
@@ -110,12 +111,15 @@ export function MeetingVideoRoom({
   onAfterLeave,
   raisedHandCount,
   accessRequestCount,
+  waitingCount,
 }: MeetingVideoRoomProps) {
   const [connection, setConnection] = useState<TokenResponse | null>(null);
+  const [isWaiting, setIsWaiting] = useState(false);
   const [error, setError] = useState("");
   const [hasMarkedJoined, setHasMarkedJoined] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [showConflictModal, setShowConflictModal] = useState(false);
+  const waitingPollRef = useRef<number | null>(null);
   // Persist clientSessionId across same-browser mode switches (floating → full → split).
   // A different device has no stored ID so it always generates a fresh one, which is
   // what triggers the real cross-device conflict check.
@@ -187,6 +191,12 @@ export function MeetingVideoRoom({
       return;
     }
 
+    if (payload.waiting === true) {
+      setIsWaiting(true);
+      return;
+    }
+
+    setIsWaiting(false);
     storeClientSessionId(meetingId, clientSessionId);
     setConnection(payload as TokenResponse);
   }, [meetingId, workspaceId]);
@@ -224,7 +234,52 @@ export function MeetingVideoRoom({
     return () => window.clearTimeout(timeout);
   }, [autoJoin, connection, disabled, isPending, joinRoom]);
 
+  // Poll for admission while waiting
+  useEffect(() => {
+    if (!isWaiting) {
+      if (waitingPollRef.current !== null) {
+        window.clearInterval(waitingPollRef.current);
+        waitingPollRef.current = null;
+      }
+      return;
+    }
+    waitingPollRef.current = window.setInterval(() => {
+      void fetchToken(false);
+    }, 3000);
+    return () => {
+      if (waitingPollRef.current !== null) {
+        window.clearInterval(waitingPollRef.current);
+        waitingPollRef.current = null;
+      }
+    };
+  }, [isWaiting, fetchToken]);
+
   if (!connection) {
+    if (isWaiting) {
+      return (
+        <div className={`${getJoinSurfaceClassName(mode)} gap-4`}>
+          <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-white/20">
+            <svg className="animate-spin text-white/60" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+            </svg>
+          </div>
+          <h2 className={mode === "floating" ? "text-lg font-semibold" : "text-2xl font-semibold"}>
+            Waiting to be admitted
+          </h2>
+          <p className="max-w-sm text-center text-sm leading-6 text-white/60">
+            The host will let you in soon. Hang tight.
+          </p>
+          <button
+            type="button"
+            onClick={() => { setIsWaiting(false); setError(""); }}
+            className="mt-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/20"
+          >
+            Leave waiting room
+          </button>
+        </div>
+      );
+    }
+
     return (
       <>
         {/* Multi-device conflict modal */}
@@ -331,6 +386,7 @@ export function MeetingVideoRoom({
         permissions={permissions}
         raisedHandCount={raisedHandCount}
         accessRequestCount={accessRequestCount}
+        waitingCount={waitingCount}
       />
       <RoomAudioRenderer />
     </LiveKitRoom>
@@ -388,6 +444,7 @@ function ConferenceSurface({
   workspaceId,
   raisedHandCount,
   accessRequestCount,
+  waitingCount,
 }: {
   hasJoinedVideo: boolean;
   meetingId: string;
@@ -399,6 +456,7 @@ function ConferenceSurface({
   workspaceId: string;
   raisedHandCount?: number;
   accessRequestCount?: number;
+  waitingCount?: number;
 }) {
   const [showLocalPreview, setShowLocalPreview] = useState(false);
   const [viewMode, setViewMode] = useState<"gallery" | "spotlight">("gallery");
@@ -488,8 +546,8 @@ function ConferenceSurface({
         : "relative flex h-full min-h-0 flex-col bg-[var(--color-live)]"
       }
     >
-      {/* Raised hand / access request notification */}
-      {((raisedHandCount ?? 0) > 0 || (accessRequestCount ?? 0) > 0) && (
+      {/* Raised hand / access request / waiting room notification */}
+      {((raisedHandCount ?? 0) > 0 || (accessRequestCount ?? 0) > 0 || (waitingCount ?? 0) > 0) && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 flex gap-2 pointer-events-none">
           {(raisedHandCount ?? 0) > 0 && (
             <span className="rounded-full bg-[var(--color-warning-dim)] px-2 py-0.5 text-xs font-semibold text-[var(--color-warning)]">
@@ -499,6 +557,11 @@ function ConferenceSurface({
           {(accessRequestCount ?? 0) > 0 && (
             <span className="rounded-full bg-[var(--color-warning-dim)] px-2 py-0.5 text-xs font-semibold text-[var(--color-warning)]">
               📝 {accessRequestCount}
+            </span>
+          )}
+          {(waitingCount ?? 0) > 0 && (
+            <span className="rounded-full bg-[var(--color-warning-dim)] px-2 py-0.5 text-xs font-semibold text-[var(--color-warning)]">
+              ⏳ {waitingCount} waiting
             </span>
           )}
         </div>

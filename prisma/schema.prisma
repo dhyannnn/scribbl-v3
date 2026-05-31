@@ -476,8 +476,9 @@ model Meeting {
   recurrence         RecurrenceFrequency?
   seriesIndex        Int?
   recurrenceEndsAt   DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  waitingRoom        Boolean              @default(false)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   group     Group?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
@@ -490,11 +491,40 @@ model Meeting {
   channel             Channel?
   moderationSettings  MeetingModerationSettings?
   permissionOverrides MeetingPermissionOverride[]
+  admissions          MeetingAdmission[]
+  waitingUsers        MeetingWaitingUser[]
 
   @@index([workspaceId, startsAt])
   @@index([groupId])
   @@index([createdByUserId])
   @@index([seriesId])
+}
+
+model MeetingAdmission {
+  id         String   @id @default(uuid()) @db.Uuid
+  meetingId  String   @db.Uuid
+  userId     String   @db.Uuid
+  admittedAt DateTime @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@index([meetingId])
+}
+
+model MeetingWaitingUser {
+  id               String   @id @default(uuid()) @db.Uuid
+  meetingId        String   @db.Uuid
+  userId           String   @db.Uuid
+  displayName      String
+  avatarUrl        String?
+  requestedAt      DateTime @default(now())
+  lastHeartbeatAt  DateTime @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@index([meetingId])
 }
 
 model MeetingModerationSettings {

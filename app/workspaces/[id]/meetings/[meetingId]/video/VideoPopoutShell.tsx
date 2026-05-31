@@ -5,8 +5,15 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PermissionSubmitButton } from "@/components/PermissionSubmitButton";
 import { RealtimeChatPanel, type RealtimeChatChannel } from "@/components/RealtimeChatPanel";
-import { setMeetingPermissionOverride } from "@/app/workspaces/[id]/meetings/[meetingId]/actions";
+import { admitAllToMeeting, admitToMeeting, setMeetingPermissionOverride } from "@/app/workspaces/[id]/meetings/[meetingId]/actions";
 import { hasRecentActiveVideoSession, MeetingVideoRoom } from "./MeetingVideoRoom";
+
+type WaitingUser = {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  requestedAt: string;
+};
 
 type VideoPopoutShellProps = {
   workspaceId: string;
@@ -17,6 +24,8 @@ type VideoPopoutShellProps = {
   hubHref: string;
   canRecord?: boolean;
   disabled: boolean;
+  waitingRoom: boolean;
+  canModerate: boolean;
   recording: MeetingVideoRecordingProps;
   recordingStatusMessage: string | null;
   permissions: MeetingVideoPermissionsProps;
@@ -139,6 +148,8 @@ export function VideoPopoutShell({
   hubHref,
   canRecord = true,
   disabled,
+  waitingRoom,
+  canModerate,
   permissions,
   recording,
   recordingStatusMessage,
@@ -149,6 +160,8 @@ export function VideoPopoutShell({
 }: VideoPopoutShellProps) {
   const router = useRouter();
   const [isReturning, setIsReturning] = useState(false);
+  const [waitingUsers, setWaitingUsers] = useState<WaitingUser[]>([]);
+  const waitingPollRef = useRef<number | null>(null);
   const [wasOpenedByHub, setWasOpenedByHub] = useState(false);
   const [shouldAutoJoin, setShouldAutoJoin] = useState(false);
   const [activePanelTab, setActivePanelTab] = useState<VideoPanelTab>("chat");
@@ -241,6 +254,30 @@ export function VideoPopoutShell({
     };
   }, [channelName, videoPath]);
 
+  useEffect(() => {
+    if (!canModerate || !waitingRoom) return;
+
+    async function pollWaiting() {
+      try {
+        const res = await fetch(`/api/meetings/${meetingId}/waiting-room`);
+        if (res.ok) {
+          const data = await res.json() as { waitingUsers: WaitingUser[] };
+          setWaitingUsers(data.waitingUsers);
+        }
+      } catch { /* network error, ignore */ }
+    }
+
+    void pollWaiting();
+    waitingPollRef.current = window.setInterval(() => { void pollWaiting(); }, 5000);
+
+    return () => {
+      if (waitingPollRef.current !== null) {
+        clearInterval(waitingPollRef.current);
+        waitingPollRef.current = null;
+      }
+    };
+  }, [canModerate, waitingRoom, meetingId]);
+
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-5 sm:px-8 lg:px-10">
@@ -300,6 +337,7 @@ export function VideoPopoutShell({
                 recording={recording}
                 participants={participants}
                 accessRequestCount={accessRequests.length}
+                waitingCount={canModerate ? waitingUsers.length : 0}
               />
               <div className="min-h-0 flex-1 overflow-hidden rounded-xl">
                 <MeetingVideoRoom
@@ -313,6 +351,7 @@ export function VideoPopoutShell({
                   onAfterLeave={() => closeToHub()}
                   raisedHandCount={participants.filter((p) => p.handRaised).length}
                   accessRequestCount={accessRequests.length}
+                  waitingCount={canModerate ? waitingUsers.length : undefined}
                 />
               </div>
             </div>
@@ -327,6 +366,8 @@ export function VideoPopoutShell({
                 recording={recording}
                 participants={participants}
                 accessRequests={accessRequests}
+                waitingUsers={waitingUsers}
+                canModerate={canModerate}
                 context={context}
               />
             </aside>
@@ -341,17 +382,19 @@ function VideoRoomStatusStrip({
   accessRequestCount,
   participants,
   recording,
+  waitingCount = 0,
 }: {
   accessRequestCount: number;
   participants: VideoMeetingParticipant[];
   recording: MeetingVideoRecordingProps;
+  waitingCount?: number;
 }) {
   const activeParticipantCount = participants.filter((participant) => participant.joinedAt && !participant.leftAt).length;
   const handRaisedCount = participants.filter((participant) => participant.handRaised).length;
   const activeRecording = recording.activeRecording;
 
   return (
-    <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+    <div className={`mb-4 grid gap-2 sm:grid-cols-2 ${waitingCount > 0 ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
       <StatusPill label="Participants" value={`${activeParticipantCount}/${participants.length} in session`} />
       <StatusPill label="Hands" value={handRaisedCount > 0 ? `${handRaisedCount} raised` : "None raised"} />
       <StatusPill
@@ -364,6 +407,9 @@ function VideoRoomStatusStrip({
         value={accessRequestCount > 0 ? `${accessRequestCount} pending` : "None pending"}
         tone={accessRequestCount > 0 ? "warn" : "neutral"}
       />
+      {waitingCount > 0 ? (
+        <StatusPill label="Waiting" value={`${waitingCount} waiting`} tone="warn" />
+      ) : null}
     </div>
   );
 }
@@ -402,6 +448,8 @@ function FullVideoSidePanel({
   onReturnToHub,
   participants,
   recording,
+  waitingUsers,
+  canModerate,
   workspaceId,
 }: {
   activeTab: VideoPanelTab;
@@ -413,6 +461,8 @@ function FullVideoSidePanel({
   onReturnToHub: () => void;
   participants: VideoMeetingParticipant[];
   recording: MeetingVideoRecordingProps;
+  waitingUsers: WaitingUser[];
+  canModerate: boolean;
   workspaceId: string;
 }) {
   const activeParticipantCount = participants.filter((participant) => participant.joinedAt && !participant.leftAt).length;
@@ -430,9 +480,9 @@ function FullVideoSidePanel({
           </button>
           <button type="button" onClick={() => onTabChange("people")} className={tabButtonClassName("people")}>
             People
-            {accessRequests.length > 0 ? (
+            {(accessRequests.length + waitingUsers.length) > 0 ? (
               <span className="ml-1 rounded-full bg-[var(--color-warning-dim)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--color-warning)]">
-                {accessRequests.length}
+                {accessRequests.length + waitingUsers.length}
               </span>
             ) : null}
           </button>
@@ -468,6 +518,13 @@ function FullVideoSidePanel({
             tone={accessRequests.length > 0 ? "warn" : "neutral"}
           />
         </div>
+        {canModerate && waitingUsers.length > 0 ? (
+          <WaitingRoomMiniPanel
+            workspaceId={workspaceId}
+            meetingId={meetingId}
+            waitingUsers={waitingUsers}
+          />
+        ) : null}
         {accessRequests.length > 0 ? (
           <AccessRequestsMiniPanel
             workspaceId={workspaceId}
@@ -517,6 +574,64 @@ function RecordingMiniPanel({ recording }: { recording: MeetingVideoRecordingPro
           Open recording
         </Link>
       ) : null}
+    </section>
+  );
+}
+
+function WaitingRoomMiniPanel({
+  meetingId,
+  waitingUsers,
+  workspaceId,
+}: {
+  meetingId: string;
+  waitingUsers: WaitingUser[];
+  workspaceId: string;
+}) {
+  return (
+    <section className="rounded-2xl border border-[var(--color-warning-dim)] bg-[var(--color-warning-dim)] p-4 text-[var(--color-warning)]">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em]">Waiting room</p>
+      <h2 className="mt-1 text-base font-semibold text-[var(--color-text)]">
+        {waitingUsers.length} {waitingUsers.length === 1 ? "person" : "people"} waiting
+      </h2>
+      <div className="mt-3 grid gap-2">
+        {waitingUsers.map((user) => (
+          <div
+            key={user.userId}
+            className="flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 py-2.5"
+          >
+            {user.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={user.avatarUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
+            ) : (
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-secondary-dim)] text-xs font-semibold text-[var(--color-secondary)]">
+                {getInitials(user.displayName)}
+              </div>
+            )}
+            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--color-text)]">{user.displayName}</p>
+            <form action={admitToMeeting} className="shrink-0">
+              <input type="hidden" name="workspaceId" value={workspaceId} />
+              <input type="hidden" name="meetingId" value={meetingId} />
+              <input type="hidden" name="userId" value={user.userId} />
+              <button
+                type="submit"
+                className="min-h-7 rounded-md border border-[#83a88b] bg-[#dff4e5] px-2.5 text-xs font-semibold text-[#1d6a3b] transition hover:bg-[#cbead4]"
+              >
+                Admit
+              </button>
+            </form>
+          </div>
+        ))}
+      </div>
+      <form action={admitAllToMeeting} className="mt-3">
+        <input type="hidden" name="workspaceId" value={workspaceId} />
+        <input type="hidden" name="meetingId" value={meetingId} />
+        <button
+          type="submit"
+          className="min-h-9 w-full rounded-md border border-[#83a88b] bg-[#dff4e5] px-3 text-sm font-semibold text-[#1d6a3b] transition hover:bg-[#cbead4]"
+        >
+          Admit all
+        </button>
+      </form>
     </section>
   );
 }

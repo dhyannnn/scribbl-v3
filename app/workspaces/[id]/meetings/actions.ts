@@ -24,6 +24,7 @@ export async function scheduleMeeting(formData: FormData) {
   const durationMinutes = Number(formData.get("durationMinutes") ?? 60);
   const groupIdRaw = String(formData.get("groupId") ?? "").trim();
   const userTimezone = String(formData.get("userTimezone") ?? "UTC");
+  const waitingRoom = formData.get("waitingRoom") === "on";
 
   if (!workspaceId || !title || !startsAtValue) {
     redirect(workspaceId ? `/workspaces/${workspaceId}/meetings?meeting=invalid` : "/");
@@ -183,6 +184,7 @@ export async function scheduleMeeting(formData: FormData) {
         recurrence: recurrenceRaw as "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY",
         seriesIndex: i + 1,
         recurrenceEndsAt: recurrenceEndsAtDate,
+        waitingRoom,
       };
     });
 
@@ -220,6 +222,7 @@ export async function scheduleMeeting(formData: FormData) {
           endsAt,
           provider: "livekit",
           createdByUserId: currentUser.id,
+          waitingRoom,
           participants: {
             create: participantUserIds.map((userId) => ({
               userId,
@@ -353,6 +356,7 @@ export async function updateMeetingDetails(formData: FormData) {
   const scopeRaw = String(formData.get("editScope") ?? "THIS");
   const editScope = scopeRaw === "THIS_AND_FUTURE" || scopeRaw === "ALL" ? scopeRaw : "THIS";
   const userTimezone = String(formData.get("userTimezone") ?? "UTC");
+  const waitingRoom = formData.get("waitingRoom") === "on";
 
   if (!workspaceId || !meetingId || !title || !startsAtValue) {
     redirect(workspaceId ? `/workspaces/${workspaceId}/meetings?meeting=invalid` : "/");
@@ -456,7 +460,7 @@ export async function updateMeetingDetails(formData: FormData) {
         return [
           prisma.meeting.update({
             where: { id: sm.id },
-            data: { title, description: description || null, startsAt: newStart, endsAt: newEnd },
+            data: { title, description: description || null, startsAt: newStart, endsAt: newEnd, waitingRoom },
           }),
           prisma.channel.updateMany({
             where: { meetingId: sm.id },
@@ -469,7 +473,7 @@ export async function updateMeetingDetails(formData: FormData) {
     await prisma.$transaction([
       prisma.meeting.update({
         where: { id: meeting.id },
-        data: { title, description: description || null, startsAt, endsAt },
+        data: { title, description: description || null, startsAt, endsAt, waitingRoom },
       }),
       prisma.channel.updateMany({
         where: { meetingId: meeting.id },

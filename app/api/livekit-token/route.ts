@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/current-user";
 import { createLiveKitMeetingRoomName } from "@/lib/livekit-room";
 import { canJoinMeeting, getMeetingLifecycle } from "@/lib/meeting-lifecycle";
-import { getMeetingVideoPermissions, type MeetingPermissionOverrideInput } from "@/lib/meeting-permissions";
+import { canModerateMeeting, getMeetingVideoPermissions, type MeetingPermissionOverrideInput } from "@/lib/meeting-permissions";
 import { isValidClientSessionId } from "@/lib/meeting-video-session";
 import { prisma } from "@/lib/prisma";
 
@@ -47,6 +47,7 @@ export async function POST(request: Request) {
       startsAt: true,
       endsAt: true,
       canceledAt: true,
+      waitingRoom: true,
       moderationSettings: true,
       permissionOverrides: {
         where: {
@@ -102,6 +103,37 @@ export async function POST(request: Request) {
 
   if (!currentMembership) {
     return NextResponse.json({ error: "You do not have access to this meeting." }, { status: 403 });
+  }
+
+  // Waiting room check — non-hosts must be admitted before getting a token
+  if (meeting.waitingRoom) {
+    const isHost = canModerateMeeting({
+      currentUserId: currentUser.id,
+      meetingCreatedByUserId: meeting.createdByUserId,
+      currentUserRole: currentMembership.role,
+    });
+
+    if (!isHost) {
+      const admission = await prisma.meetingAdmission.findUnique({
+        where: { meetingId_userId: { meetingId, userId: currentUser.id } },
+        select: { id: true },
+      });
+
+      if (!admission) {
+        // Register/heartbeat in the waiting list
+        await prisma.meetingWaitingUser.upsert({
+          where: { meetingId_userId: { meetingId, userId: currentUser.id } },
+          create: {
+            meetingId,
+            userId: currentUser.id,
+            displayName: currentUser.displayName,
+            avatarUrl: currentUser.avatarUrl ?? null,
+          },
+          update: { lastHeartbeatAt: new Date() },
+        });
+        return NextResponse.json({ waiting: true });
+      }
+    }
   }
 
   const permissions = getMeetingVideoPermissions({
