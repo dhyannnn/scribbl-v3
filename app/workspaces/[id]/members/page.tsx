@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
+import { StatusDot } from "@/components/StatusPickerAvatar";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import {
@@ -196,18 +197,21 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
 
                     {/* Avatar + info */}
                     <Link href={`/profile/${member.userId}`} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl transition hover:opacity-75">
-                      {member.user.avatarUrl ? (
-                        <img
-                          src={member.user.avatarUrl}
-                          alt={member.user.displayName}
-                          className="h-10 w-10 shrink-0 rounded-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-secondary-dim)] font-mono text-sm font-semibold text-[var(--color-secondary)]">
-                          {getInitials(member.user.displayName)}
-                        </div>
-                      )}
+                      <div className="relative shrink-0">
+                        {member.user.avatarUrl ? (
+                          <img
+                            src={member.user.avatarUrl}
+                            alt={member.user.displayName}
+                            className="h-10 w-10 rounded-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-secondary-dim)] font-mono text-sm font-semibold text-[var(--color-secondary)]">
+                            {getInitials(member.user.displayName)}
+                          </div>
+                        )}
+                        <StatusDot status={member.user.status} className="absolute bottom-0 right-0" />
+                      </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="truncate font-medium text-[var(--color-text)]">{member.user.displayName}</p>

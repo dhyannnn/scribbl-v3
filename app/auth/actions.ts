@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
 export async function signInWithPassword(formData: FormData) {
@@ -21,6 +22,11 @@ export async function signInWithPassword(formData: FormData) {
   if (error) {
     redirect(createLoginUrl({ message: error.message, next }));
   }
+
+  await prisma.user.updateMany({
+    where: { email },
+    data: { status: "ONLINE", previousStatus: null },
+  });
 
   redirect(next);
 }

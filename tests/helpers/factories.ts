@@ -20,6 +20,8 @@ export function makeUser(overrides: Partial<User> = {}): User {
     timezone: "UTC",
     language: "en",
     darkMode: false,
+    status: "ONLINE" as const,
+    previousStatus: null,
     deletionRequestedAt: null,
     deletedAt: null,
     createdAt: new Date(),

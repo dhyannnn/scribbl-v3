@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LocalTime } from "@/components/LocalTime";
+import { StatusPickerAvatar } from "@/components/StatusPickerAvatar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -365,16 +366,18 @@ export async function AppSidebar({ activePath = "/" }: AppSidebarProps) {
           <ThemeToggle initialDark={currentUser?.darkMode ?? false} />
         </div>
         {currentUser ? (
-          <Link
-            href="/account"
-            className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-[var(--color-surface-mid)]"
-          >
-            <UserAvatar name={currentUser.displayName} avatarUrl={currentUser.avatarUrl} sizeClassName="h-8 w-8" />
-            <div className="min-w-0">
+          <div className="flex items-center gap-3 rounded-xl px-2 py-1.5">
+            <StatusPickerAvatar
+              initialStatus={currentUser.status}
+              name={currentUser.displayName}
+              avatarUrl={currentUser.avatarUrl}
+              sizeClassName="h-8 w-8"
+            />
+            <Link href="/account" className="min-w-0 flex-1 transition hover:opacity-75">
               <p className="truncate text-sm font-medium text-[var(--color-text)]">{currentUser.displayName}</p>
               <p className="truncate text-xs text-[var(--color-muted)]">{currentUser.email}</p>
-            </div>
-          </Link>
+            </Link>
+          </div>
         ) : null}
       </div>
       </aside>

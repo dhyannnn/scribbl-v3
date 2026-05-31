@@ -1844,6 +1844,22 @@ async function updateCurrentUserAttendance(
     return result;
   }
 
+  if (attendance === "joined") {
+    const prevStatus = currentUser.status !== "IN_MEETING"
+      ? currentUser.status
+      : (currentUser.previousStatus ?? "ONLINE");
+    await prisma.user.update({
+      where: { id: currentUser.id },
+      data: { status: "IN_MEETING", previousStatus: prevStatus },
+    });
+  } else {
+    const restoreStatus = currentUser.previousStatus ?? "ONLINE";
+    await prisma.user.update({
+      where: { id: currentUser.id },
+      data: { status: restoreStatus, previousStatus: null },
+    });
+  }
+
   revalidateMeetingPaths(workspaceId, meetingId);
 
   return {

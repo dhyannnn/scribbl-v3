@@ -198,6 +198,13 @@ enum SubscriptionStatus {
   INCOMPLETE
 }
 
+enum UserStatus {
+  ONLINE
+  BUSY
+  AWAY
+  IN_MEETING
+}
+
 enum NotificationType {
   ANNOUNCEMENT_POSTED
   CHAT_MESSAGE
@@ -221,9 +228,11 @@ model User {
   institution         String?
   jobTitle            String?
   bio                 String?
-  timezone            String    @default("UTC")
-  language            String    @default("en")
-  darkMode            Boolean   @default(false)
+  timezone            String     @default("UTC")
+  language            String     @default("en")
+  darkMode            Boolean    @default(false)
+  status              UserStatus @default(ONLINE)
+  previousStatus      UserStatus?
   deletionRequestedAt DateTime?
   deletedAt           DateTime?
   createdAt           DateTime  @default(now())

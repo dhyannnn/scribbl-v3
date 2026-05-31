@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
@@ -14,6 +15,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(
         new URL(createLoginUrl("Could not finish sign in. Try again.", next), requestUrl.origin),
       );
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.email) {
+      await prisma.user.updateMany({
+        where: { email: user.email.toLowerCase() },
+        data: { status: "ONLINE", previousStatus: null },
+      });
     }
   } else {
     return NextResponse.redirect(new URL(createLoginUrl("Could not finish sign in. Try again.", next), requestUrl.origin));
