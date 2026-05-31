@@ -300,6 +300,18 @@ body {
   pointer-events: none;
 }
 
+.scribbl-mention {
+  display: inline-block;
+  background: var(--color-secondary-dim);
+  color: var(--color-secondary);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-weight: 600;
+  font-size: 0.9em;
+  white-space: nowrap;
+  cursor: default;
+}
+
 /* ── Video split layout ───────────────────────────────────────────────── */
 
 body.scribbl-video-split-active { overflow-x: hidden; }

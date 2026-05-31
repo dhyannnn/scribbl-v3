@@ -32,6 +32,7 @@ import { Indent } from "@/lib/tiptap/indent";
 import { KeyboardShortcuts } from "@/lib/tiptap/keyboard-shortcuts";
 import { LiveblocksCursors, type CursorUser } from "@/lib/tiptap/liveblocks-cursors";
 import { SlashCommands } from "@/lib/tiptap/slash-commands";
+import { buildMentionExtension, type MentionMember } from "@/lib/tiptap/mention";
 import { NoteToolbar } from "@/components/NoteToolbar";
 import { VisibilityDropdown } from "@/components/VisibilityDropdown";
 import { noteTitleMaxLength } from "@/lib/note-title";
@@ -100,6 +101,7 @@ type EditorProps = {
   onExit?: () => void;
   onCollapse?: () => void;
   variant?: "card" | "document";
+  members?: MentionMember[];
 };
 
 function CollapseDocIcon() {
@@ -168,7 +170,7 @@ export function TextNoteEditor(props: EditorProps) {
 
 // Inner editor — only mounts once Yjs is confirmed ready.
 function TextNoteEditorInner({
-  workspaceId, meetingId, noteId, title, contentJson, saveAction, canEdit, canExportPdf = true, noteVisibility, canChangeVisibility = false, onExit, onCollapse, variant = "card", ySetup,
+  workspaceId, meetingId, noteId, title, contentJson, saveAction, canEdit, canExportPdf = true, noteVisibility, canChangeVisibility = false, onExit, onCollapse, variant = "card", members = [], ySetup,
 }: EditorProps & { ySetup: YSetup }) {
   const [titleValue, setTitleValue] = useState(title);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -242,7 +244,7 @@ function TextNoteEditorInner({
       Subscript,
       Superscript,
       MathNode,
-      ...(canEdit ? [SlashCommands] : []),
+      ...(canEdit ? [SlashCommands, buildMentionExtension(members)] : []),
     ],
     onCreate: ({ editor: e }) => {
       const yFragment = ySetup.yDoc.getXmlFragment("tiptap-v1");
