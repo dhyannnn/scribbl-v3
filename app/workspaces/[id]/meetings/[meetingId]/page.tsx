@@ -42,7 +42,6 @@ import { MeetingChatPanel } from "./MeetingChatPanel";
 import { ActiveMeetingBridge } from "./ActiveMeetingBridge";
 import { VideoRejoinBanner } from "./VideoRejoinBanner";
 import { PollsPanel } from "@/components/PollsPanel";
-import { createMeetingChatRoomId } from "@/lib/liveblocks-room";
 import { canCreateMeetingPoll } from "@/lib/meeting-permissions";
 import { shapePoll } from "@/lib/polls";
 import {
@@ -511,7 +510,8 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
   });
   const initialPolls = rawPolls.map((p) => shapePoll(p, currentUser.id));
   const canCreatePoll = canCreateMeetingPoll(permissionContext);
-  const pollsRoomId = createMeetingChatRoomId(id, meetingId);
+  // Use the same room as meeting chat so poll broadcasts appear in the chat feed
+  const chatRoomId = meetingChannel ? createChatRoomId(id, meetingChannel.id) : createChatRoomId(id, meeting.id);
 
   return (
     <main data-meeting-hub-main className="min-h-screen overflow-x-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
@@ -985,12 +985,14 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
 
         <MeetingChatPanel
           workspaceId={id}
-          roomId={meetingChannel ? createChatRoomId(id, meetingChannel.id) : createChatRoomId(id, meeting.id)}
+          roomId={chatRoomId}
           channel={meetingChannel}
           currentUserId={currentUser.id}
           currentUserDisplayName={currentUser.displayName}
           currentUserAvatarUrl={currentUser.avatarUrl}
           canModerateChat={canModerateChat}
+          initialPolls={initialPolls}
+          canCreatePolls={canCreatePoll}
           status={chatStatus}
           title="Meeting Chat"
           emptyText="No messages in this meeting chat yet."
@@ -1003,7 +1005,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
 
         <section id="meeting-polls" className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm scroll-mt-6">
           <PollsPanel
-            roomId={pollsRoomId}
+            roomId={chatRoomId}
             initialPolls={initialPolls}
             currentUserId={currentUser.id}
             canCreate={canCreatePoll}
