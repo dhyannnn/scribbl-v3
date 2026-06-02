@@ -86,6 +86,20 @@ const ExportCtx = createContext<ExportCtxValue>({
 // (position: fixed). This scopes the toolbar to the whiteboard card and
 // prevents multiple mounted editors from stacking their toolbars globally.
 const ToolbarContainerCtx = createContext<HTMLElement | null>(null);
+const ToolbarCompactCtx = createContext(false);
+
+function useToolbarSizes() {
+  const compact = useContext(ToolbarCompactCtx);
+  return {
+    btn: compact ? 26 : 32,
+    radius: compact ? 5 : 6,
+    icon: compact ? 14 : 18,
+    penCircle: compact ? 21 : 28,
+    dividerH: compact ? 16 : 20,
+    pillPad: compact ? "3px 6px" : "6px 10px",
+    pillGap: compact ? 2 : 4,
+  } as const;
+}
 
 type PenSlot = { color: TLDefaultColorStyle; size: TLDefaultSizeStyle };
 
@@ -289,7 +303,8 @@ function DashIcon({ type }: { type: TLDefaultDashStyle }) {
 
 // Tool icon SVGs (18×18 viewBox)
 function ToolIcon({ tool }: { tool: string }) {
-  const props = { width: 18, height: 18, viewBox: "0 0 18 18", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, style: { display: "block" as const } };
+  const { icon } = useToolbarSizes();
+  const props = { width: icon, height: icon, viewBox: "0 0 18 18", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, style: { display: "block" as const } };
   if (tool === "draw") return (
     <svg {...props}>
       <path d="M2,14 C5,8 8,18 11,12 C14,6 15,14 18,10" />
@@ -404,15 +419,16 @@ function TBButton({
   children: React.ReactNode;
 }) {
   const c = usePillColors();
+  const sz = useToolbarSizes();
   return (
     <button
       title={title}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={onClick}
       style={{
-        width: 32,
-        height: 32,
-        borderRadius: 6,
+        width: sz.btn,
+        height: sz.btn,
+        borderRadius: sz.radius,
         border: "none",
         background: active ? c.active : "transparent",
         cursor: "pointer",
@@ -511,7 +527,8 @@ function usePopoverStyle(overrides?: React.CSSProperties): React.CSSProperties {
 
 function Divider() {
   const c = usePillColors();
-  return <div style={{ width: 1, height: 20, background: c.divider, margin: "0 4px", flexShrink: 0 }} />;
+  const sz = useToolbarSizes();
+  return <div style={{ width: 1, height: sz.dividerH, background: c.divider, margin: "0 4px", flexShrink: 0 }} />;
 }
 
 function PopoverSection({ label }: { label: string }) {
@@ -540,6 +557,7 @@ function PenSlotCircle({
   const isDarkMode = useIsDarkMode();
   const [popoverOpen, setPopoverOpen] = useState(false);
   const c = usePillColors();
+  const sz = useToolbarSizes();
   const popoverStyle = usePopoverStyle({ width: 184 });
   const theme = getDefaultColorTheme({ isDarkMode });
   const hexColor = (theme as unknown as Record<string, { solid: string }>)[slot.color]?.solid ?? "#000";
@@ -599,8 +617,8 @@ function PenSlotCircle({
         onPointerDown={(e) => e.stopPropagation()}
         onClick={handleClick}
         style={{
-          width: 28,
-          height: 28,
+          width: sz.penCircle,
+          height: sz.penCircle,
           borderRadius: "50%",
           border: "none",
           outline: isActive ? "2px solid var(--color-secondary)" : "none",
@@ -655,6 +673,7 @@ function StyleControls() {
   const [fontOpen, setFontOpen] = useState(false);
   const [tuneOpen, setTuneOpen] = useState(false);
   const c = usePillColors();
+  const sz = useToolbarSizes();
   const colorPopoverStyle = usePopoverStyle({ width: 168 });
   const fontPopoverStyle = usePopoverStyle({ width: 164 });
   const tunePopoverStyle = usePopoverStyle({ width: 200, right: 0, left: "auto", transform: "none" });
@@ -720,8 +739,8 @@ function StyleControls() {
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => setColorOpen((v) => !v)}
             style={{
-              width: 28,
-              height: 28,
+              width: sz.penCircle,
+              height: sz.penCircle,
               borderRadius: "50%",
               border: `1px solid ${c.border}`,
               background: currentColorHex,
@@ -740,9 +759,9 @@ function StyleControls() {
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => handleStyleChange(DefaultSizeStyle, s)}
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: 4,
+            width: sz.btn,
+            height: sz.btn,
+            borderRadius: sz.radius,
             border: "none",
             background: currentSize === s ? c.active : "transparent",
             cursor: "pointer",
@@ -985,9 +1004,12 @@ function ScribblToolbar() {
   const geoPopoverStyle = usePopoverStyle({ width: 160, left: "50%", transform: "translateX(-50%)" });
   const overflowPopoverStyle = usePopoverStyle({ display: "flex", gap: 4, padding: 6 });
 
+  const sz = useToolbarSizes();
   const pillStyle: React.CSSProperties = {
     ...PILL_BASE,
     position: toolbarContainer ? "absolute" : "fixed",
+    padding: sz.pillPad,
+    gap: sz.pillGap,
     background: c.bg,
     border: `1px solid ${c.border}`,
     boxShadow: c.shadow,
@@ -997,7 +1019,7 @@ function ScribblToolbar() {
 
   const chevronBtn = (
     <TBButton title={collapsed ? "Expand toolbar" : "Collapse toolbar"} onClick={toggleCollapsed}>
-      <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
+      <svg width={sz.icon} height={sz.icon} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
         {collapsed
           ? <path d="M5,11 L9,7 L13,11" />
           : <path d="M5,7 L9,11 L13,7" />}
@@ -1187,7 +1209,7 @@ function ScribblToolbar() {
       {/* Image upload */}
       {canUploadAssets && (
         <TBButton title="Upload image" onClick={() => actions["insert-media"]?.onSelect("toolbar")}>
-          <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
+          <svg width={sz.icon} height={sz.icon} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
             <rect x={1.5} y={3.5} width={15} height={11} rx={1.5} />
             <circle cx={6} cy={7.5} r={1.3} />
             <path d="M1.5,12.5 L5.5,8.5 L8.5,11.5 L11,9 L16.5,14.5" />
@@ -1707,17 +1729,19 @@ export function TldrawWhiteboardEditor({
 
   const canvas = (
     <ToolbarContainerCtx.Provider value={toolbarContainer}>
-      <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets, onRegisterExportPdf: registerExportPdf }}>
-        <PenSlotCtx.Provider value={{ penSlots, setSlot }}>
-          <TldrawCanvas
-            key={`${noteId}:${variant}`}
-            store={storeWithStatus}
-            shapeUtils={SHAPE_UTILS}
-            onMount={handleMount}
-            components={TLDRAW_COMPONENTS}
-          />
-        </PenSlotCtx.Provider>
-      </ExportCtx.Provider>
+      <ToolbarCompactCtx.Provider value={variant === "card"}>
+        <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets, onRegisterExportPdf: registerExportPdf }}>
+          <PenSlotCtx.Provider value={{ penSlots, setSlot }}>
+            <TldrawCanvas
+              key={`${noteId}:${variant}`}
+              store={storeWithStatus}
+              shapeUtils={SHAPE_UTILS}
+              onMount={handleMount}
+              components={TLDRAW_COMPONENTS}
+            />
+          </PenSlotCtx.Provider>
+        </ExportCtx.Provider>
+      </ToolbarCompactCtx.Provider>
     </ToolbarContainerCtx.Provider>
   );
 
