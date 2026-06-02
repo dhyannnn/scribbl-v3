@@ -9,11 +9,13 @@ import {
 } from "@/lib/meeting-lifecycle";
 import { createChatRoomId } from "@/lib/liveblocks-room";
 import {
+  canCreateMeetingPoll,
   canManageMeetingParticipantPermissions,
   canModerateMeeting,
   getMeetingVideoPermissions,
   type MeetingPermissionOverrideInput,
 } from "@/lib/meeting-permissions";
+import { shapePoll } from "@/lib/polls";
 import { prisma } from "@/lib/prisma";
 import { VideoPopoutShell } from "./VideoPopoutShell";
 
@@ -256,6 +258,25 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
     currentUserRole: currentMembership.role,
   });
   const canModerateChat = currentMembership.role === "OWNER" || currentMembership.role === "ADMIN";
+  const pollPermissionContext = {
+    currentUserId: currentUser.id,
+    meetingCreatedByUserId: meeting.createdByUserId,
+    currentUserRole: currentMembership.role,
+    settings: meeting.moderationSettings,
+    overrides: meeting.permissionOverrides as MeetingPermissionOverrideInput[],
+  };
+  const canCreatePoll = canCreateMeetingPoll(pollPermissionContext);
+  const rawPolls = await prisma.poll.findMany({
+    where: { meetingId },
+    select: {
+      id: true, question: true, options: true, createdByUserId: true,
+      closedAt: true, createdAt: true, updatedAt: true,
+      createdBy: { select: { displayName: true } },
+      votes: { select: { userId: true, optionIndex: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const initialPolls = rawPolls.map((p) => shapePoll(p, currentUser.id));
   const pendingRequests = meeting.permissionOverrides.filter(
     (override) =>
       override.state === "REQUESTED" &&
@@ -366,6 +387,8 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
           currentUserDisplayName: currentUser.displayName,
           currentUserAvatarUrl: currentUser.avatarUrl,
           canModerateChat,
+          initialPolls,
+          canCreatePolls: canCreatePoll,
           openInChannelsHref: meetingChannel ? `/workspaces/${id}/chat?channel=${meetingChannel.id}` : undefined,
         }}
       />

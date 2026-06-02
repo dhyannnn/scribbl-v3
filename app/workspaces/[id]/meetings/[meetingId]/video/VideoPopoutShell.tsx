@@ -79,6 +79,8 @@ type VideoMeetingChatProps = {
   currentUserAvatarUrl: string | null;
   canModerateChat: boolean;
   openInChannelsHref?: string;
+  initialPolls?: import("@/lib/polls").PollData[];
+  canCreatePolls?: boolean;
 };
 
 type VideoMeetingParticipant = {
@@ -501,6 +503,8 @@ function FullVideoSidePanel({
           currentUserDisplayName={chat.currentUserDisplayName}
           currentUserAvatarUrl={chat.currentUserAvatarUrl}
           canModerateChat={chat.canModerateChat}
+          initialPolls={chat.initialPolls}
+          canCreatePolls={chat.canCreatePolls}
           title="Meeting Chat"
           emptyText="No messages in this meeting chat yet."
           placeholder="Message this meeting"
