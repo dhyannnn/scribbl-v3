@@ -17,7 +17,8 @@ import { Check, Edit2, ExternalLink, Hash, Paperclip, Pin, PinOff, Reply, Search
 import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { LiveblocksRoom } from "@/components/LiveblocksRoom";
 import { PollsPanelInner } from "@/components/PollsPanel";
-import type { PollData } from "@/lib/polls";
+import type { PollData, PollEvent } from "@/lib/polls";
+import { castVote, closePoll } from "@/app/workspaces/[id]/polls/actions";
 
 hljs.registerLanguage("javascript", javascript);
 hljs.registerLanguage("typescript", typescript);
@@ -156,6 +157,7 @@ function RealtimeChatPanelContent({
   const [showSearch, setShowSearch] = useState(false);
   const [showPinned, setShowPinned] = useState(false);
   const [showPolls, setShowPolls] = useState(false);
+  const [polls, setPolls] = useState<PollData[]>(initialPolls);
   const [emojiPickerForId, setEmojiPickerForId] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [attachmentPending, setAttachmentPending] = useState(false);
@@ -213,8 +215,27 @@ function RealtimeChatPanelContent({
   }, [updateMyPresence]);
 
   useEventListener(({ event }) => {
-    const ev = event as ChatEvent;
+    const ev = event as ChatEvent | PollEvent;
     if (!channel) return;
+
+    if (ev.type === "poll-created") {
+      setPolls((cur) => cur.some((p) => p.id === ev.poll.id) ? cur : [ev.poll, ...cur]);
+      return;
+    }
+    if (ev.type === "poll-voted") {
+      setPolls((cur) => cur.map((p) => {
+        if (p.id !== ev.pollId) return p;
+        const votes = p.votes.filter((v) => v.userId !== ev.userId);
+        votes.push({ userId: ev.userId, optionIndex: ev.optionIndex });
+        const options = p.options.map((o, i) => ({ ...o, count: votes.filter((v) => v.optionIndex === i).length }));
+        return { ...p, votes, options, myVote: ev.userId === currentUserId ? ev.optionIndex : p.myVote };
+      }));
+      return;
+    }
+    if (ev.type === "poll-closed") {
+      setPolls((cur) => cur.map((p) => p.id === ev.pollId ? { ...p, closedAt: new Date().toISOString() } : p));
+      return;
+    }
 
     if ("message" in ev && ev.message.channelId !== channel.id) return;
     if (ev.type === "message-created") {
@@ -421,6 +442,60 @@ function RealtimeChatPanelContent({
 
   const statusMessage = useMemo(() => getChatStatusMessage(sendStatus), [sendStatus]);
 
+  type ChatItem = { kind: "message"; data: MessageWithGroup } | { kind: "poll"; data: PollData };
+
+  const sortedItems = useMemo<ChatItem[]>(() => {
+    const msgItems = displayMessages.map((m) => ({ kind: "message" as const, data: m }));
+    if (searchQuery.trim() || !polls.length) return msgItems;
+    const merged: ChatItem[] = [
+      ...msgItems,
+      ...polls.map((p) => ({ kind: "poll" as const, data: p })),
+    ];
+    merged.sort((a, b) => new Date(a.data.createdAt).getTime() - new Date(b.data.createdAt).getTime());
+    return merged;
+  }, [displayMessages, polls, searchQuery]);
+
+  function handlePollVote(pollId: string, optionIndex: number) {
+    const poll = polls.find((p) => p.id === pollId);
+    if (!poll || poll.closedAt) return;
+    const previousOptionIndex = poll.myVote ?? null;
+    setPolls((cur) => cur.map((p) => {
+      if (p.id !== pollId) return p;
+      const votes = p.votes.filter((v) => v.userId !== currentUserId);
+      votes.push({ userId: currentUserId, optionIndex });
+      const options = p.options.map((o, i) => ({ ...o, count: votes.filter((v) => v.optionIndex === i).length }));
+      return { ...p, votes, options, myVote: optionIndex };
+    }));
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.append("pollId", pollId);
+      fd.append("optionIndex", String(optionIndex));
+      const result = await castVote(fd);
+      if (result.error) {
+        setPolls((cur) => cur.map((p) => {
+          if (p.id !== pollId) return p;
+          const votes = previousOptionIndex !== null
+            ? p.votes.filter((v) => v.userId !== currentUserId).concat({ userId: currentUserId, optionIndex: previousOptionIndex })
+            : p.votes.filter((v) => v.userId !== currentUserId);
+          const options = p.options.map((o, i) => ({ ...o, count: votes.filter((v) => v.optionIndex === i).length }));
+          return { ...p, votes, options, myVote: previousOptionIndex };
+        }));
+        return;
+      }
+      broadcast({ type: "poll-voted", pollId, userId: currentUserId, optionIndex, previousOptionIndex: result.previousOptionIndex ?? null } satisfies PollEvent);
+    });
+  }
+
+  function handlePollClose(pollId: string) {
+    setPolls((cur) => cur.map((p) => p.id === pollId ? { ...p, closedAt: new Date().toISOString() } : p));
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.append("pollId", pollId);
+      await closePoll(fd);
+      broadcast({ type: "poll-closed", pollId } satisfies PollEvent);
+    });
+  }
+
   const messagesClass = variant === "fullscreen"
     ? "flex-1 overflow-y-auto bg-[var(--color-bg)] p-3 sm:p-5 content-start"
     : `overflow-y-auto bg-[var(--color-bg)] p-3 sm:p-5 ${maxMessagesHeightClassName}`;
@@ -557,7 +632,19 @@ function RealtimeChatPanelContent({
         {!searchQuery && channel && messages.length === 0 && (
           <p className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-low)] p-4 text-sm text-[var(--color-muted)]">{emptyText}</p>
         )}
-        {displayMessages.map((message) => {
+        {sortedItems.map((item) => {
+          if (item.kind === "poll") {
+            return (
+              <ChatPollCard
+                key={`poll-${item.data.id}`}
+                poll={item.data}
+                currentUserId={currentUserId}
+                onVote={handlePollVote}
+                onClose={handlePollClose}
+              />
+            );
+          }
+          const message = item.data;
           const isOwn = message.senderUserId === currentUserId;
           const canEdit = isOwn && !message.deletedAt && !message.isPending;
           const canDelete = !message.deletedAt && !message.isPending && (isOwn || canModerateChat);
@@ -1093,6 +1180,103 @@ function groupMessages(messages: RealtimeChatMessage[]): MessageWithGroup[] {
     const sameNext = next?.senderUserId === message.senderUserId && !next.deletedAt && !message.deletedAt;
     return { ...message, isFirstInGroup: !samePrev || prevBreak, isLastInGroup: !sameNext || nextBreak };
   });
+}
+
+// ── Inline poll card ─────────────────────────────────────────────────────────
+
+function ChatPollCard({
+  poll,
+  currentUserId,
+  onVote,
+  onClose,
+}: {
+  poll: PollData;
+  currentUserId: string;
+  onVote: (pollId: string, optionIndex: number) => void;
+  onClose: (pollId: string) => void;
+}) {
+  const totalVotes = poll.votes.length;
+  const isCreator = poll.createdByUserId === currentUserId;
+  const isClosed = !!poll.closedAt;
+  const maxCount = Math.max(...poll.options.map((o) => o.count), 0);
+
+  return (
+    <div className="my-3 flex justify-center px-2">
+      <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]">
+        {/* Header */}
+        <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-secondary-dim)]">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-secondary)]">
+              <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+          </div>
+          <p className="flex-1 text-[11px] text-[var(--color-subtle)]">
+            Poll by <span className="font-medium text-[var(--color-muted)]">{poll.createdByName}</span>
+            {isClosed && <span className="ml-1.5 rounded-full bg-[var(--color-surface-high)] px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-[var(--color-subtle)]">Closed</span>}
+          </p>
+          <span className="shrink-0 text-[10px] text-[var(--color-subtle)]">{formatMessageTime(poll.createdAt)}</span>
+        </div>
+
+        {/* Question */}
+        <p className="px-4 pb-2 pt-1 text-sm font-semibold text-[var(--color-text)]">{poll.question}</p>
+
+        {/* Options */}
+        <div className="flex flex-col gap-1.5 px-4 pb-3">
+          {poll.options.map((opt, i) => {
+            const pct = totalVotes > 0 ? Math.round((opt.count / totalVotes) * 100) : 0;
+            const isSelected = poll.myVote === i;
+            const isWinner = isClosed && opt.count === maxCount && opt.count > 0;
+            return (
+              <button
+                key={i}
+                type="button"
+                disabled={isClosed}
+                onClick={() => onVote(poll.id, i)}
+                className={`relative flex w-full items-center overflow-hidden rounded-xl border px-3 py-2 text-left text-sm transition disabled:cursor-default ${
+                  isSelected
+                    ? "border-[var(--color-secondary)] bg-[var(--color-secondary-dim)]"
+                    : isWinner
+                    ? "border-[var(--color-secondary)]/50 bg-[var(--color-secondary-dim)]/40"
+                    : "border-[var(--color-border)] hover:border-[var(--color-secondary)] hover:bg-[var(--color-surface-low)]"
+                }`}
+              >
+                <div
+                  className="absolute inset-y-0 left-0 transition-all duration-500"
+                  style={{
+                    width: `${pct}%`,
+                    background: isSelected ? "var(--color-secondary)" : "var(--color-surface-mid)",
+                    opacity: 0.25,
+                  }}
+                />
+                <span className="relative flex-1 text-sm text-[var(--color-text)]">{opt.text}</span>
+                <span className="relative ml-2 shrink-0 font-mono text-xs text-[var(--color-subtle)]">
+                  {opt.count} · {pct}%
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-[var(--color-border)] px-4 py-2">
+          <span className="text-xs text-[var(--color-subtle)]">
+            {totalVotes} vote{totalVotes !== 1 ? "s" : ""}
+          </span>
+          {isCreator && !isClosed ? (
+            <button
+              type="button"
+              onClick={() => onClose(poll.id)}
+              className="text-xs text-[var(--color-muted)] transition hover:text-[var(--color-danger)]"
+            >
+              Close poll
+            </button>
+          ) : isClosed ? (
+            <span className="text-xs text-[var(--color-subtle)]">Final results</span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Avatar({ name, avatarUrl, size = 32 }: { name: string; avatarUrl?: string | null; size?: number }) {
