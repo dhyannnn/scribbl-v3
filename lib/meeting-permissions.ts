@@ -15,6 +15,7 @@ export type MeetingModerationSettingsInput = {
   screenShareDefaultEnabled: boolean;
   reactionsEnabled: boolean;
   handRaiseEnabled: boolean;
+  pollCreationEnabled?: boolean;
 } | null;
 
 export type MeetingPermissionOverrideInput = {
@@ -51,6 +52,7 @@ export const defaultMeetingModerationSettings = {
   screenShareDefaultEnabled: false,
   reactionsEnabled: true,
   handRaiseEnabled: true,
+  pollCreationEnabled: false,
 } satisfies NonNullable<MeetingModerationSettingsInput>;
 
 export function canModerateMeeting(context: Pick<MeetingPermissionContext, "currentUserId" | "meetingCreatedByUserId" | "currentUserRole">) {
@@ -113,6 +115,11 @@ export function canUseCamera(context: MeetingPermissionContext) {
 
 export function canShareScreen(context: MeetingPermissionContext) {
   return resolveMeetingVideoPermission({ ...context, targetType: "SCREEN_SHARE" });
+}
+
+export function canCreateMeetingPoll(context: MeetingPermissionContext) {
+  if (canModerateMeeting(context)) return true;
+  return (context.settings ?? defaultMeetingModerationSettings).pollCreationEnabled ?? false;
 }
 
 export function canSendReactions(context: MeetingPermissionContext) {
