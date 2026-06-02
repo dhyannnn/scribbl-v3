@@ -1,7 +1,8 @@
 "use client";
 
 import { Rectangle2d, ShapeUtil, T, type TLBaseShape } from "tldraw";
-import { COVER_COLORS, isCoverTemplate, isDarkTemplate, PAGE_H, PAGE_W, type PageTemplate } from "./page-config";
+import { useIsDarkMode } from "@tldraw/editor";
+import { COVER_COLORS, isCoverTemplate, PAGE_H, PAGE_W, type PageTemplate } from "./page-config";
 
 export type PageBackgroundShape = TLBaseShape<
   "page-background",
@@ -17,8 +18,14 @@ const DARK_BG = "#1a1a1a";
 
 function borderColor(template: string): string {
   if (isCoverTemplate(template)) return "rgba(0,0,0,0.2)";
-  if (isDarkTemplate(template)) return "rgba(255,255,255,0.25)";
+  if (template.endsWith("-dark")) return "rgba(255,255,255,0.25)";
   return "rgba(0,0,0,0.18)";
+}
+
+function toEffectiveTemplate(stored: string, isDark: boolean): PageTemplate {
+  const family = stored.replace(/-dark$/, "") as PageTemplate;
+  if (isCoverTemplate(family)) return family;
+  return isDark ? (`${family}-dark` as PageTemplate) : family;
 }
 
 export class PageBackgroundShapeUtil extends ShapeUtil<PageBackgroundShape> {
@@ -81,9 +88,10 @@ export class PageBackgroundShapeUtil extends ShapeUtil<PageBackgroundShape> {
   // Called by tldraw's built-in SVG/PNG export — returns pure SVG so the
   // template renders identically to what's shown on the canvas.
   override toSvg(shape: PageBackgroundShape) {
+    const effective = toEffectiveTemplate(shape.props.template, this.editor.user.getIsDarkMode());
     return (
       <PageBackgroundSvg
-        template={shape.props.template as PageTemplate}
+        template={effective}
         w={shape.props.w}
         h={shape.props.h}
       />
@@ -120,7 +128,7 @@ function TemplateContent({
     );
   }
 
-  const dark = isDarkTemplate(template);
+  const dark = template.endsWith("-dark");
   const lineColor = dark ? DARK_LINE_COLOR : LINE_COLOR;
   const dotColor = dark ? DARK_DOT_COLOR : DOT_COLOR;
   const bgFill = dark ? DARK_BG : "white";
@@ -160,14 +168,16 @@ function TemplateContent({
 
 // DOM canvas renderer — uses <svg> as root
 function PageBackground({ template, w, h }: { template: PageTemplate; w: number; h: number }) {
-  const dark = isDarkTemplate(template) || isCoverTemplate(template);
+  const isDark = useIsDarkMode();
+  const effective = toEffectiveTemplate(template, isDark);
+  const dark = effective.endsWith("-dark") || isCoverTemplate(effective);
   const glow = dark
     ? "drop-shadow(0 8px 60px rgba(0,0,0,0.85)) drop-shadow(0 2px 10px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(91,156,246,0.18)) drop-shadow(0 0 2px rgba(255,255,255,0.14))"
     : "drop-shadow(0 8px 40px rgba(0,0,0,0.22)) drop-shadow(0 20px 60px rgba(0,0,0,0.10)) drop-shadow(0 0 40px rgba(33,112,228,0.07))";
 
   return (
     <TemplateContent
-      template={template}
+      template={effective}
       w={w}
       h={h}
       Root="svg"
