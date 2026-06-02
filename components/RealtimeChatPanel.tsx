@@ -524,6 +524,14 @@ function RealtimeChatPanelContent({
                 title="Search messages">
                 <Search size={14} />
               </button>
+              {canCreatePolls && (
+                <button type="button" onClick={() => setShowPolls((v) => !v)} title="Create poll"
+                  className={`grid size-7 place-items-center rounded-full transition ${showPolls ? "bg-[var(--color-secondary-dim)] text-[var(--color-secondary)]" : "text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)]"}`}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+                  </svg>
+                </button>
+              )}
               {openInChannelsHref && (
                 <Link href={openInChannelsHref} className="text-xs font-medium text-[var(--color-secondary)]">Open</Link>
               )}
