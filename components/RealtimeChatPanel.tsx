@@ -16,6 +16,8 @@ import { useBroadcastEvent, useEventListener, useMyPresence, useOthers } from "@
 import { Check, Edit2, ExternalLink, Hash, Paperclip, Pin, PinOff, Reply, Search, SendHorizontal, Smile, Trash2, X } from "lucide-react";
 import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { LiveblocksRoom } from "@/components/LiveblocksRoom";
+import { PollsPanelInner } from "@/components/PollsPanel";
+import type { PollData } from "@/lib/polls";
 
 hljs.registerLanguage("javascript", javascript);
 hljs.registerLanguage("typescript", typescript);
@@ -74,6 +76,8 @@ type RealtimeChatPanelProps = {
   lazy?: boolean;
   variant?: "fullscreen" | "card";
   members?: Member[];
+  initialPolls?: PollData[];
+  canCreatePolls?: boolean;
 };
 
 const maxMessageLength = 2000;
@@ -142,6 +146,7 @@ function RealtimeChatPanelContent({
   readOnlyText = "You can read this channel, but you cannot post here.",
   openInChannelsHref, maxMessagesHeightClassName = "max-h-[50vh] sm:max-h-[460px]",
   variant = "card", members = [],
+  initialPolls = [], canCreatePolls = false,
 }: Omit<RealtimeChatPanelProps, "roomId">) {
   const [messages, setMessages] = useState<RealtimeChatMessage[]>(channel?.messages ?? []);
   const [sendStatus, setSendStatus] = useState<string | null>(status ?? null);
@@ -150,6 +155,7 @@ function RealtimeChatPanelContent({
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [showPinned, setShowPinned] = useState(false);
+  const [showPolls, setShowPolls] = useState(false);
   const [emojiPickerForId, setEmojiPickerForId] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [attachmentPending, setAttachmentPending] = useState(false);
@@ -477,6 +483,13 @@ function RealtimeChatPanelContent({
               className={`grid size-7 place-items-center rounded-full transition ${showSearch ? "bg-[var(--color-secondary-dim)] text-[var(--color-secondary)]" : "text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)]"}`}>
               <Search size={14} />
             </button>
+            <button type="button" onClick={() => setShowPolls((v) => !v)}
+              title="Polls"
+              className={`grid size-7 place-items-center rounded-full transition ${showPolls ? "bg-[var(--color-secondary-dim)] text-[var(--color-secondary)]" : "text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)]"}`}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+              </svg>
+            </button>
           </div>
           {showSearch && (
             <div className="border-b border-[var(--color-border)] px-4 py-2">
@@ -518,6 +531,19 @@ function RealtimeChatPanelContent({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Polls panel */}
+      {showPolls && (
+        <div className="shrink-0 max-h-[60vh] overflow-y-auto border-b border-[var(--color-border)] bg-[var(--color-surface-low)] p-4">
+          <PollsPanelInner
+            initialPolls={initialPolls}
+            currentUserId={currentUserId}
+            canCreate={canCreatePolls}
+            workspaceId={workspaceId}
+            channelId={channel?.id}
+          />
         </div>
       )}
 

@@ -6,6 +6,7 @@ import { RealtimeChatPanel } from "@/components/RealtimeChatPanel";
 import { ChatPanelResizer } from "@/components/ChatPanelResizer";
 import { getCurrentUser } from "@/lib/current-user";
 import { createChatRoomId } from "@/lib/liveblocks-room";
+import { shapePoll } from "@/lib/polls";
 import { prisma } from "@/lib/prisma";
 import { createChannel, deleteChannel } from "../actions";
 
@@ -89,7 +90,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
     : `#${channel.name}`;
 
   // Fetch right panel data in parallel with messages
-  const [messages, recentNotes, pinnedFiles, members] = await Promise.all([
+  const [messages, recentNotes, pinnedFiles, members, rawPolls] = await Promise.all([
     prisma.message.findMany({
       where: { channelId, deletedAt: null },
       select: {
@@ -124,7 +125,19 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
       orderBy: { createdAt: "asc" },
       take: 20,
     }),
+    prisma.poll.findMany({
+      where: { channelId, meetingId: null },
+      select: {
+        id: true, question: true, options: true, createdByUserId: true,
+        closedAt: true, createdAt: true, updatedAt: true,
+        createdBy: { select: { displayName: true } },
+        votes: { select: { userId: true, optionIndex: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
+
+  const initialPolls = rawPolls.map((p) => shapePoll(p, currentUser.id));
 
   const channelPayload = {
     id: channel.id,
@@ -202,6 +215,8 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
             currentUserDisplayName={currentUser.displayName}
             currentUserAvatarUrl={currentUser.avatarUrl}
             canModerateChat={canManage}
+            initialPolls={initialPolls}
+            canCreatePolls={canPost}
             status={chatStatus}
             title={displayName}
             emptyText={

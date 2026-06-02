@@ -36,10 +36,15 @@ import {
 } from "@/lib/meeting-permissions";
 import { CancelMeetingForm } from "../CancelMeetingForm";
 import { updateMeetingDetails } from "../actions";
+import { updateModerationSettings } from "../../polls/actions";
 import { LocalDatetimeInput } from "@/components/LocalDateTimeInput";
 import { MeetingChatPanel } from "./MeetingChatPanel";
 import { ActiveMeetingBridge } from "./ActiveMeetingBridge";
 import { VideoRejoinBanner } from "./VideoRejoinBanner";
+import { PollsPanel } from "@/components/PollsPanel";
+import { createMeetingChatRoomId } from "@/lib/liveblocks-room";
+import { canCreateMeetingPoll } from "@/lib/meeting-permissions";
+import { shapePoll } from "@/lib/polls";
 import {
   admitAllToMeeting,
   admitToMeeting,
@@ -494,6 +499,20 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
     ? (privateNoteSlotArtifacts.find((a) => a.noteId === selectedPrivateArtifact.noteId) ?? null)
     : null;
 
+  const rawPolls = await prisma.poll.findMany({
+    where: { meetingId },
+    select: {
+      id: true, question: true, options: true, createdByUserId: true,
+      closedAt: true, createdAt: true, updatedAt: true,
+      createdBy: { select: { displayName: true } },
+      votes: { select: { userId: true, optionIndex: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const initialPolls = rawPolls.map((p) => shapePoll(p, currentUser.id));
+  const canCreatePoll = canCreateMeetingPoll(permissionContext);
+  const pollsRoomId = createMeetingChatRoomId(id, meetingId);
+
   return (
     <main data-meeting-hub-main className="min-h-screen overflow-x-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
       <MeetingRouteRefresher />
@@ -730,6 +749,34 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
               ) : null}
             </form>
             <CancelMeetingForm workspaceId={id} meetingId={meeting.id} isSeries={Boolean(meeting.seriesId)} />
+
+            <form action={updateModerationSettings} className="border-t border-[var(--color-border)] pt-4">
+              <input type="hidden" name="workspaceId" value={id} />
+              <input type="hidden" name="meetingId" value={meeting.id} />
+              <p className="mb-3 font-mono text-[11px] font-bold uppercase tracking-widest text-[var(--color-muted)]">
+                Moderation
+              </p>
+              <label className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 py-3 cursor-pointer hover:bg-[var(--color-surface-mid)] transition">
+                <input
+                  type="checkbox"
+                  name="pollCreationEnabled"
+                  defaultChecked={meeting.moderationSettings?.pollCreationEnabled ?? false}
+                  className="h-4 w-4 rounded accent-[var(--color-secondary)]"
+                />
+                <div>
+                  <p className="text-sm font-medium text-[var(--color-text)]">Allow participants to create polls</p>
+                  <p className="text-xs text-[var(--color-muted)]">Off by default — host and admins can always create polls</p>
+                </div>
+              </label>
+              <div className="mt-3">
+                <PendingSubmitButton
+                  pendingLabel="Saving..."
+                  className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
+                >
+                  Save moderation settings
+                </PendingSubmitButton>
+              </div>
+            </form>
           </section>
         ) : null}
 
@@ -953,6 +1000,17 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           }
           lazy
         />
+
+        <section id="meeting-polls" className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm scroll-mt-6">
+          <PollsPanel
+            roomId={pollsRoomId}
+            initialPolls={initialPolls}
+            currentUserId={currentUser.id}
+            canCreate={canCreatePoll}
+            workspaceId={id}
+            meetingId={meetingId}
+          />
+        </section>
 
         <MeetingNotesSection
           workspaceId={id}
