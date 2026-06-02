@@ -35,14 +35,11 @@ export function PollsPanelInner({
       setPolls((cur) =>
         cur.map((p) => {
           if (p.id !== ev.pollId) return p;
-          const options = p.options.map((opt, i) => {
-            let count = opt.count;
-            if (ev.previousOptionIndex === i) count = Math.max(0, count - 1);
-            if (ev.optionIndex === i) count += 1;
-            return { ...opt, count };
-          });
+          const votes = p.votes.filter((v) => v.userId !== ev.userId);
+          votes.push({ userId: ev.userId, optionIndex: ev.optionIndex });
+          const options = p.options.map((opt, i) => ({ ...opt, count: votes.filter((v) => v.optionIndex === i).length }));
           const myVote = ev.userId === currentUserId ? ev.optionIndex : p.myVote;
-          return { ...p, options, myVote };
+          return { ...p, votes, options, myVote };
         }),
       );
     } else if (ev.type === "poll-closed") {
@@ -170,8 +167,6 @@ function PollCard({
   const [isPending, startTransition] = useTransition();
   const [showResponses, setShowResponses] = useState(false);
   const totalVotes = poll.options.reduce((sum, o) => sum + o.count, 0);
-  const canClose =
-    poll.createdByUserId === currentUserId || poll.votes.some(() => false); // creator check
 
   function handleVote(optionIndex: number) {
     if (isPending) return;
@@ -369,7 +364,7 @@ function ResponsesBreakdown({ poll }: { poll: PollData }) {
 
 // ── Create poll form ──────────────────────────────────────────────────────────
 
-function CreatePollForm({
+export function CreatePollForm({
   workspaceId,
   meetingId,
   channelId,
