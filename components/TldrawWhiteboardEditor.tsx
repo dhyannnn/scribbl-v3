@@ -82,6 +82,12 @@ const ExportCtx = createContext<ExportCtxValue>({
   onRegisterExportPdf: null,
 });
 
+// Each TldrawWhiteboardEditor instance provides its own container so the
+// toolbar portals into it (position: absolute) rather than document.body
+// (position: fixed). This scopes the toolbar to the whiteboard card and
+// prevents multiple mounted editors from stacking their toolbars globally.
+const ToolbarContainerCtx = createContext<HTMLElement | null>(null);
+
 type PenSlot = { color: TLDefaultColorStyle; size: TLDefaultSizeStyle };
 
 const DEFAULT_PEN_SLOTS: [PenSlot, PenSlot, PenSlot] = [
@@ -937,6 +943,7 @@ function ScribblToolbar() {
   const editor = useEditor();
   const { canUploadAssets } = useContext(ExportCtx);
   const actions = useActions();
+  const toolbarContainer = useContext(ToolbarContainerCtx);
 
   const [activeSlotIdx, setActiveSlotIdx] = useState<number | null>(null);
   const [arrowOpen, setArrowOpen] = useState(false);
@@ -981,6 +988,7 @@ function ScribblToolbar() {
 
   const pillStyle: React.CSSProperties = {
     ...PILL_BASE,
+    position: toolbarContainer ? "absolute" : "fixed",
     background: c.bg,
     border: `1px solid ${c.border}`,
     boxShadow: c.shadow,
@@ -1020,7 +1028,7 @@ function ScribblToolbar() {
         <Divider />
         {chevronBtn}
       </div>,
-      document.body,
+      toolbarContainer ?? document.body,
     );
   }
 
@@ -1196,7 +1204,7 @@ function ScribblToolbar() {
       {/* Collapse chevron */}
       {chevronBtn}
     </div>,
-    document.body,
+    toolbarContainer ?? document.body,
   );
 }
 
@@ -1533,6 +1541,9 @@ export function TldrawWhiteboardEditor({
     exportPdfFnRef.current = fn;
   }, []);
 
+  const [toolbarContainer, setToolbarContainer] = useState<HTMLElement | null>(null);
+  const handleContainerRef = useCallback((el: HTMLElement | null) => setToolbarContainer(el), []);
+
   useEffect(() => { titleValueRef.current = titleValue; }, [titleValue]);
   useEffect(() => { canEditRef.current = canEdit; }, [canEdit]);
   useEffect(() => { canUploadAssetsRef.current = canUploadAssets; }, [canUploadAssets]);
@@ -1719,17 +1730,19 @@ export function TldrawWhiteboardEditor({
   }
 
   const canvas = (
-    <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets, onRegisterExportPdf: registerExportPdf }}>
-      <PenSlotCtx.Provider value={{ penSlots, setSlot }}>
-        <TldrawCanvas
-          key={`${noteId}:${variant}`}
-          store={storeWithStatus}
-          shapeUtils={SHAPE_UTILS}
-          onMount={handleMount}
-          components={TLDRAW_COMPONENTS}
-        />
-      </PenSlotCtx.Provider>
-    </ExportCtx.Provider>
+    <ToolbarContainerCtx.Provider value={toolbarContainer}>
+      <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets, onRegisterExportPdf: registerExportPdf }}>
+        <PenSlotCtx.Provider value={{ penSlots, setSlot }}>
+          <TldrawCanvas
+            key={`${noteId}:${variant}`}
+            store={storeWithStatus}
+            shapeUtils={SHAPE_UTILS}
+            onMount={handleMount}
+            components={TLDRAW_COMPONENTS}
+          />
+        </PenSlotCtx.Provider>
+      </ExportCtx.Provider>
+    </ToolbarContainerCtx.Provider>
   );
 
   if (variant === "goodnotes") {
@@ -1831,7 +1844,7 @@ export function TldrawWhiteboardEditor({
           )}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="relative min-h-0 flex-1 overflow-hidden" ref={handleContainerRef}>
           {canvas}
         </div>
 
@@ -1904,7 +1917,7 @@ export function TldrawWhiteboardEditor({
           {getStatusText(isPending ? "saving" : saveState)}
         </p>
       </div>
-      <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-sm" style={{ height: canvasHeight }}>
+      <div className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-sm" style={{ height: canvasHeight }} ref={handleContainerRef}>
         {canvas}
       </div>
       {!canEdit && (
