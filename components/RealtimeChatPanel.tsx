@@ -16,7 +16,7 @@ import { useBroadcastEvent, useEventListener, useMyPresence, useOthers } from "@
 import { Check, Edit2, ExternalLink, Hash, Paperclip, Pin, PinOff, Reply, Search, SendHorizontal, Smile, Trash2, X } from "lucide-react";
 import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { LiveblocksRoom } from "@/components/LiveblocksRoom";
-import { PollsPanelInner } from "@/components/PollsPanel";
+import { CreatePollForm } from "@/components/PollsPanel";
 import type { PollData, PollEvent } from "@/lib/polls";
 import { castVote, closePoll } from "@/app/workspaces/[id]/polls/actions";
 
@@ -609,15 +609,18 @@ function RealtimeChatPanelContent({
         </div>
       )}
 
-      {/* Polls panel */}
-      {showPolls && (
-        <div className="shrink-0 max-h-[60vh] overflow-y-auto border-b border-[var(--color-border)] bg-[var(--color-surface-low)] p-4">
-          <PollsPanelInner
-            initialPolls={initialPolls}
-            currentUserId={currentUserId}
-            canCreate={canCreatePolls}
+      {/* Polls panel — create only; active polls appear inline in the feed */}
+      {showPolls && canCreatePolls && (
+        <div className="shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface-low)] p-4">
+          <CreatePollForm
             workspaceId={workspaceId}
             channelId={channel?.id}
+            onCancel={() => setShowPolls(false)}
+            onCreated={(poll) => {
+              setPolls((cur) => (cur.some((p) => p.id === poll.id) ? cur : [poll, ...cur]));
+              setShowPolls(false);
+              broadcast({ type: "poll-created", poll } satisfies PollEvent);
+            }}
           />
         </div>
       )}
