@@ -1118,6 +1118,7 @@ export async function createMeetingNote(formData: FormData) {
   const scopeValue = String(formData.get("scope") ?? "SHARED");
   const typeValue = String(formData.get("type") ?? "TEXT");
   const noteFocusValue = String(formData.get("noteFocus") ?? "");
+  const userTimezone = String(formData.get("userTimezone") || "UTC");
 
   if (
     !workspaceId ||
@@ -1217,6 +1218,7 @@ export async function createMeetingNote(formData: FormData) {
         scope: scope === "SHARED" ? "WORKSPACE_SHARED" : "PRIVATE",
         type,
         collaborative: scope === "SHARED",
+        timeZone: userTimezone,
       }),
       type,
       visibility: scope === "SHARED" ? "WORKSPACE_SHARED" : "PRIVATE",

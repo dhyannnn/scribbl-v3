@@ -5,6 +5,7 @@ import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
 import { canEditMeetingNotes, getMeetingLifecycle } from "@/lib/meeting-lifecycle";
+import { canEditMeetingSharedNote, canEditMeetingWhiteboard } from "@/lib/meeting-permissions";
 import { prisma } from "@/lib/prisma";
 import { updateNoteExportAccess } from "../actions";
 import { NoteEditorShell } from "./NoteEditorShell";
@@ -74,6 +75,12 @@ export default async function NoteEditorPage({ params }: PageProps) {
               startsAt: true,
               endsAt: true,
               canceledAt: true,
+              createdByUserId: true,
+              moderationSettings: true,
+              permissionOverrides: {
+                where: { userId: currentUser.id },
+                select: { userId: true, targetType: true, artifactId: true, state: true },
+              },
             },
           },
         },
@@ -109,9 +116,28 @@ export default async function NoteEditorPage({ params }: PageProps) {
   );
   const currentMembership = note.workspace.members.find((member) => member.userId === currentUser.id);
   const canManageWorkspaceNotes = currentMembership?.role === "OWNER" || currentMembership?.role === "ADMIN";
+  // For notes created inside an active meeting, also enforce the meeting's permission system.
+  // (isLockedByMeeting handles ended meetings; this handles active meetings with restricted editing.)
+  const isBlockedByActiveMeetingPermission =
+    note.visibility === "WORKSPACE_SHARED" &&
+    note.artifacts.some((artifact) => {
+      if (artifact.source !== "CREATED_IN_MEETING" || !artifact.meeting) return false;
+      const lifecycle = getMeetingLifecycle(artifact.meeting);
+      if (!canEditMeetingNotes(lifecycle)) return false; // ended — covered by isLockedByMeeting
+      const checkFn = isTextNote ? canEditMeetingSharedNote : canEditMeetingWhiteboard;
+      return !checkFn({
+        artifactId: artifact.id,
+        currentUserId: currentUser.id,
+        meetingCreatedByUserId: artifact.meeting.createdByUserId,
+        currentUserRole: currentMembership?.role,
+        settings: artifact.meeting.moderationSettings,
+        overrides: artifact.meeting.permissionOverrides,
+      });
+    });
   const canEdit =
     Boolean(currentUser) &&
     !isLockedByMeeting &&
+    !isBlockedByActiveMeetingPermission &&
     !isSharedWhiteboardOnFree &&
     (note.ownerUserId === currentUser.id || note.collaboration === "COLLABORATIVE");
   const canChangeVisibility =

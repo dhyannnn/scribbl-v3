@@ -78,6 +78,7 @@ export async function signInWithOAuth(formData: FormData) {
     provider,
     options: {
       redirectTo: `${getSiteUrl()}/auth/callback?next=${encodeURIComponent(next)}`,
+      skipBrowserRedirect: true,
     },
   });
 

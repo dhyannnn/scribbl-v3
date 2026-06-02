@@ -10,6 +10,7 @@ import { PermissionSubmitButton } from "@/components/PermissionSubmitButton";
 import { TextNoteEditor } from "@/components/TextNoteEditor";
 import { TldrawWhiteboardEditor } from "@/components/TldrawWhiteboardEditor";
 import { createNoteRoomId } from "@/lib/liveblocks-room";
+import { TimezoneInput } from "@/components/TimezoneInput";
 import {
   createMeetingNote,
   requestMeetingPermission,
@@ -331,6 +332,7 @@ function NoteHeader({
           <input type="hidden" name="meetingId" value={meetingId} />
           <input type="hidden" name="scope" value={scope} />
           <input type="hidden" name="type" value="TEXT" />
+          <TimezoneInput />
           <PendingSubmitButton
             className="rounded-full bg-[var(--color-primary)] px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-80 disabled:opacity-50"
             disabled={disabled}
@@ -345,6 +347,7 @@ function NoteHeader({
             <input type="hidden" name="meetingId" value={meetingId} />
             <input type="hidden" name="scope" value={scope} />
             <input type="hidden" name="type" value="WHITEBOARD" />
+            <TimezoneInput />
             <PendingSubmitButton
               className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
               disabled={disabled}
@@ -450,6 +453,7 @@ function FocusedMeetingNoteChrome({
               <input type="hidden" name="scope" value={scope} />
               <input type="hidden" name="type" value="TEXT" />
               <input type="hidden" name="noteFocus" value={scope === "SHARED" ? "shared" : "private"} />
+              <TimezoneInput />
               <PendingSubmitButton
                 className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
                 disabled={disabled}
@@ -466,6 +470,7 @@ function FocusedMeetingNoteChrome({
                 <input type="hidden" name="scope" value={scope} />
                 <input type="hidden" name="type" value="WHITEBOARD" />
                 <input type="hidden" name="noteFocus" value={scope === "SHARED" ? "shared" : "private"} />
+                <TimezoneInput />
                 <PendingSubmitButton
                   className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
                   disabled={disabled}
