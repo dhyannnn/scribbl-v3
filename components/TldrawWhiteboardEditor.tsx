@@ -52,7 +52,6 @@ import { noteTitleMaxLength } from "@/lib/note-title";
 import { useTldrawYjsStore } from "@/components/tldraw-yjs-store";
 import {
   COVER_TEMPLATES,
-  DARK_TEMPLATES,
   LIGHT_TEMPLATES,
   getPageBackgroundShapeId,
   PAGE_H,
@@ -81,6 +80,12 @@ const ExportCtx = createContext<ExportCtxValue>({
   canUploadAssets: true,
   onRegisterExportPdf: null,
 });
+
+// Each TldrawWhiteboardEditor instance provides its own container so the
+// toolbar portals into it (position: absolute) rather than document.body
+// (position: fixed). This scopes the toolbar to the whiteboard card and
+// prevents multiple mounted editors from stacking their toolbars globally.
+const ToolbarContainerCtx = createContext<HTMLElement | null>(null);
 
 type PenSlot = { color: TLDefaultColorStyle; size: TLDefaultSizeStyle };
 
@@ -937,6 +942,7 @@ function ScribblToolbar() {
   const editor = useEditor();
   const { canUploadAssets } = useContext(ExportCtx);
   const actions = useActions();
+  const toolbarContainer = useContext(ToolbarContainerCtx);
 
   const [activeSlotIdx, setActiveSlotIdx] = useState<number | null>(null);
   const [arrowOpen, setArrowOpen] = useState(false);
@@ -981,6 +987,7 @@ function ScribblToolbar() {
 
   const pillStyle: React.CSSProperties = {
     ...PILL_BASE,
+    position: toolbarContainer ? "absolute" : "fixed",
     background: c.bg,
     border: `1px solid ${c.border}`,
     boxShadow: c.shadow,
@@ -1020,7 +1027,7 @@ function ScribblToolbar() {
         <Divider />
         {chevronBtn}
       </div>,
-      document.body,
+      toolbarContainer ?? document.body,
     );
   }
 
@@ -1196,7 +1203,7 @@ function ScribblToolbar() {
       {/* Collapse chevron */}
       {chevronBtn}
     </div>,
-    document.body,
+    toolbarContainer ?? document.body,
   );
 }
 
@@ -1248,13 +1255,16 @@ function TemplatePicker() {
         .find((s) => s.type === "page-background") as PageBackgroundShape | undefined,
     [editor],
   );
-  const current = (bgShape?.props.template ?? "blank") as PageTemplate;
+  // Normalize to the base family — dark variants are applied per-user by the renderer
+  const current = ((bgShape?.props.template ?? "blank") as string).replace(/-dark$/, "") as PageTemplate;
   const isReadonly = editor.getInstanceState().isReadonly;
   if (isReadonly) return null;
 
   function apply(t: PageTemplate) {
     if (!bgShape) return;
-    editor.store.put([{ ...bgShape, props: { ...bgShape.props, template: t } }]);
+    // Always store the base family; dark/light is applied per-user by the renderer
+    const family = (t as string).replace(/-dark$/, "") as PageTemplate;
+    editor.store.put([{ ...bgShape, props: { ...bgShape.props, template: family } }]);
     setOpen(false);
   }
 
@@ -1288,16 +1298,9 @@ function TemplatePicker() {
             padding: 12,
             width: 216,
           }}>
-            <p style={sectionLabel}>Light</p>
+            <p style={sectionLabel}>Layout</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, marginBottom: 10 }}>
               {LIGHT_TEMPLATES.map((t) => (
-                <TemplateTile key={t} template={t} active={current === t} c={c} onClick={() => apply(t)} />
-              ))}
-            </div>
-            <div style={{ height: 1, background: c.divider, margin: "0 0 10px" }} />
-            <p style={sectionLabel}>Dark</p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, marginBottom: 10 }}>
-              {DARK_TEMPLATES.map((t) => (
                 <TemplateTile key={t} template={t} active={current === t} c={c} onClick={() => apply(t)} />
               ))}
             </div>
@@ -1375,7 +1378,7 @@ function TemplateIcon({ template, size = 16 }: { template: PageTemplate; size?: 
     );
   }
 
-  const dark = DARK_TEMPLATES.includes(template);
+  const dark = (template as string).endsWith("-dark");
   const bg = dark ? "#1a1a1a" : "white";
   const border = dark ? "rgba(255,255,255,0.25)" : "#d1d5db";
   const lineStroke = dark ? "rgba(255,255,255,0.18)" : "#cbd5e1";
@@ -1533,6 +1536,9 @@ export function TldrawWhiteboardEditor({
     exportPdfFnRef.current = fn;
   }, []);
 
+  const [toolbarContainer, setToolbarContainer] = useState<HTMLElement | null>(null);
+  const handleContainerRef = useCallback((el: HTMLElement | null) => setToolbarContainer(el), []);
+
   useEffect(() => { titleValueRef.current = titleValue; }, [titleValue]);
   useEffect(() => { canEditRef.current = canEdit; }, [canEdit]);
   useEffect(() => { canUploadAssetsRef.current = canUploadAssets; }, [canUploadAssets]);
@@ -1655,24 +1661,6 @@ export function TldrawWhiteboardEditor({
         },
       );
 
-      // Sync dark mode toggle to page background template
-      let prevDark = editor.user.getIsDarkMode();
-      const unsubTheme = editor.store.listen(
-        () => {
-          const dark = editor.user.getIsDarkMode();
-          if (dark === prevDark) return;
-          prevDark = dark;
-          const bgShape = editor.getCurrentPageShapes().find((s) => s.type === "page-background") as PageBackgroundShape | undefined;
-          if (!bgShape) return;
-          const t = bgShape.props.template as string;
-          const lightToDark: Record<string, string> = { blank: "blank-dark", lined: "lined-dark", dotted: "dotted-dark", grid: "grid-dark" };
-          const darkToLight: Record<string, string> = { "blank-dark": "blank", "lined-dark": "lined", "dotted-dark": "dotted", "grid-dark": "grid" };
-          const newTemplate = dark ? (lightToDark[t] ?? t) : (darkToLight[t] ?? t);
-          if (newTemplate !== t) editor.store.put([{ ...bgShape, props: { ...bgShape.props, template: newTemplate } }]);
-        },
-        { source: "all" },
-      );
-
       if (!canEditRef.current) {
         editor.updateInstanceState({ isReadonly: true });
       } else {
@@ -1697,7 +1685,6 @@ export function TldrawWhiteboardEditor({
         unsubPage();
         unsubDelete();
         unsubChange();
-        unsubTheme();
         unsubStore();
         unsubZoom();
         window.removeEventListener("scribbl:theme", onScribblTheme);
@@ -1719,17 +1706,19 @@ export function TldrawWhiteboardEditor({
   }
 
   const canvas = (
-    <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets, onRegisterExportPdf: registerExportPdf }}>
-      <PenSlotCtx.Provider value={{ penSlots, setSlot }}>
-        <TldrawCanvas
-          key={`${noteId}:${variant}`}
-          store={storeWithStatus}
-          shapeUtils={SHAPE_UTILS}
-          onMount={handleMount}
-          components={TLDRAW_COMPONENTS}
-        />
-      </PenSlotCtx.Provider>
-    </ExportCtx.Provider>
+    <ToolbarContainerCtx.Provider value={toolbarContainer}>
+      <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets, onRegisterExportPdf: registerExportPdf }}>
+        <PenSlotCtx.Provider value={{ penSlots, setSlot }}>
+          <TldrawCanvas
+            key={`${noteId}:${variant}`}
+            store={storeWithStatus}
+            shapeUtils={SHAPE_UTILS}
+            onMount={handleMount}
+            components={TLDRAW_COMPONENTS}
+          />
+        </PenSlotCtx.Provider>
+      </ExportCtx.Provider>
+    </ToolbarContainerCtx.Provider>
   );
 
   if (variant === "goodnotes") {
@@ -1831,7 +1820,7 @@ export function TldrawWhiteboardEditor({
           )}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="relative min-h-0 flex-1 overflow-hidden" ref={handleContainerRef}>
           {canvas}
         </div>
 
@@ -1904,7 +1893,7 @@ export function TldrawWhiteboardEditor({
           {getStatusText(isPending ? "saving" : saveState)}
         </p>
       </div>
-      <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-sm" style={{ height: canvasHeight }}>
+      <div className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-sm" style={{ height: canvasHeight }} ref={handleContainerRef}>
         {canvas}
       </div>
       {!canEdit && (
