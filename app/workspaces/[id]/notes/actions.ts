@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { writeAuditLog } from "@/lib/audit-log";
 import { getCurrentUser } from "@/lib/current-user";
 import { canEditMeetingNotes, getMeetingLifecycle } from "@/lib/meeting-lifecycle";
+import { canEditMeetingSharedNote, canEditMeetingWhiteboard } from "@/lib/meeting-permissions";
 import { createDefaultNoteTitle, sanitizeNoteTitle } from "@/lib/note-title";
 import { prisma } from "@/lib/prisma";
 
@@ -222,6 +223,12 @@ export async function saveTextNote(formData: FormData) {
                 startsAt: true,
                 endsAt: true,
                 canceledAt: true,
+                createdByUserId: true,
+                moderationSettings: true,
+                permissionOverrides: {
+                  where: { userId: currentUser.id },
+                  select: { userId: true, targetType: true, artifactId: true, state: true },
+                },
               },
             },
           },
@@ -236,6 +243,7 @@ export async function saveTextNote(formData: FormData) {
         },
       },
       select: {
+        role: true,
         status: true,
       },
     }),
@@ -245,6 +253,7 @@ export async function saveTextNote(formData: FormData) {
     !note ||
     membership?.status !== "ACTIVE" ||
     hasLockedMeetingArtifact(note) ||
+    hasActiveMeetingPermissionBlock(note, "TEXT", currentUser.id, membership.role) ||
     !canEditNote(note, currentUser.id)
   ) {
     return;
@@ -359,6 +368,12 @@ export async function saveWhiteboardNote(formData: FormData) {
                 startsAt: true,
                 endsAt: true,
                 canceledAt: true,
+                createdByUserId: true,
+                moderationSettings: true,
+                permissionOverrides: {
+                  where: { userId: currentUser.id },
+                  select: { userId: true, targetType: true, artifactId: true, state: true },
+                },
               },
             },
           },
@@ -373,6 +388,7 @@ export async function saveWhiteboardNote(formData: FormData) {
         },
       },
       select: {
+        role: true,
         status: true,
       },
     }),
@@ -382,6 +398,7 @@ export async function saveWhiteboardNote(formData: FormData) {
     !note ||
     membership?.status !== "ACTIVE" ||
     hasLockedMeetingArtifact(note) ||
+    hasActiveMeetingPermissionBlock(note, "WHITEBOARD", currentUser.id, membership.role) ||
     !canEditNote(note, currentUser.id)
   ) {
     return;
@@ -674,6 +691,44 @@ function canEditNote(
   currentUserId: string,
 ) {
   return note.ownerUserId === currentUserId || note.collaboration === "COLLABORATIVE";
+}
+
+function hasActiveMeetingPermissionBlock(
+  note: {
+    visibility: string;
+    artifacts?: {
+      id: string;
+      source: string;
+      meeting: {
+        startsAt: Date;
+        endsAt: Date | null;
+        canceledAt: Date | null;
+        createdByUserId: string;
+        moderationSettings: Parameters<typeof canEditMeetingSharedNote>[0]["settings"];
+        permissionOverrides: Parameters<typeof canEditMeetingSharedNote>[0]["overrides"];
+      } | null;
+    }[];
+  },
+  type: "TEXT" | "WHITEBOARD",
+  currentUserId: string,
+  currentUserRole: string,
+) {
+  if (note.visibility !== "WORKSPACE_SHARED") return false;
+  return Boolean(
+    note.artifacts?.some((artifact) => {
+      if (artifact.source !== "CREATED_IN_MEETING" || !artifact.meeting) return false;
+      if (!canEditMeetingNotes(getMeetingLifecycle(artifact.meeting))) return false;
+      const checkFn = type === "WHITEBOARD" ? canEditMeetingWhiteboard : canEditMeetingSharedNote;
+      return !checkFn({
+        artifactId: artifact.id,
+        currentUserId,
+        meetingCreatedByUserId: artifact.meeting.createdByUserId,
+        currentUserRole,
+        settings: artifact.meeting.moderationSettings,
+        overrides: artifact.meeting.permissionOverrides ?? [],
+      });
+    }),
+  );
 }
 
 function hasLockedMeetingArtifact(note: {
