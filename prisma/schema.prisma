@@ -228,6 +228,10 @@ model User {
   institution         String?
   jobTitle            String?
   bio                 String?
+  linkedinUrl         String?
+  githubUrl           String?
+  websiteUrl          String?
+  twitterUrl          String?
   timezone            String     @default("UTC")
   language            String     @default("en")
   darkMode            Boolean    @default(false)

@@ -112,17 +112,34 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                     </select>
                   </Field>
                 </div>
-                {currentUser.bio !== null && (
-                  <Field label="Bio">
-                    <textarea
-                      name="bio"
-                      defaultValue={currentUser.bio ?? ""}
-                      rows={3}
-                      placeholder="A short bio visible to your workspace members…"
-                      className="w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 text-sm text-[var(--color-text)] outline-none transition focus:border-[var(--color-secondary)] placeholder:text-[var(--color-subtle)] resize-none"
-                    />
-                  </Field>
-                )}
+                <Field label="Bio">
+                  <textarea
+                    name="bio"
+                    defaultValue={currentUser.bio ?? ""}
+                    rows={3}
+                    placeholder="A short bio visible on your public profile…"
+                    className="w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 text-sm text-[var(--color-text)] outline-none transition focus:border-[var(--color-secondary)] placeholder:text-[var(--color-subtle)] resize-none"
+                  />
+                </Field>
+                <div>
+                  <p className="mb-3 font-mono text-[11px] font-bold uppercase tracking-widest text-[var(--color-muted)]">
+                    Social Links
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="LinkedIn">
+                      <Input name="linkedinUrl" defaultValue={currentUser.linkedinUrl ?? ""} placeholder="linkedin.com/in/yourname" />
+                    </Field>
+                    <Field label="GitHub">
+                      <Input name="githubUrl" defaultValue={currentUser.githubUrl ?? ""} placeholder="github.com/yourname" />
+                    </Field>
+                    <Field label="Website">
+                      <Input name="websiteUrl" defaultValue={currentUser.websiteUrl ?? ""} placeholder="yourwebsite.com" />
+                    </Field>
+                    <Field label="Twitter / X">
+                      <Input name="twitterUrl" defaultValue={currentUser.twitterUrl ?? ""} placeholder="x.com/yourhandle" />
+                    </Field>
+                  </div>
+                </div>
                 <div className="pt-2">
                   <PendingSubmitButton
                     pendingLabel="Saving…"

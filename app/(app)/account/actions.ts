@@ -39,6 +39,10 @@ export async function updateAccountProfile(formData: FormData) {
   const institution = String(formData.get("institution") ?? "").trim() || null;
   const jobTitle = String(formData.get("jobTitle") ?? "").trim() || null;
   const bio = String(formData.get("bio") ?? "").trim() || null;
+  const linkedinUrl = sanitizeSocialUrl(formData.get("linkedinUrl"));
+  const githubUrl = sanitizeSocialUrl(formData.get("githubUrl"));
+  const websiteUrl = sanitizeSocialUrl(formData.get("websiteUrl"));
+  const twitterUrl = sanitizeSocialUrl(formData.get("twitterUrl"));
   const timezone = String(formData.get("timezone") ?? "UTC").trim() || "UTC";
   const language = String(formData.get("language") ?? "en").trim() || "en";
   const resolvedDisplayName = displayName || [firstName, lastName].filter(Boolean).join(" ") || email.split("@")[0];
@@ -87,6 +91,10 @@ export async function updateAccountProfile(formData: FormData) {
       institution,
       jobTitle,
       bio,
+      linkedinUrl,
+      githubUrl,
+      websiteUrl,
+      twitterUrl,
       timezone,
       language,
     },
@@ -316,6 +324,13 @@ export async function updateDarkMode(enabled: boolean) {
     where: { id: currentUser.id },
     data: { darkMode: enabled },
   });
+}
+
+function sanitizeSocialUrl(value: FormDataEntryValue | null): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `https://${raw}`;
 }
 
 function getAvatarExtension(contentType: string) {
