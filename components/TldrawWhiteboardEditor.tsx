@@ -91,13 +91,13 @@ const ToolbarCompactCtx = createContext(false);
 function useToolbarSizes() {
   const compact = useContext(ToolbarCompactCtx);
   return {
-    btn: compact ? 26 : 32,
-    radius: compact ? 5 : 6,
-    icon: compact ? 14 : 18,
-    penCircle: compact ? 21 : 28,
-    dividerH: compact ? 16 : 20,
-    pillPad: compact ? "3px 6px" : "6px 10px",
-    pillGap: compact ? 2 : 4,
+    btn: compact ? 22 : 32,
+    radius: compact ? 4 : 6,
+    icon: compact ? 12 : 18,
+    penCircle: compact ? 18 : 28,
+    dividerH: compact ? 14 : 20,
+    pillPad: compact ? "3px 5px" : "6px 10px",
+    pillGap: compact ? 1 : 4,
   } as const;
 }
 
@@ -1844,8 +1844,11 @@ export function TldrawWhiteboardEditor({
           )}
         </div>
 
-        <div className="relative min-h-0 flex-1 overflow-hidden" ref={handleContainerRef}>
-          {canvas}
+        {/* Outer div anchors the toolbar (no overflow-hidden); inner div clips the canvas */}
+        <div className="relative min-h-0 flex-1" ref={handleContainerRef}>
+          <div className="absolute inset-0 overflow-hidden">
+            {canvas}
+          </div>
         </div>
 
         {!canEdit && (
@@ -1917,8 +1920,11 @@ export function TldrawWhiteboardEditor({
           {getStatusText(isPending ? "saving" : saveState)}
         </p>
       </div>
-      <div className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-sm" style={{ height: canvasHeight }} ref={handleContainerRef}>
-        {canvas}
+      {/* Outer div anchors the toolbar (no overflow-hidden); inner div clips the canvas */}
+      <div className="relative" style={{ height: canvasHeight }} ref={handleContainerRef}>
+        <div className="absolute inset-0 overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-sm">
+          {canvas}
+        </div>
       </div>
       {!canEdit && (
         <p className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm text-[var(--color-muted)]">
