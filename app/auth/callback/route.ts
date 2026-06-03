@@ -2,10 +2,19 @@ import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
+function getOrigin(request: NextRequest): string {
+  if (process.env.APP_URL) return process.env.APP_URL;
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  if (host) return `${proto}://${host}`;
+  return new URL(request.url).origin;
+}
+
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
   const next = getSafeNext(requestUrl.searchParams.get("next"));
+  const origin = getOrigin(request);
 
   if (code) {
     const supabase = await createClient();
@@ -13,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       return NextResponse.redirect(
-        new URL(createLoginUrl("Could not finish sign in. Try again.", next), requestUrl.origin),
+        new URL(createLoginUrl("Could not finish sign in. Try again.", next), origin),
       );
     }
 
@@ -25,10 +34,10 @@ export async function GET(request: NextRequest) {
       });
     }
   } else {
-    return NextResponse.redirect(new URL(createLoginUrl("Could not finish sign in. Try again.", next), requestUrl.origin));
+    return NextResponse.redirect(new URL(createLoginUrl("Could not finish sign in. Try again.", next), origin));
   }
 
-  return NextResponse.redirect(new URL(next, requestUrl.origin));
+  return NextResponse.redirect(new URL(next, origin));
 }
 
 function getSafeNext(value: string | null) {
