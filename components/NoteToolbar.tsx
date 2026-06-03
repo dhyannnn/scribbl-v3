@@ -11,7 +11,7 @@ import {
   Table as TableIcon, TableCellsMerge, TableCellsSplit,
   Trash2, Underline as UnderlineIcon, Undo2,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -79,14 +79,11 @@ function ColorPicker({
   label: string;
   anchorRef: React.RefObject<HTMLButtonElement | null>;
 }) {
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-
-  useEffect(() => {
-    if (anchorRef.current) {
-      const r = anchorRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + 4, left: r.left });
-    }
-  }, [anchorRef]);
+  const [pos] = useState(() => {
+    if (!anchorRef.current) return { top: -9999, left: -9999 };
+    const r = anchorRef.current.getBoundingClientRect();
+    return { top: r.bottom + 4, left: r.left };
+  });
 
   return createPortal(
     <div
