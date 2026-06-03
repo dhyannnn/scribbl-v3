@@ -11,7 +11,8 @@ import {
   Table as TableIcon, TableCellsMerge, TableCellsSplit,
   Trash2, Underline as UnderlineIcon, Undo2,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -69,16 +70,28 @@ function ColorPicker({
   onSelect,
   onClear,
   label,
+  anchorRef,
 }: {
   colors: string[];
   activeColor?: string;
   onSelect: (color: string) => void;
   onClear: () => void;
   label: string;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
 }) {
-  return (
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (anchorRef.current) {
+      const r = anchorRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left });
+    }
+  }, [anchorRef]);
+
+  return createPortal(
     <div
-      className="absolute left-0 top-full z-50 mt-1 w-44 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-xl"
+      style={{ top: pos.top, left: pos.left }}
+      className="fixed z-[9999] w-44 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-xl"
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
@@ -106,7 +119,8 @@ function ColorPicker({
       >
         Clear
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -117,6 +131,8 @@ export function NoteToolbar({ editor, flat = false }: { editor: Editor; flat?: b
   const [showHighlightColors, setShowHighlightColors] = useState(false);
   const [showCellColors, setShowCellColors] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const textColorBtnRef = useRef<HTMLButtonElement>(null);
+  const highlightBtnRef = useRef<HTMLButtonElement>(null);
 
   const currentHeading = HEADING_OPTIONS.find((opt) => {
     if (opt.value === 0) return editor.isActive("paragraph");
@@ -261,8 +277,9 @@ export function NoteToolbar({ editor, flat = false }: { editor: Editor; flat?: b
         {sep()}
 
         {/* Text color */}
-        <div className="relative">
+        <div>
           <button
+            ref={textColorBtnRef}
             type="button"
             title="Text color"
             onMouseDown={(e) => { e.preventDefault(); setShowTextColors((v) => !v); setShowHighlightColors(false); setShowCellColors(false); }}
@@ -276,6 +293,7 @@ export function NoteToolbar({ editor, flat = false }: { editor: Editor; flat?: b
               label="Text color"
               colors={TEXT_COLORS}
               activeColor={activeColor}
+              anchorRef={textColorBtnRef}
               onSelect={(color) => { editor.chain().focus().setColor(color).run(); setShowTextColors(false); }}
               onClear={() => { editor.chain().focus().unsetColor().run(); setShowTextColors(false); }}
             />
@@ -283,8 +301,9 @@ export function NoteToolbar({ editor, flat = false }: { editor: Editor; flat?: b
         </div>
 
         {/* Highlight color */}
-        <div className="relative">
+        <div>
           <button
+            ref={highlightBtnRef}
             type="button"
             title="Highlight color"
             onMouseDown={(e) => { e.preventDefault(); setShowHighlightColors((v) => !v); setShowTextColors(false); setShowCellColors(false); }}
@@ -298,6 +317,7 @@ export function NoteToolbar({ editor, flat = false }: { editor: Editor; flat?: b
               label="Highlight color"
               colors={HIGHLIGHT_COLORS}
               activeColor={activeHighlight}
+              anchorRef={highlightBtnRef}
               onSelect={(color) => { editor.chain().focus().toggleHighlight({ color }).run(); setShowHighlightColors(false); }}
               onClear={() => { editor.chain().focus().unsetHighlight().run(); setShowHighlightColors(false); }}
             />
