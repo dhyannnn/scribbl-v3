@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { NavLink } from "@/components/NavLink";
 import { StatusPickerAvatar } from "@/components/StatusPickerAvatar";
+import { NewDmButton } from "@/components/NewDmButton";
 
 type WorkspaceSidebarProps = {
   workspaceId: string;
@@ -57,11 +58,46 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
   const announcementChannels = workspace.channels.filter((c) => !c.meetingId && c.type === "ANNOUNCEMENT");
   const workspaceChannels = workspace.channels.filter((c) => !c.meetingId && c.type === "CHAT");
   const dmChannels = workspace.channels.filter((c) => c.type === "DIRECT");
-  // Show most recent 15 meeting channels, sorted newest first
   const meetingChannels = workspace.channels
     .filter((c) => c.meetingId)
     .sort((a, b) => (b.meeting?.startsAt?.getTime() ?? 0) - (a.meeting?.startsAt?.getTime() ?? 0))
     .slice(0, 15);
+
+  // Unread indicators
+  const channelIds = workspace.channels.map((c) => c.id);
+  const [lastReads, latestMessages, dmMembers] = await Promise.all([
+    channelIds.length > 0
+      ? prisma.channelLastRead.findMany({
+          where: { userId: currentUser.id, channelId: { in: channelIds } },
+          select: { channelId: true, readAt: true },
+        })
+      : Promise.resolve([]),
+    channelIds.length > 0
+      ? prisma.message.groupBy({
+          by: ["channelId"],
+          where: { channelId: { in: channelIds }, deletedAt: null },
+          _max: { createdAt: true },
+        })
+      : Promise.resolve([]),
+    prisma.workspaceMember.findMany({
+      where: { workspaceId, status: "ACTIVE", userId: { not: currentUser.id } },
+      select: { user: { select: { id: true, displayName: true, avatarUrl: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+
+  const lastReadMap = new Map(lastReads.map((lr) => [lr.channelId, lr.readAt]));
+  const latestMsgMap = new Map(latestMessages.map((lm) => [lm.channelId, lm._max.createdAt]));
+
+  const unreadChannelIds = new Set<string>();
+  for (const id of channelIds) {
+    const latest = latestMsgMap.get(id);
+    if (!latest) continue;
+    const lastRead = lastReadMap.get(id);
+    if (!lastRead || latest > lastRead) {
+      unreadChannelIds.add(id);
+    }
+  }
 
   const pageNav = [
     { label: "Home", href: `/workspaces/${workspaceId}`, page: "home" as const },
@@ -159,6 +195,9 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
                       <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
                     </svg>
                     <span className="truncate">Announcements</span>
+                    {unreadChannelIds.has(channel.id) ? (
+                      <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-[var(--color-secondary)]" />
+                    ) : null}
                   </NavLink>
                 </li>
               ))}
@@ -183,6 +222,9 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
                   >
                     <span className="shrink-0 font-mono text-xs opacity-60">#</span>
                     <span className="truncate">{channel.name}</span>
+                    {unreadChannelIds.has(channel.id) ? (
+                      <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-[var(--color-secondary)]" />
+                    ) : null}
                   </NavLink>
                 </li>
               ))}
@@ -201,39 +243,46 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
           </div>
         ) : null}
 
-        {/* Direct Messages */}
-        {dmChannels.length > 0 ? (
-          <div className="px-3 pb-2">
-            <p className="mb-1 px-4 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">
+        {/* Direct Messages — always visible */}
+        <div className="px-3 pb-2">
+          <div className="mb-1 flex items-center justify-between px-4">
+            <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">
               Direct Messages
             </p>
-            <ul className="space-y-0.5">
-              {dmChannels.map((channel) => {
-                const other = channel.dmUser1Id === currentUser.id ? channel.dmUser2 : channel.dmUser1;
-                const initials = other?.displayName?.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() ?? "?";
-                return (
-                  <li key={channel.id}>
-                    <NavLink
-                      href={`/workspaces/${workspaceId}/chat/${channel.id}`}
-                      exact
-                      activeClassName="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium bg-[var(--color-secondary)] text-white"
-                      inactiveClassName="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)] transition"
-                    >
-                      {other?.avatarUrl ? (
-                        <img src={other.avatarUrl} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" />
-                      ) : (
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-high)] text-[9px] font-bold text-[var(--color-muted)]">
-                          {initials}
-                        </span>
-                      )}
-                      <span className="truncate">{other?.displayName ?? "Unknown"}</span>
-                    </NavLink>
-                  </li>
-                );
-              })}
-            </ul>
+            <NewDmButton
+              workspaceId={workspaceId}
+              members={dmMembers.map((m) => m.user)}
+            />
           </div>
-        ) : null}
+          <ul className="space-y-0.5">
+            {dmChannels.map((channel) => {
+              const other = channel.dmUser1Id === currentUser.id ? channel.dmUser2 : channel.dmUser1;
+              const initials = other?.displayName?.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() ?? "?";
+              return (
+                <li key={channel.id}>
+                  <NavLink
+                    href={`/workspaces/${workspaceId}/chat/${channel.id}`}
+                    exact
+                    activeClassName="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium bg-[var(--color-secondary)] text-white"
+                    inactiveClassName="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)] transition"
+                  >
+                    {other?.avatarUrl ? (
+                      <img src={other.avatarUrl} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-high)] text-[9px] font-bold text-[var(--color-muted)]">
+                        {initials}
+                      </span>
+                    )}
+                    <span className="truncate">{other?.displayName ?? "Unknown"}</span>
+                    {unreadChannelIds.has(channel.id) ? (
+                      <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-[var(--color-secondary)]" />
+                    ) : null}
+                  </NavLink>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
 
         {/* Meeting chats */}
         {meetingChannels.length > 0 ? (
@@ -261,6 +310,9 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
                       <span className="ml-auto shrink-0 font-mono text-xs opacity-50">
                         {channel.meeting.startsAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>
+                    ) : null}
+                    {unreadChannelIds.has(channel.id) ? (
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--color-secondary)]" />
                     ) : null}
                   </NavLink>
                 </li>

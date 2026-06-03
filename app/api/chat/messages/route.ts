@@ -69,6 +69,22 @@ export async function POST(request: Request) {
         logger.error("Announcement notifications could not be created", { workspaceId, channelId }, error);
       });
     });
+  } else if (channel.type === "DIRECT") {
+    const otherUserId = channel.dmUser1Id === currentUser.id ? channel.dmUser2Id : channel.dmUser1Id;
+    if (otherUserId) {
+      after(() => {
+        void createDmNotification({
+          actorUserId: currentUser.id,
+          actorDisplayName: currentUser.displayName,
+          recipientUserId: otherUserId,
+          body,
+          href: `/workspaces/${workspaceId}/chat/${channelId}`,
+          workspaceId,
+        }).catch((error) => {
+          logger.error("DM notification could not be created", { workspaceId, channelId }, error);
+        });
+      });
+    }
   } else {
     after(() => {
       void Promise.all([
@@ -259,6 +275,8 @@ async function getAccessibleChannel(workspaceId: string, channelId: string, user
       id: true,
       name: true,
       type: true,
+      dmUser1Id: true,
+      dmUser2Id: true,
       workspace: {
         select: {
           members: {
@@ -382,6 +400,36 @@ function parseBody(body: unknown) {
   };
 }
 
+
+// ── DM notifications ──────────────────────────────────────────────────────────
+
+async function createDmNotification({
+  actorUserId, actorDisplayName, recipientUserId, body, href, workspaceId,
+}: {
+  actorUserId: string; actorDisplayName: string; recipientUserId: string;
+  body: string; href: string; workspaceId: string;
+}) {
+  const pref = await prisma.notificationPreference.findUnique({
+    where: { userId: recipientUserId },
+    select: { chatMessages: true },
+  });
+
+  if (!(pref?.chatMessages ?? false)) return;
+
+  const preview = body.length > 80 ? body.slice(0, 80) + "…" : body;
+
+  await prisma.notification.create({
+    data: {
+      userId: recipientUserId,
+      workspaceId,
+      actorUserId,
+      type: "CHAT_MESSAGE",
+      title: `Message from ${actorDisplayName}`,
+      body: preview,
+      href,
+    },
+  });
+}
 
 // ── @mention notifications ────────────────────────────────────────────────────
 

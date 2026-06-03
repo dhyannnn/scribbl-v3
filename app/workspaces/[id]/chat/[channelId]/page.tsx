@@ -4,6 +4,7 @@ import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { RealtimeChatPanel } from "@/components/RealtimeChatPanel";
 import { ChatPanelResizer } from "@/components/ChatPanelResizer";
+import { MarkChannelRead } from "@/components/MarkChannelRead";
 import { getCurrentUser } from "@/lib/current-user";
 import { createChatRoomId } from "@/lib/liveblocks-room";
 import { shapePoll } from "@/lib/polls";
@@ -165,6 +166,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--color-bg)]">
+      <MarkChannelRead channelId={channelId} workspaceId={workspaceId} />
       {/* Channel header */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5">
         <div className="flex items-center gap-2.5">

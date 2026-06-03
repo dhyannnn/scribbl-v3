@@ -8,6 +8,60 @@ import { RateLimits } from "@/lib/rate-limit";
 
 const MAX_CHANNELS_PER_WORKSPACE = 20;
 
+export async function markChannelRead(channelId: string, workspaceId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return;
+
+  await prisma.channelLastRead.upsert({
+    where: { channelId_userId: { channelId, userId: currentUser.id } },
+    create: { channelId, userId: currentUser.id },
+    update: { readAt: new Date() },
+  });
+}
+
+export async function getOrCreateDmChannelId(workspaceId: string, otherUserId: string): Promise<string | null> {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return null;
+  if (!workspaceId || !otherUserId || otherUserId === currentUser.id) return null;
+
+  const [myMembership, otherMembership] = await Promise.all([
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { status: true },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: otherUserId } },
+      select: { status: true },
+    }),
+  ]);
+
+  if (myMembership?.status !== "ACTIVE" || otherMembership?.status !== "ACTIVE") return null;
+
+  const [user1Id, user2Id] = [currentUser.id, otherUserId].sort();
+
+  const existing = await prisma.channel.findFirst({
+    where: { workspaceId, type: "DIRECT", dmUser1Id: user1Id, dmUser2Id: user2Id },
+    select: { id: true },
+  });
+
+  if (existing) return existing.id;
+
+  const channel = await prisma.channel.create({
+    data: {
+      workspaceId,
+      name: `dm-${user1Id.slice(0, 8)}-${user2Id.slice(0, 8)}`,
+      type: "DIRECT",
+      createdByUserId: currentUser.id,
+      dmUser1Id: user1Id,
+      dmUser2Id: user2Id,
+    },
+    select: { id: true },
+  });
+
+  revalidatePath(`/workspaces/${workspaceId}/chat`);
+  return channel.id;
+}
+
 export async function findOrCreateDmChannel(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
   const otherUserId = String(formData.get("otherUserId") ?? "");
