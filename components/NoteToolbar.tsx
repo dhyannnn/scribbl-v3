@@ -1,4 +1,4 @@
-"use client";
+"use client"; // toolbar
 
 import type { Editor } from "@tiptap/react";
 import {
