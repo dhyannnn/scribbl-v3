@@ -46,6 +46,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
     prisma.channel.findMany({
       where: {
         workspaceId,
+        type: { not: "DIRECT" },
         OR: [
           { meetingId: null },
           { meetingId: { not: null }, type: "CHAT", meeting: { canceledAt: null } },
