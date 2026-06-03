@@ -251,7 +251,11 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
             </p>
             <NewDmButton
               workspaceId={workspaceId}
-              members={dmMembers.map((m) => m.user)}
+              members={dmMembers
+                .map((m) => m.user)
+                .filter((m) => !dmChannels.some(
+                  (c) => c.dmUser1Id === m.id || c.dmUser2Id === m.id
+                ))}
             />
           </div>
           <ul className="space-y-0.5">

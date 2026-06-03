@@ -27,14 +27,12 @@ export function NewDmButton({ workspaceId, members }: { workspaceId: string; mem
     setOpen(false);
     startTransition(async () => {
       const channelId = await getOrCreateDmChannelId(workspaceId, memberId);
-      if (channelId) {
-        router.push(`/workspaces/${workspaceId}/chat/${channelId}`);
-      }
+      if (channelId) router.push(`/workspaces/${workspaceId}/chat/${channelId}`);
     });
   }
 
   return (
-    <div className="relative">
+    <>
       <button
         type="button"
         onClick={handleOpen}
@@ -49,21 +47,27 @@ export function NewDmButton({ workspaceId, members }: { workspaceId: string; mem
       </button>
 
       {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-6 z-50 w-52 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg">
-            <div className="border-b border-[var(--color-border)] p-2">
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-24"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="w-80 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-[var(--color-border)] p-3">
+              <p className="mb-2 text-xs font-semibold text-[var(--color-text)]">New Direct Message</p>
               <input
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Find a member..."
-                className="w-full rounded-lg bg-[var(--color-surface-low)] px-3 py-1.5 text-xs text-[var(--color-text)] outline-none placeholder:text-[var(--color-subtle)]"
+                className="w-full rounded-lg bg-[var(--color-surface-low)] px-3 py-2 text-sm text-[var(--color-text)] outline-none placeholder:text-[var(--color-subtle)] focus:ring-1 focus:ring-[var(--color-secondary)]"
               />
             </div>
-            <ul className="max-h-52 overflow-y-auto py-1">
+            <ul className="max-h-64 overflow-y-auto py-1">
               {filtered.length === 0 ? (
-                <li className="px-3 py-2 text-xs text-[var(--color-subtle)]">No members found</li>
+                <li className="px-3 py-3 text-sm text-[var(--color-subtle)]">No members found</li>
               ) : (
                 filtered.map((m) => {
                   const initials = m.displayName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
@@ -72,12 +76,12 @@ export function NewDmButton({ workspaceId, members }: { workspaceId: string; mem
                       <button
                         type="button"
                         onClick={() => handleSelect(m.id)}
-                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)]"
+                        className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)]"
                       >
                         {m.avatarUrl ? (
-                          <img src={m.avatarUrl} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" />
+                          <img src={m.avatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
                         ) : (
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-high)] text-[9px] font-bold text-[var(--color-muted)]">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-high)] text-xs font-bold text-[var(--color-muted)]">
                             {initials}
                           </span>
                         )}
@@ -89,8 +93,8 @@ export function NewDmButton({ workspaceId, members }: { workspaceId: string; mem
               )}
             </ul>
           </div>
-        </>
+        </div>
       )}
-    </div>
+    </>
   );
 }
