@@ -381,3 +381,30 @@ body.scribbl-video-split-active [data-split-stack] {
     max-width: 520px;
   }
 }
+
+/* ── Search highlights ───────────────────────────────────────────────── */
+.search-result         { background-color: #fef08a; border-radius: 2px; }
+.search-result-current { background-color: #fbbf24; border-radius: 2px; outline: 2px solid #f59e0b; }
+
+/* ── Print ───────────────────────────────────────────────────────────── */
+@media print {
+  .note-toolbar,
+  .note-editor-topbar,
+  .note-editor-bottombar { display: none !important; }
+
+  .note-editor-viewport {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  .scribbl-document-editor .ProseMirror {
+    box-shadow: none !important;
+    border: none !important;
+    zoom: 1 !important;
+    background-image: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+}
