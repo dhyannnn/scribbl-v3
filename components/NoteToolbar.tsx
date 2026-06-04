@@ -4,14 +4,16 @@ import type { Editor } from "@tiptap/react";
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight,
   ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine,
-  Bold, Code, Code2, Highlighter, Image as ImageIcon,
+  Bold, ChevronDown, ChevronUp, Code, Code2, Highlighter, Image as ImageIcon,
   Italic, Link as LinkIcon, List, ListChecks, ListIndentDecrease,
   ListIndentIncrease, ListOrdered,
-  Minus, Quote, Redo2, Strikethrough, Subscript, Superscript,
+  Minus, Printer, Quote, Redo2, Replace, ReplaceAll, Search,
+  Strikethrough, Subscript, Superscript,
   Table as TableIcon, TableCellsMerge, TableCellsSplit,
-  Trash2, Underline as UnderlineIcon, Undo2,
+  Trash2, Underline as UnderlineIcon, Undo2, X,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { SearchAndReplaceStorage } from "@/lib/tiptap/search";
 import { createPortal } from "react-dom";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -123,11 +125,29 @@ function ColorPicker({
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function NoteToolbar({ editor, flat = false }: { editor: Editor; flat?: boolean }) {
+export function NoteToolbar({ editor, flat = false, showSearch, onCloseSearch }: {
+  editor: Editor;
+  flat?: boolean;
+  showSearch?: boolean;
+  onCloseSearch?: () => void;
+}) {
   const [showTextColors, setShowTextColors] = useState(false);
   const [showHighlightColors, setShowHighlightColors] = useState(false);
   const [showCellColors, setShowCellColors] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [replaceTerm, setReplaceTerm] = useState("");
+  const [showReplace, setShowReplace] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!showSearch) {
+      setSearchTerm("");
+      setReplaceTerm("");
+      setShowReplace(false);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (editor.commands as any).setSearchTerm?.("");
+    }
+  }, [showSearch, editor.commands]);
   const textColorBtnRef = useRef<HTMLButtonElement>(null);
   const highlightBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -190,10 +210,10 @@ export function NoteToolbar({ editor, flat = false }: { editor: Editor; flat?: b
   const inTable = editor.isActive("table");
 
   return (
-    <div className={flat
+    <div className={`note-toolbar ${flat
       ? "border-b border-[var(--color-border)] bg-[var(--color-surface-low)]"
       : "rounded-t-md border border-b-0 border-[var(--color-border)] bg-[var(--color-surface-low)]"
-    }>
+    }`}>
 
       {/* ── Main toolbar row ─────────────────────────────────────── */}
       <div className="flex items-center gap-0.5 overflow-x-auto px-2 py-1.5 sm:flex-wrap">
@@ -387,6 +407,9 @@ export function NoteToolbar({ editor, flat = false }: { editor: Editor; flat?: b
 
         {sep()}
 
+        {/* Print */}
+        {btn(false, "Print (⌘P)", () => window.print(), <Printer size={14} />)}
+
         {/* Character count */}
         <span className="ml-auto font-mono text-xs text-[var(--color-subtle)]">
           {editor.storage.characterCount?.characters?.() ?? 0} chars
@@ -482,6 +505,61 @@ export function NoteToolbar({ editor, flat = false }: { editor: Editor; flat?: b
           {/* Delete table */}
           {btn(false, "Delete table", () => editor.chain().focus().deleteTable().run(),
             <span className="flex items-center gap-0.5 text-red-600"><Trash2 size={11} /><span className="text-[10px]">table</span></span>)}
+        </div>
+      )}
+
+      {/* ── Find & replace row ───────────────────────────────────── */}
+      {showSearch && (
+        <div className="flex items-center gap-1 overflow-x-auto border-t border-[var(--color-border)] px-2 py-1.5 sm:flex-wrap">
+          <Search size={13} className="shrink-0 text-[var(--color-subtle)]" />
+          <input
+            type="text"
+            value={searchTerm}
+            placeholder="Find…"
+            autoFocus
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              editor.commands.setSearchTerm(e.target.value);
+            }}
+            className="h-7 w-32 min-w-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 text-xs text-[var(--color-text)] outline-none focus:border-[var(--color-secondary)]"
+          />
+          <span className="min-w-fit text-xs text-[var(--color-subtle)]">
+            {(() => {
+              const s = (editor.storage as unknown as Record<string, unknown>).searchAndReplace as SearchAndReplaceStorage | undefined;
+              const total = s?.results?.length ?? 0;
+              if (!total) return "No results";
+              return `${(s?.currentIndex ?? 0) + 1} / ${total}`;
+            })()}
+          </span>
+          {btn(false, "Previous match", () => editor.commands.previousSearchResult(), <ChevronUp size={13} />)}
+          {btn(false, "Next match", () => editor.commands.nextSearchResult(), <ChevronDown size={13} />)}
+          {tsep()}
+          {btn(showReplace, "Toggle replace", () => setShowReplace((v) => !v), <Replace size={13} />)}
+          {showReplace && (
+            <>
+              <input
+                type="text"
+                value={replaceTerm}
+                placeholder="Replace…"
+                onChange={(e) => {
+                  setReplaceTerm(e.target.value);
+                  editor.commands.setReplaceTerm(e.target.value);
+                }}
+                className="h-7 w-32 min-w-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 text-xs text-[var(--color-text)] outline-none focus:border-[var(--color-secondary)]"
+              />
+              {btn(false, "Replace current", () => editor.commands.replaceCurrentResult(), <Replace size={13} />)}
+              {btn(false, "Replace all", () => editor.commands.replaceAllResults(), <ReplaceAll size={13} />)}
+            </>
+          )}
+          <button
+            type="button"
+            title="Close search (Esc)"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onCloseSearch?.()}
+            className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)]"
+          >
+            <X size={13} />
+          </button>
         </div>
       )}
 

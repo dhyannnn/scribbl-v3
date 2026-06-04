@@ -31,8 +31,10 @@ import { FontSize } from "@/lib/tiptap/font-size";
 import { Indent } from "@/lib/tiptap/indent";
 import { KeyboardShortcuts } from "@/lib/tiptap/keyboard-shortcuts";
 import { LiveblocksCursors, type CursorUser } from "@/lib/tiptap/liveblocks-cursors";
+import { SearchAndReplace } from "@/lib/tiptap/search";
 import { SlashCommands } from "@/lib/tiptap/slash-commands";
 import { buildMentionExtension, type MentionMember } from "@/lib/tiptap/mention";
+import { LinkHoverPopover } from "@/components/LinkHoverPopover";
 import { NoteToolbar } from "@/components/NoteToolbar";
 import { VisibilityDropdown } from "@/components/VisibilityDropdown";
 import { noteTitleMaxLength } from "@/lib/note-title";
@@ -202,6 +204,8 @@ function TextNoteEditorInner({
     yMeta.observe(onMeta);
     return () => yMeta.unobserve(onMeta);
   }, [yMeta]);
+  const [linkPopover, setLinkPopover] = useState<{ href: string; top: number; left: number } | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
   const latestSaveIdRef = useRef(0);
   const changeVersionRef = useRef(0);
   const hasPendingSaveRef = useRef(false);
@@ -244,6 +248,7 @@ function TextNoteEditorInner({
       Subscript,
       Superscript,
       MathNode,
+      SearchAndReplace,
       ...(canEdit ? [SlashCommands, buildMentionExtension(members)] : []),
     ],
     onCreate: ({ editor: e }) => {
@@ -260,7 +265,17 @@ function TextNoteEditorInner({
       const { from, to } = e.state.selection;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (updateMyPresence as any)({ cursor: { from, to } });
+      if (e.isActive("link")) {
+        const href = e.getAttributes("link").href as string | undefined;
+        if (href) {
+          const coords = e.view.coordsAtPos(from);
+          setLinkPopover({ href, top: coords.bottom + 4, left: coords.left });
+        }
+      } else {
+        setLinkPopover(null);
+      }
     },
+    onBlur: () => setTimeout(() => setLinkPopover(null), 150),
     onUpdate: () => {
       if (canEdit) queueAutosave();
     },
@@ -387,6 +402,42 @@ function TextNoteEditorInner({
     });
   }
 
+  function handleCopyLink(href: string) {
+    void navigator.clipboard.writeText(href);
+    setLinkPopover(null);
+  }
+
+  function handleEditLink() {
+    const newHref = window.prompt("URL:", linkPopover?.href ?? "");
+    if (newHref === null) return;
+    if (!newHref.trim()) {
+      editor?.chain().focus().unsetLink().run();
+    } else {
+      editor?.chain().focus().extendMarkRange("link").setLink({ href: newHref.trim() }).run();
+    }
+    setLinkPopover(null);
+  }
+
+  function handleUnlink() {
+    editor?.chain().focus().unsetLink().run();
+    setLinkPopover(null);
+  }
+
+  // Cmd+F opens find bar; Escape closes it
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+      if (e.key === "Escape" && showSearch) {
+        setShowSearch(false);
+      }
+    }
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+  }, [showSearch]);
+
   const wordCount = editor?.getText().split(/\s+/).filter(Boolean).length ?? 0;
   const charCount = editor?.storage.characterCount?.characters?.() ?? 0;
 
@@ -396,7 +447,7 @@ function TextNoteEditorInner({
     return (
       <div className="scribbl-document-editor flex h-full min-h-0 flex-col">
         {/* Top bar */}
-        <div className="flex h-12 shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5">
+        <div className="note-editor-topbar flex h-12 shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5">
           <input
             value={titleValue}
             maxLength={noteTitleMaxLength}
@@ -470,19 +521,21 @@ function TextNoteEditorInner({
         </div>
 
         {/* Toolbar */}
-        {canEdit && editor && <NoteToolbar editor={editor} flat />}
+        {canEdit && editor && (
+          <NoteToolbar editor={editor} flat showSearch={showSearch} onCloseSearch={() => setShowSearch(false)} />
+        )}
 
         {/* Scrollable page viewport */}
         <div
           ref={viewportRef}
-          className="min-h-0 flex-1 overflow-auto bg-[var(--color-surface-low)] py-8"
+          className="note-editor-viewport min-h-0 flex-1 overflow-auto bg-[var(--color-surface-low)] py-8"
           style={{ "--scribbl-zoom": String(zoomLevel / 100) } as React.CSSProperties}
         >
           <EditorContent editor={editor} />
         </div>
 
         {/* Bottom bar */}
-        <div className="flex h-10 shrink-0 items-center justify-between border-t border-[var(--color-border)] bg-[var(--color-surface)] px-5">
+        <div className="note-editor-bottombar flex h-10 shrink-0 items-center justify-between border-t border-[var(--color-border)] bg-[var(--color-surface)] px-5">
           <div className="flex items-center gap-3 font-mono text-xs text-[var(--color-subtle)]">
             <span className="flex items-center gap-1.5">
               <span className={`size-1.5 rounded-full ${
@@ -542,6 +595,16 @@ function TextNoteEditorInner({
             )}
           </div>
         </div>
+        {linkPopover && (
+          <LinkHoverPopover
+            href={linkPopover.href}
+            top={linkPopover.top}
+            left={linkPopover.left}
+            onCopy={() => handleCopyLink(linkPopover.href)}
+            onEdit={handleEditLink}
+            onUnlink={handleUnlink}
+          />
+        )}
       </div>
     );
   }
@@ -556,7 +619,9 @@ function TextNoteEditorInner({
       />
 
       <div className="grid gap-0">
-        {canEdit && editor && <NoteToolbar editor={editor} />}
+        {canEdit && editor && (
+          <NoteToolbar editor={editor} showSearch={showSearch} onCloseSearch={() => setShowSearch(false)} />
+        )}
         <div
           className={`overflow-auto rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] transition focus-within:border-[var(--color-secondary)] ${canEdit ? "rounded-t-none border-t-0" : ""}`}
           style={{ minHeight: "360px" }}
@@ -594,6 +659,16 @@ function TextNoteEditorInner({
         <p className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-muted)]">
           This shared note is view-only for you.
         </p>
+      )}
+      {linkPopover && (
+        <LinkHoverPopover
+          href={linkPopover.href}
+          top={linkPopover.top}
+          left={linkPopover.left}
+          onCopy={() => handleCopyLink(linkPopover.href)}
+          onEdit={handleEditLink}
+          onUnlink={handleUnlink}
+        />
       )}
     </div>
   );
