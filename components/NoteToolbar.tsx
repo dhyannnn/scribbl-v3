@@ -19,7 +19,7 @@ import { createPortal } from "react-dom";
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const FONT_FAMILIES = [
-  { label: "Default", value: "" },
+  { label: "Inter", value: "" },
   { label: "Arial", value: "Arial, sans-serif" },
   { label: "Georgia", value: "Georgia, serif" },
   { label: "Courier New", value: "'Courier New', monospace" },
@@ -306,7 +306,7 @@ export function NoteToolbar({ editor, flat = false, showSearch, onCloseSearch }:
               const active = currentSize || "16px";
               const idx = FONT_SIZES.indexOf(active);
               const next = idx > 0 ? FONT_SIZES[idx - 1] : FONT_SIZES[0];
-              editor.chain().focus().setFontSize(next!).run();
+              editor.commands.setFontSize(next!);
             }}
             className="flex h-7 w-5 items-center justify-center rounded-l-full border border-r-0 border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)] disabled:opacity-30"
             disabled={!!currentSize && currentSize === FONT_SIZES[0]}
@@ -334,7 +334,7 @@ export function NoteToolbar({ editor, flat = false, showSearch, onCloseSearch }:
               const active = currentSize || "16px";
               const idx = FONT_SIZES.indexOf(active);
               const next = idx < FONT_SIZES.length - 1 ? FONT_SIZES[idx + 1] : FONT_SIZES[FONT_SIZES.length - 1];
-              editor.chain().focus().setFontSize(next!).run();
+              editor.commands.setFontSize(next!);
             }}
             className="flex h-7 w-5 items-center justify-center rounded-r-full border border-l-0 border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)] disabled:opacity-30"
             disabled={!!currentSize && currentSize === FONT_SIZES[FONT_SIZES.length - 1]}

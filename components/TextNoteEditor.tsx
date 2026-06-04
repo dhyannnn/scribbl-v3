@@ -228,6 +228,11 @@ function TextNoteEditorInner({
   const [commentBubble, setCommentBubble] = useState<{ top: number; left: number } | null>(null);
   const [pendingCommentText, setPendingCommentText] = useState("");
   const [addingComment, setAddingComment] = useState(false);
+  const [liveOrientation, setLiveOrientation] = useState(orientation);
+  const [liveMarginTop, setLiveMarginTop] = useState(marginTop);
+  const [liveMarginBottom, setLiveMarginBottom] = useState(marginBottom);
+  const [liveMarginLeft, setLiveMarginLeft] = useState(marginLeft);
+  const [liveMarginRight, setLiveMarginRight] = useState(marginRight);
   const [_shareToken, setShareToken] = useState<string | null>(initialShareToken);
   const [isPublic, setIsPublic] = useState(initialIsPublic);
   const [shareLoading, setShareLoading] = useState(false);
@@ -639,16 +644,15 @@ function TextNoteEditorInner({
             className="note-editor-viewport min-h-0 flex-1 overflow-auto bg-[var(--color-surface-low)] py-8"
             style={{
               "--scribbl-zoom": String(zoomLevel / 100),
-              "--scribbl-page-width": orientation === "landscape" ? "1056px" : "816px",
+              "--scribbl-page-width": liveOrientation === "landscape" ? "1056px" : "816px",
             } as React.CSSProperties}
           >
             <div
               style={{
-                // Pass margins through to ProseMirror via a wrapper style the global CSS can pick up
-                "--page-mt": `${marginTop}px`,
-                "--page-mb": `${marginBottom}px`,
-                "--page-ml": `${marginLeft}px`,
-                "--page-mr": `${marginRight}px`,
+                "--page-mt": `${liveMarginTop}px`,
+                "--page-mb": `${liveMarginBottom}px`,
+                "--page-ml": `${liveMarginLeft}px`,
+                "--page-mr": `${liveMarginRight}px`,
               } as React.CSSProperties}
             >
               <EditorContent editor={editor} />
@@ -660,6 +664,21 @@ function TextNoteEditorInner({
               noteId={noteId}
               workspaceId={workspaceId}
               onClose={() => setShowComments(false)}
+              onCommentDeleted={(commentId) => {
+                if (!editor) return;
+                const { state, view } = editor;
+                const { tr, doc } = state;
+                const commentMarkType = state.schema.marks.commentMark;
+                if (!commentMarkType) return;
+                doc.descendants((node, pos) => {
+                  node.marks.forEach((mark) => {
+                    if (mark.type === commentMarkType && mark.attrs.commentId === commentId) {
+                      tr.removeMark(pos, pos + node.nodeSize, commentMarkType);
+                    }
+                  });
+                });
+                view.dispatch(tr);
+              }}
             />
           )}
           {showHistory && (
@@ -787,11 +806,18 @@ function TextNoteEditorInner({
           <PageSetupModal
             noteId={noteId}
             workspaceId={workspaceId}
-            initialOrientation={orientation}
-            initialMarginTop={marginTop}
-            initialMarginBottom={marginBottom}
-            initialMarginLeft={marginLeft}
-            initialMarginRight={marginRight}
+            initialOrientation={liveOrientation}
+            initialMarginTop={liveMarginTop}
+            initialMarginBottom={liveMarginBottom}
+            initialMarginLeft={liveMarginLeft}
+            initialMarginRight={liveMarginRight}
+            onSave={({ orientation: o, marginTop: t, marginBottom: b, marginLeft: l, marginRight: r }) => {
+              setLiveOrientation(o);
+              setLiveMarginTop(t);
+              setLiveMarginBottom(b);
+              setLiveMarginLeft(l);
+              setLiveMarginRight(r);
+            }}
             onClose={() => setShowPageSetup(false)}
           />
         )}
