@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, CheckCircle2, CornerDownRight } from "lucide-react";
+import { X, CheckCircle2, CornerDownRight, Trash2 } from "lucide-react";
 
 type NoteCommentRow = {
   id: string;
@@ -39,6 +39,12 @@ export function NoteCommentsPanel({ noteId, workspaceId, onClose }: Props) {
   async function resolve(commentId: string) {
     const { resolveNoteComment } = await import("@/app/workspaces/[id]/notes/actions");
     await resolveNoteComment(noteId, workspaceId, commentId);
+    void load();
+  }
+
+  async function deleteComment(commentId: string) {
+    const { deleteNoteComment } = await import("@/app/workspaces/[id]/notes/actions");
+    await deleteNoteComment(noteId, workspaceId, commentId);
     void load();
   }
 
@@ -81,16 +87,26 @@ export function NoteCommentsPanel({ noteId, workspaceId, onClose }: Props) {
           <div key={c.id} className={`mb-3 rounded-xl border p-3 ${c.resolvedAt ? "opacity-50" : "border-[var(--color-border)]"}`}>
             <div className="mb-1 flex items-start justify-between gap-2">
               <span className="font-medium text-[var(--color-text)]">{c.user.displayName}</span>
-              {!c.resolvedAt && (
+              <div className="flex items-center gap-1">
+                {!c.resolvedAt && (
+                  <button
+                    type="button"
+                    title="Resolve"
+                    onClick={() => void resolve(c.commentId)}
+                    className="shrink-0 text-[var(--color-success)] hover:opacity-80"
+                  >
+                    <CheckCircle2 size={13} />
+                  </button>
+                )}
                 <button
                   type="button"
-                  title="Resolve"
-                  onClick={() => void resolve(c.commentId)}
-                  className="shrink-0 text-[var(--color-success)] hover:opacity-80"
+                  title="Delete comment"
+                  onClick={() => void deleteComment(c.commentId)}
+                  className="shrink-0 text-[var(--color-danger)] hover:opacity-80"
                 >
-                  <CheckCircle2 size={13} />
+                  <Trash2 size={12} />
                 </button>
-              )}
+              </div>
             </div>
             <p className="mb-2 text-[var(--color-muted)]">{c.text}</p>
 
