@@ -485,6 +485,22 @@ function TextNoteEditorInner({
     setLinkPopover(null);
   }
 
+  function removeCommentMark(commentId: string) {
+    if (!editor) return;
+    const { state, view } = editor;
+    const { tr, doc } = state;
+    const commentMarkType = state.schema.marks.commentMark;
+    if (!commentMarkType) return;
+    doc.descendants((node, pos) => {
+      node.marks.forEach((mark) => {
+        if (mark.type === commentMarkType && mark.attrs.commentId === commentId) {
+          tr.removeMark(pos, pos + node.nodeSize, commentMarkType);
+        }
+      });
+    });
+    view.dispatch(tr);
+  }
+
   async function handlePublicShare() {
     setShareLoading(true);
     try {
@@ -664,21 +680,8 @@ function TextNoteEditorInner({
               noteId={noteId}
               workspaceId={workspaceId}
               onClose={() => setShowComments(false)}
-              onCommentDeleted={(commentId) => {
-                if (!editor) return;
-                const { state, view } = editor;
-                const { tr, doc } = state;
-                const commentMarkType = state.schema.marks.commentMark;
-                if (!commentMarkType) return;
-                doc.descendants((node, pos) => {
-                  node.marks.forEach((mark) => {
-                    if (mark.type === commentMarkType && mark.attrs.commentId === commentId) {
-                      tr.removeMark(pos, pos + node.nodeSize, commentMarkType);
-                    }
-                  });
-                });
-                view.dispatch(tr);
-              }}
+              onCommentDeleted={removeCommentMark}
+              onCommentResolved={removeCommentMark}
             />
           )}
           {showHistory && (

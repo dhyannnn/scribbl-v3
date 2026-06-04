@@ -30,7 +30,7 @@ const FONT_FAMILIES = [
 const FONT_SIZES = ["8px", "10px", "12px", "14px", "16px", "18px", "20px", "24px", "28px", "32px", "36px", "48px"];
 
 const LINE_SPACING_OPTIONS = [
-  { label: "Default", value: "" },
+  { label: "Normal", value: "" },
   { label: "1.0", value: "1" },
   { label: "1.15", value: "1.15" },
   { label: "1.5", value: "1.5" },
@@ -39,7 +39,7 @@ const LINE_SPACING_OPTIONS = [
 ];
 
 const LETTER_SPACING_OPTIONS = [
-  { label: "Default", value: "" },
+  { label: "Normal", value: "" },
   { label: "-0.05em", value: "-0.05em" },
   { label: "0em", value: "0em" },
   { label: "0.05em", value: "0.05em" },
@@ -49,7 +49,7 @@ const LETTER_SPACING_OPTIONS = [
 ];
 
 const WORD_SPACING_OPTIONS = [
-  { label: "Default", value: "" },
+  { label: "Normal", value: "" },
   { label: "-0.05em", value: "-0.05em" },
   { label: "0em", value: "0em" },
   { label: "0.05em", value: "0.05em" },
