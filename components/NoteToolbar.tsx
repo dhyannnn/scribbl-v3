@@ -27,7 +27,36 @@ const FONT_FAMILIES = [
   { label: "Trebuchet MS", value: "'Trebuchet MS', sans-serif" },
 ];
 
-const FONT_SIZES = ["12px", "14px", "16px", "18px", "20px", "24px", "28px", "32px", "36px", "48px"];
+const FONT_SIZES = ["8px", "10px", "12px", "14px", "16px", "18px", "20px", "24px", "28px", "32px", "36px", "48px"];
+
+const LINE_SPACING_OPTIONS = [
+  { label: "Default", value: "" },
+  { label: "1.0", value: "1" },
+  { label: "1.15", value: "1.15" },
+  { label: "1.5", value: "1.5" },
+  { label: "2.0", value: "2" },
+  { label: "2.5", value: "2.5" },
+];
+
+const LETTER_SPACING_OPTIONS = [
+  { label: "Default", value: "" },
+  { label: "-0.05em", value: "-0.05em" },
+  { label: "0em", value: "0em" },
+  { label: "0.05em", value: "0.05em" },
+  { label: "0.1em", value: "0.1em" },
+  { label: "0.15em", value: "0.15em" },
+  { label: "0.25em", value: "0.25em" },
+];
+
+const WORD_SPACING_OPTIONS = [
+  { label: "Default", value: "" },
+  { label: "-0.05em", value: "-0.05em" },
+  { label: "0em", value: "0em" },
+  { label: "0.05em", value: "0.05em" },
+  { label: "0.1em", value: "0.1em" },
+  { label: "0.2em", value: "0.2em" },
+  { label: "0.4em", value: "0.4em" },
+];
 
 const HEADING_OPTIONS = [
   { label: "Paragraph", value: 0 },
@@ -254,19 +283,97 @@ export function NoteToolbar({ editor, flat = false, showSearch, onCloseSearch }:
           ))}
         </select>
 
-        {/* Font size — shows current active size */}
+        {/* Font size — − select + */}
+        <div className="flex items-center">
+          <button
+            type="button"
+            title="Decrease font size"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const active = currentSize || "16px";
+              const idx = FONT_SIZES.indexOf(active);
+              const next = idx > 0 ? FONT_SIZES[idx - 1] : FONT_SIZES[0];
+              editor.chain().focus().setFontSize(next!).run();
+            }}
+            className="flex h-7 w-5 items-center justify-center rounded-l-full border border-r-0 border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)] disabled:opacity-30"
+            disabled={!!currentSize && currentSize === FONT_SIZES[0]}
+          >
+            −
+          </button>
+          <select
+            title="Font size"
+            value={currentSize}
+            onChange={(e) => {
+              if (!e.target.value) editor.chain().focus().unsetFontSize().run();
+              else editor.chain().focus().setFontSize(e.target.value).run();
+            }}
+            className="h-7 border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-xs text-[var(--color-muted)] outline-none focus:border-[var(--color-secondary)]"
+            style={{ width: "3.2rem" }}
+          >
+            <option value="">Size</option>
+            {FONT_SIZES.map((s) => (
+              <option key={s} value={s}>{s.replace("px", "")}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            title="Increase font size"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const active = currentSize || "16px";
+              const idx = FONT_SIZES.indexOf(active);
+              const next = idx < FONT_SIZES.length - 1 ? FONT_SIZES[idx + 1] : FONT_SIZES[FONT_SIZES.length - 1];
+              editor.chain().focus().setFontSize(next!).run();
+            }}
+            className="flex h-7 w-5 items-center justify-center rounded-r-full border border-l-0 border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)] disabled:opacity-30"
+            disabled={!!currentSize && currentSize === FONT_SIZES[FONT_SIZES.length - 1]}
+          >
+            +
+          </button>
+        </div>
+
+        {/* Line spacing */}
         <select
-          title="Font size"
-          value={currentSize}
+          title="Line spacing"
+          value={(editor.getAttributes("textStyle").lineHeight as string | undefined) ?? ""}
           onChange={(e) => {
-            if (!e.target.value) editor.chain().focus().unsetFontSize().run();
-            else editor.chain().focus().setFontSize(e.target.value).run();
+            if (!e.target.value) editor.chain().focus().unsetLineHeight().run();
+            else editor.chain().focus().setLineHeight(e.target.value).run();
           }}
-          className={`${selectCls} w-16`}
+          className={`${selectCls} w-20`}
         >
-          <option value="">Size</option>
-          {FONT_SIZES.map((s) => (
-            <option key={s} value={s}>{s.replace("px", "")}</option>
+          {LINE_SPACING_OPTIONS.map((o) => (
+            <option key={o.label} value={o.value}>{o.label === "Default" ? "Line ↕" : o.label}</option>
+          ))}
+        </select>
+
+        {/* Letter spacing */}
+        <select
+          title="Letter spacing"
+          value={(editor.getAttributes("textStyle").letterSpacing as string | undefined) ?? ""}
+          onChange={(e) => {
+            if (!e.target.value) editor.chain().focus().unsetLetterSpacing().run();
+            else editor.chain().focus().setLetterSpacing(e.target.value).run();
+          }}
+          className={`${selectCls} w-20`}
+        >
+          {LETTER_SPACING_OPTIONS.map((o) => (
+            <option key={o.label} value={o.value}>{o.label === "Default" ? "Lttr ↔" : o.label}</option>
+          ))}
+        </select>
+
+        {/* Word spacing */}
+        <select
+          title="Word spacing"
+          value={(editor.getAttributes("textStyle").wordSpacing as string | undefined) ?? ""}
+          onChange={(e) => {
+            if (!e.target.value) editor.chain().focus().unsetWordSpacing().run();
+            else editor.chain().focus().setWordSpacing(e.target.value).run();
+          }}
+          className={`${selectCls} w-20`}
+        >
+          {WORD_SPACING_OPTIONS.map((o) => (
+            <option key={o.label} value={o.value}>{o.label === "Default" ? "Word ↔" : o.label}</option>
           ))}
         </select>
 
