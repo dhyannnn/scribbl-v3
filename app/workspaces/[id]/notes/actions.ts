@@ -734,6 +734,228 @@ export async function updateNoteVisibility(formData: FormData) {
   revalidatePath("/");
 }
 
+// ── Embed meta ────────────────────────────────────────────────────────────────
+
+const EMBED_ALLOWED_HOSTS = [
+  "youtube.com", "www.youtube.com", "youtu.be",
+  "loom.com", "www.loom.com",
+  "figma.com", "www.figma.com",
+];
+
+export async function fetchEmbedMeta(rawUrl: string): Promise<{ title: string; provider: string; embedUrl: string } | null> {
+  let url: URL;
+  try { url = new URL(rawUrl); } catch { return null; }
+
+  if (!EMBED_ALLOWED_HOSTS.includes(url.hostname)) return null;
+
+  const provider = url.hostname.replace(/^www\./, "").split(".")[0] ?? "embed";
+
+  // Import the pure converter so we don't duplicate it here
+  const { toEmbedUrl } = await import("@/lib/tiptap/embed-node");
+  const embedUrl = toEmbedUrl(rawUrl);
+  if (!embedUrl) return null;
+
+  let title = "";
+  try {
+    const res = await fetch(rawUrl, { method: "GET", headers: { "User-Agent": "Scribblbot/1.0" }, signal: AbortSignal.timeout(4000) });
+    const html = await res.text();
+    const match = /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i.exec(html)
+      ?? /<title>([^<]+)<\/title>/i.exec(html);
+    if (match?.[1]) title = match[1].trim();
+  } catch { /* silent */ }
+
+  return { title, provider, embedUrl };
+}
+
+// ── Page setup ────────────────────────────────────────────────────────────────
+
+export async function updateNotePageSetup(
+  noteId: string,
+  data: {
+    orientation: string;
+    marginTop: number;
+    marginBottom: number;
+    marginLeft: number;
+    marginRight: number;
+  },
+) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return;
+
+  const note = await prisma.note.findFirst({
+    where: { id: noteId, deletedAt: null },
+    select: { id: true, ownerUserId: true, workspaceId: true },
+  });
+  if (!note) return;
+  if (note.ownerUserId !== currentUser.id) return;
+
+  await prisma.note.update({
+    where: { id: note.id },
+    data: {
+      orientation: data.orientation === "landscape" ? "landscape" : "portrait",
+      marginTop: Math.max(0, Math.min(200, data.marginTop)),
+      marginBottom: Math.max(0, Math.min(200, data.marginBottom)),
+      marginLeft: Math.max(0, Math.min(200, data.marginLeft)),
+      marginRight: Math.max(0, Math.min(200, data.marginRight)),
+    },
+  });
+
+  if (note.workspaceId) {
+    revalidatePath(`/workspaces/${note.workspaceId}/notes/${noteId}`);
+  }
+}
+
+// ── Public share ──────────────────────────────────────────────────────────────
+
+export async function toggleNoteShare(
+  noteId: string,
+  workspaceId: string,
+): Promise<{ isPublic: boolean; shareToken: string | null }> {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return { isPublic: false, shareToken: null };
+
+  const note = await prisma.note.findFirst({
+    where: { id: noteId, workspaceId, deletedAt: null },
+    select: { id: true, ownerUserId: true, isPublic: true, shareToken: true },
+  });
+  if (!note || note.ownerUserId !== currentUser.id) return { isPublic: false, shareToken: null };
+
+  const newIsPublic = !note.isPublic;
+  const newToken = newIsPublic ? (note.shareToken ?? crypto.randomUUID()) : note.shareToken;
+
+  await prisma.note.update({
+    where: { id: note.id },
+    data: { isPublic: newIsPublic, shareToken: newToken },
+  });
+
+  revalidatePath(`/workspaces/${workspaceId}/notes/${noteId}`);
+  return { isPublic: newIsPublic, shareToken: newIsPublic ? (newToken ?? null) : null };
+}
+
+// ── Inline comments ───────────────────────────────────────────────────────────
+
+export async function addNoteComment(
+  noteId: string,
+  workspaceId: string,
+  commentId: string,
+  text: string,
+  parentCommentId?: string,
+) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !commentId.trim() || !text.trim()) return;
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+    select: { status: true },
+  });
+  if (membership?.status !== "ACTIVE") return;
+
+  await prisma.noteComment.create({
+    data: {
+      noteId,
+      userId: currentUser.id,
+      commentId,
+      text: text.trim(),
+      parentCommentId: parentCommentId ?? null,
+    },
+  });
+
+  revalidatePath(`/workspaces/${workspaceId}/notes/${noteId}`);
+}
+
+export async function resolveNoteComment(noteId: string, workspaceId: string, commentId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return;
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+    select: { status: true },
+  });
+  if (membership?.status !== "ACTIVE") return;
+
+  await prisma.noteComment.updateMany({
+    where: { noteId, commentId, resolvedAt: null },
+    data: { resolvedAt: new Date() },
+  });
+
+  revalidatePath(`/workspaces/${workspaceId}/notes/${noteId}`);
+}
+
+export async function addNoteCommentReply(
+  noteId: string,
+  workspaceId: string,
+  parentCommentId: string,
+  text: string,
+) {
+  await addNoteComment(noteId, workspaceId, crypto.randomUUID(), text, parentCommentId);
+}
+
+// ── Version snapshots ─────────────────────────────────────────────────────────
+
+export async function saveNoteSnapshot(noteId: string, contentJson: unknown) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return;
+
+  const note = await prisma.note.findFirst({
+    where: { id: noteId, deletedAt: null },
+    select: { id: true, ownerUserId: true, collaboration: true },
+  });
+  if (!note) return;
+  if (note.ownerUserId !== currentUser.id && note.collaboration !== "COLLABORATIVE") return;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.noteSnapshot.create({
+      data: {
+        noteId,
+        userId: currentUser.id,
+        contentJson: contentJson as Prisma.InputJsonValue,
+      },
+    });
+
+    // Prune to keep at most 50 snapshots per note
+    const count = await tx.noteSnapshot.count({ where: { noteId } });
+    if (count > 50) {
+      const oldest = await tx.noteSnapshot.findMany({
+        where: { noteId },
+        orderBy: { createdAt: "asc" },
+        take: count - 50,
+        select: { id: true },
+      });
+      await tx.noteSnapshot.deleteMany({ where: { id: { in: oldest.map((s) => s.id) } } });
+    }
+  });
+}
+
+export async function restoreNoteSnapshot(
+  noteId: string,
+  workspaceId: string,
+  snapshotId: string,
+): Promise<{ contentJson: unknown } | null> {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return null;
+
+  const [snapshot, note] = await Promise.all([
+    prisma.noteSnapshot.findFirst({
+      where: { id: snapshotId, noteId },
+      select: { contentJson: true },
+    }),
+    prisma.note.findFirst({
+      where: { id: noteId, workspaceId, deletedAt: null },
+      select: { id: true, ownerUserId: true },
+    }),
+  ]);
+
+  if (!snapshot || !note || note.ownerUserId !== currentUser.id) return null;
+
+  await prisma.note.update({
+    where: { id: note.id },
+    data: { contentJson: snapshot.contentJson as Prisma.InputJsonValue },
+  });
+
+  revalidatePath(`/workspaces/${workspaceId}/notes/${noteId}`);
+  return { contentJson: snapshot.contentJson };
+}
+
 function extractMentionIds(content: unknown): string[] {
   const ids: string[] = [];
   function walk(node: unknown) {
