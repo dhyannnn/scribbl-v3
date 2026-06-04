@@ -28,6 +28,10 @@ import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import { InlineMathNode } from "@aarkue/tiptap-math-extension";
 import { FontSize } from "@/lib/tiptap/font-size";
+import { LineHeight } from "@/lib/tiptap/line-height";
+import { LetterSpacing } from "@/lib/tiptap/letter-spacing";
+import { EmbedNode } from "@/lib/tiptap/embed-node";
+import { CommentMark } from "@/lib/tiptap/comment-mark";
 import { Indent } from "@/lib/tiptap/indent";
 import { KeyboardShortcuts } from "@/lib/tiptap/keyboard-shortcuts";
 import { LiveblocksCursors, type CursorUser } from "@/lib/tiptap/liveblocks-cursors";
@@ -36,6 +40,9 @@ import { SlashCommands } from "@/lib/tiptap/slash-commands";
 import { buildMentionExtension, type MentionMember } from "@/lib/tiptap/mention";
 import { LinkHoverPopover } from "@/components/LinkHoverPopover";
 import { NoteToolbar } from "@/components/NoteToolbar";
+import { PageSetupModal } from "@/components/PageSetupModal";
+import { NoteCommentsPanel } from "@/components/NoteCommentsPanel";
+import { NoteHistoryPanel } from "@/components/NoteHistoryPanel";
 import { VisibilityDropdown } from "@/components/VisibilityDropdown";
 import { noteTitleMaxLength } from "@/lib/note-title";
 import { liveblocksNow, logLiveblocksClientTiming } from "@/lib/liveblocks-timing";
@@ -104,6 +111,15 @@ type EditorProps = {
   onCollapse?: () => void;
   variant?: "card" | "document";
   members?: MentionMember[];
+  // Page setup (Group 3)
+  orientation?: string;
+  marginTop?: number;
+  marginBottom?: number;
+  marginLeft?: number;
+  marginRight?: number;
+  // Public share (Group 3)
+  shareToken?: string | null;
+  isPublic?: boolean;
 };
 
 function CollapseDocIcon() {
@@ -173,6 +189,8 @@ export function TextNoteEditor(props: EditorProps) {
 // Inner editor — only mounts once Yjs is confirmed ready.
 function TextNoteEditorInner({
   workspaceId, meetingId, noteId, title, contentJson, saveAction, canEdit, canExportPdf = true, noteVisibility, canChangeVisibility = false, onExit, onCollapse, variant = "card", members = [], ySetup,
+  orientation = "portrait", marginTop = 72, marginBottom = 72, marginLeft = 72, marginRight = 72,
+  shareToken: initialShareToken = null, isPublic: initialIsPublic = false,
 }: EditorProps & { ySetup: YSetup }) {
   const [titleValue, setTitleValue] = useState(title);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -180,9 +198,7 @@ function TextNoteEditorInner({
   const [totalPages, setTotalPages] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const [zoomLevel, setZoomLevel] = useState(100);
-  const [linkCopied, setLinkCopied] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
 
   const yMeta = useMemo(() => ySetup.yDoc.getMap<string>("note-meta"), [ySetup.yDoc]);
@@ -206,6 +222,19 @@ function TextNoteEditorInner({
   }, [yMeta]);
   const [linkPopover, setLinkPopover] = useState<{ href: string; top: number; left: number } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+  const [showPageSetup, setShowPageSetup] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [commentBubble, setCommentBubble] = useState<{ top: number; left: number } | null>(null);
+  const [pendingCommentText, setPendingCommentText] = useState("");
+  const [addingComment, setAddingComment] = useState(false);
+  const [_shareToken, setShareToken] = useState<string | null>(initialShareToken);
+  const [isPublic, setIsPublic] = useState(initialIsPublic);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  // Track 30-min activity snapshot timer
+  const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isDirtyRef = useRef(false);
   const latestSaveIdRef = useRef(0);
   const changeVersionRef = useRef(0);
   const hasPendingSaveRef = useRef(false);
@@ -233,6 +262,8 @@ function TextNoteEditorInner({
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       FontFamily,
       FontSize,
+      LineHeight,
+      LetterSpacing,
       Indent,
       KeyboardShortcuts,
       Link.configure({ openOnClick: false }),
@@ -249,6 +280,8 @@ function TextNoteEditorInner({
       Superscript,
       MathNode,
       SearchAndReplace,
+      EmbedNode,
+      CommentMark,
       ...(canEdit ? [SlashCommands, buildMentionExtension(members)] : []),
     ],
     onCreate: ({ editor: e }) => {
@@ -274,10 +307,33 @@ function TextNoteEditorInner({
       } else {
         setLinkPopover(null);
       }
+      // Show "Add comment" bubble when text is selected (document variant, edit mode)
+      if (canEdit && from !== to) {
+        const coords = e.view.coordsAtPos(to);
+        setCommentBubble({ top: coords.top, left: coords.left + 8 });
+      } else {
+        setCommentBubble(null);
+      }
     },
     onBlur: () => setTimeout(() => setLinkPopover(null), 150),
     onUpdate: () => {
-      if (canEdit) queueAutosave();
+      if (canEdit) {
+        queueAutosave();
+        isDirtyRef.current = true;
+        // Schedule a snapshot every 30 minutes of activity
+        if (!snapshotTimerRef.current) {
+          snapshotTimerRef.current = setTimeout(() => {
+            snapshotTimerRef.current = null;
+            const e = editorRef.current;
+            if (e && isDirtyRef.current) {
+              isDirtyRef.current = false;
+              void import("@/app/workspaces/[id]/notes/actions").then(({ saveNoteSnapshot }) => {
+                void saveNoteSnapshot(noteId, e.getJSON());
+              });
+            }
+          }, 30 * 60 * 1000);
+        }
+      }
     },
   });
 
@@ -318,11 +374,20 @@ function TextNoteEditorInner({
     window.addEventListener("pagehide", flushPendingSave);
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+      if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("pagehide", flushPendingSave);
       flushPendingSave();
+      // Flush snapshot on unmount if dirty
+      const e = editorRef.current;
+      if (canEdit && e && isDirtyRef.current) {
+        isDirtyRef.current = false;
+        void import("@/app/workspaces/[id]/notes/actions").then(({ saveNoteSnapshot }) => {
+          void saveNoteSnapshot(noteId, e.getJSON());
+        });
+      }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flushPendingSave]);
 
   // Page count — ResizeObserver on the ProseMirror element (only active in document variant)
@@ -350,14 +415,6 @@ function TextNoteEditorInner({
     vp.addEventListener("scroll", onScroll, { passive: true });
     return () => vp.removeEventListener("scroll", onScroll);
   }, [variant]);
-
-  function handleShare() {
-    void navigator.clipboard.writeText(window.location.href).then(() => {
-      setLinkCopied(true);
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-      copyTimeoutRef.current = setTimeout(() => setLinkCopied(false), 2000);
-    });
-  }
 
   function zoomIn() {
     const next = ZOOM_LEVELS.find((z) => z > zoomLevel);
@@ -423,6 +480,25 @@ function TextNoteEditorInner({
     setLinkPopover(null);
   }
 
+  async function handlePublicShare() {
+    setShareLoading(true);
+    try {
+      const { toggleNoteShare } = await import("@/app/workspaces/[id]/notes/actions");
+      const result = await toggleNoteShare(noteId, workspaceId);
+      setIsPublic(result.isPublic);
+      setShareToken(result.shareToken ?? null);
+      if (result.isPublic && result.shareToken) {
+        const url = `${window.location.origin}/share/${result.shareToken}`;
+        void navigator.clipboard.writeText(url).then(() => {
+          setShareCopied(true);
+          setTimeout(() => setShareCopied(false), 2000);
+        });
+      }
+    } finally {
+      setShareLoading(false);
+    }
+  }
+
   // Cmd+F opens find bar; Escape closes it
   useEffect(() => {
     function handler(e: KeyboardEvent) {
@@ -486,6 +562,34 @@ function TextNoteEditorInner({
               )}
             </div>
           )}
+          {/* Page Setup */}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setShowPageSetup(true)}
+              className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
+            >
+              Page Setup
+            </button>
+          )}
+          {/* History */}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${showHistory ? "border-[var(--color-secondary)] bg-[var(--color-secondary-dim)] text-[var(--color-secondary)]" : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)]"}`}
+            >
+              History
+            </button>
+          )}
+          {/* Comments */}
+          <button
+            type="button"
+            onClick={() => setShowComments((v) => !v)}
+            className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${showComments ? "border-[var(--color-secondary)] bg-[var(--color-secondary-dim)] text-[var(--color-secondary)]" : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)]"}`}
+          >
+            Comments
+          </button>
           {/* Export PDF */}
           {canExportPdf && (
             <a
@@ -495,17 +599,20 @@ function TextNoteEditorInner({
               Export PDF
             </a>
           )}
-          {/* Share — copy link */}
+          {/* Public share link */}
           <button
             type="button"
-            onClick={handleShare}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
-              linkCopied
-                ? "bg-[var(--color-success)] text-white"
-                : "bg-[var(--color-secondary)] text-white hover:bg-[var(--color-secondary-hover)]"
+            onClick={() => void handlePublicShare()}
+            disabled={shareLoading}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition disabled:opacity-60 ${
+              isPublic
+                ? shareCopied
+                  ? "bg-[var(--color-success)] text-white"
+                  : "bg-[var(--color-secondary)] text-white hover:bg-[var(--color-secondary-hover)]"
+                : "border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)]"
             }`}
           >
-            {linkCopied ? "Copied!" : "Share"}
+            {isPublic ? (shareCopied ? "Copied!" : "Shared ✓") : "Share"}
           </button>
           {/* Collapse (only when launched from NoteEditorShell) */}
           {onCollapse && (
@@ -526,12 +633,43 @@ function TextNoteEditorInner({
         )}
 
         {/* Scrollable page viewport */}
-        <div
-          ref={viewportRef}
-          className="note-editor-viewport min-h-0 flex-1 overflow-auto bg-[var(--color-surface-low)] py-8"
-          style={{ "--scribbl-zoom": String(zoomLevel / 100) } as React.CSSProperties}
-        >
-          <EditorContent editor={editor} />
+        <div className="flex min-h-0 flex-1">
+          <div
+            ref={viewportRef}
+            className="note-editor-viewport min-h-0 flex-1 overflow-auto bg-[var(--color-surface-low)] py-8"
+            style={{
+              "--scribbl-zoom": String(zoomLevel / 100),
+              "--scribbl-page-width": orientation === "landscape" ? "1056px" : "816px",
+            } as React.CSSProperties}
+          >
+            <div
+              style={{
+                // Pass margins through to ProseMirror via a wrapper style the global CSS can pick up
+                "--page-mt": `${marginTop}px`,
+                "--page-mb": `${marginBottom}px`,
+                "--page-ml": `${marginLeft}px`,
+                "--page-mr": `${marginRight}px`,
+              } as React.CSSProperties}
+            >
+              <EditorContent editor={editor} />
+            </div>
+          </div>
+          {/* Side panels */}
+          {showComments && (
+            <NoteCommentsPanel
+              noteId={noteId}
+              workspaceId={workspaceId}
+              onClose={() => setShowComments(false)}
+            />
+          )}
+          {showHistory && (
+            <NoteHistoryPanel
+              noteId={noteId}
+              workspaceId={workspaceId}
+              editor={editor}
+              onClose={() => setShowHistory(false)}
+            />
+          )}
         </div>
 
         {/* Bottom bar */}
@@ -603,6 +741,58 @@ function TextNoteEditorInner({
             onCopy={() => handleCopyLink(linkPopover.href)}
             onEdit={handleEditLink}
             onUnlink={handleUnlink}
+          />
+        )}
+        {/* Floating "Add comment" button — appears when text is selected */}
+        {canEdit && commentBubble && variant === "document" && (
+          <div
+            className="fixed z-[9998] flex flex-col gap-1"
+            style={{ top: commentBubble.top, left: commentBubble.left }}
+          >
+            {addingComment ? (
+              <div className="flex items-center gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-xl">
+                <input
+                  autoFocus
+                  value={pendingCommentText}
+                  onChange={(e) => setPendingCommentText(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key === "Enter" && !e.shiftKey && pendingCommentText.trim()) {
+                      e.preventDefault();
+                      const id = crypto.randomUUID();
+                      editor?.chain().focus().setComment(id).run();
+                      const { addNoteComment } = await import("@/app/workspaces/[id]/notes/actions");
+                      await addNoteComment(noteId, workspaceId, id, pendingCommentText.trim());
+                      setPendingCommentText("");
+                      setAddingComment(false);
+                      setCommentBubble(null);
+                    }
+                    if (e.key === "Escape") { setAddingComment(false); setPendingCommentText(""); }
+                  }}
+                  placeholder="Add a comment…"
+                  className="w-48 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs outline-none focus:border-[var(--color-secondary)]"
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); setAddingComment(true); }}
+                className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-medium text-[var(--color-secondary)] shadow-md hover:bg-[var(--color-secondary-dim)]"
+              >
+                + Comment
+              </button>
+            )}
+          </div>
+        )}
+        {showPageSetup && (
+          <PageSetupModal
+            noteId={noteId}
+            workspaceId={workspaceId}
+            initialOrientation={orientation}
+            initialMarginTop={marginTop}
+            initialMarginBottom={marginBottom}
+            initialMarginLeft={marginLeft}
+            initialMarginRight={marginRight}
+            onClose={() => setShowPageSetup(false)}
           />
         )}
       </div>
