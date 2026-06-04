@@ -1651,20 +1651,20 @@ function toNoteArtifactData(
       (override) =>
         override.userId === permissionContext.currentUserId &&
         override.artifactId === artifact.id &&
-        override.targetType === (artifact.note?.type === "WHITEBOARD" ? "WHITEBOARD" : "SHARED_NOTES"),
+        override.targetType === (artifact.note?.type === "WHITEBOARD" || artifact.note?.type === "MINDBOARD" ? "WHITEBOARD" : "SHARED_NOTES"),
     )?.state ?? null;
   const canEdit =
     artifact.note.visibility === "PRIVATE"
       ? artifact.note.ownerUserId === permissionContext.currentUserId ||
         artifact.note.collaboration === "COLLABORATIVE"
-      : artifact.note.type === "WHITEBOARD"
+      : (artifact.note.type === "WHITEBOARD" || artifact.note.type === "MINDBOARD")
         ? canEditMeetingWhiteboard({ ...permissionContext, artifactId: artifact.id })
         : canEditMeetingSharedNote({ ...permissionContext, artifactId: artifact.id });
 
   return {
     artifactId: artifact.id,
     noteId: artifact.noteId,
-    noteType: artifact.note.type as "TEXT" | "WHITEBOARD",
+    noteType: artifact.note.type as "TEXT" | "WHITEBOARD" | "MINDBOARD",
     noteTitle: artifact.note.title,
     noteOwnerUserId: artifact.note.ownerUserId,
     noteCollaboration: artifact.note.collaboration,

@@ -83,6 +83,7 @@ enum ChannelType {
 enum NoteType {
   TEXT
   WHITEBOARD
+  MINDBOARD
 }
 
 enum NoteStorageType {

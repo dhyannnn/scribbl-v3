@@ -176,6 +176,75 @@ export async function createWhiteboardNote(formData: FormData) {
   redirect(`/workspaces/${workspaceId}/notes/${note.id}`);
 }
 
+export async function createMindboardNote(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const visibilityValue = String(formData.get("visibility") ?? "WORKSPACE_SHARED");
+  const collaborationValue = String(formData.get("collaboration") ?? "SOLO");
+  const userTimezone = String(formData.get("userTimezone") || "UTC");
+
+  if (
+    !workspaceId ||
+    !noteVisibilities.includes(visibilityValue as (typeof noteVisibilities)[number]) ||
+    !noteCollaborations.includes(collaborationValue as (typeof noteCollaborations)[number])
+  ) {
+    redirect(workspaceId ? `/workspaces/${workspaceId}/notes?note=invalid` : "/");
+  }
+
+  const visibility = visibilityValue as (typeof noteVisibilities)[number];
+  const collaboration =
+    visibility === "PRIVATE" ? "SOLO" : (collaborationValue as (typeof noteCollaborations)[number]);
+
+  const [currentUser, workspace] = await Promise.all([
+    getCurrentUser(),
+    prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true, plan: true },
+    }),
+  ]);
+
+  // Shared mindboards are Pro+ only; private mindboards are available on all plans
+  if (workspace?.plan === "FREE" && visibility === "WORKSPACE_SHARED") {
+    redirect(`/workspaces/${workspaceId}/notes?note=shared-mindboard-upgrade-required`);
+  }
+
+  if (!currentUser || !workspace) {
+    redirect(workspaceId ? `/workspaces/${workspaceId}/notes?note=invalid` : "/");
+  }
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId: workspace.id, userId: currentUser.id } },
+    select: { status: true },
+  });
+
+  if (membership?.status !== "ACTIVE") {
+    redirect(`/workspaces/${workspace.id}/notes?note=unauthorized`);
+  }
+
+  const note = await prisma.note.create({
+    data: {
+      workspaceId: workspace.id,
+      ownerUserId: currentUser.id,
+      title: createDefaultNoteTitle({
+        scope: visibility,
+        type: "MINDBOARD",
+        collaborative: collaboration === "COLLABORATIVE",
+        timeZone: userTimezone,
+      }),
+      type: "MINDBOARD",
+      visibility,
+      collaboration,
+      sourceDevice: "WEB",
+      storageType: "JSON",
+      contentJson: { strokes: [] },
+    },
+  });
+
+  revalidatePath(`/workspaces/${workspaceId}`);
+  revalidatePath(`/workspaces/${workspaceId}/notes`);
+  revalidatePath("/");
+  redirect(`/workspaces/${workspaceId}/notes/${note.id}`);
+}
+
 export async function saveTextNote(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
   const noteId = String(formData.get("noteId") ?? "");
@@ -649,8 +718,8 @@ export async function updateNoteVisibility(formData: FormData) {
 
   const newVisibility = visibilityValue as (typeof noteVisibilities)[number];
 
-  // Free plan: whiteboards cannot be made shared
-  if (note.workspace?.plan === "FREE" && note.type === "WHITEBOARD" && newVisibility === "WORKSPACE_SHARED") {
+  // Free plan: whiteboards and mindboards cannot be made shared
+  if (note.workspace?.plan === "FREE" && (note.type === "WHITEBOARD" || note.type === "MINDBOARD") && newVisibility === "WORKSPACE_SHARED") {
     redirect(`/workspaces/${workspaceId}/notes/${noteId}?note=plan-upgrade-required`);
   }
 

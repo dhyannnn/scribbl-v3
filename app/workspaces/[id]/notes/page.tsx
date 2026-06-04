@@ -5,7 +5,7 @@ import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { getGradient } from "@/lib/color-hash";
-import { createTextNote, createWhiteboardNote, updateNoteExportAccess } from "./actions";
+import { createTextNote, createWhiteboardNote, createMindboardNote, updateNoteExportAccess } from "./actions";
 import { DeleteNoteForm } from "./DeleteNoteForm";
 import { TimezoneInput } from "@/components/TimezoneInput";
 
@@ -116,99 +116,146 @@ export default async function NotesPage({ params, searchParams }: PageProps) {
               </p>
             </div>
 
-            {/* Primary CTAs */}
+            {/* Primary CTAs — three dropdowns */}
             <div className="flex shrink-0 flex-wrap items-start gap-2">
-              <form action={createTextNote}>
-                <TimezoneInput />
-                <input type="hidden" name="workspaceId" value={workspace.id} />
-                <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
-                <input type="hidden" name="collaboration" value="COLLABORATIVE" />
-                <PendingSubmitButton
-                  pendingLabel="Creating..."
-                  className="flex items-center gap-2 rounded-full bg-[var(--color-secondary)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--color-secondary-hover)] disabled:opacity-50"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-                  New Note
-                </PendingSubmitButton>
-              </form>
-              {canUseWhiteboard ? (
-                <form action={createWhiteboardNote}>
-                  <TimezoneInput />
-                  <input type="hidden" name="workspaceId" value={workspace.id} />
-                  <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
-                  <input type="hidden" name="collaboration" value="COLLABORATIVE" />
-                  <PendingSubmitButton
-                    pendingLabel="Creating..."
-                    className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-semibold text-[var(--color-text)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
-                    New Whiteboard
-                  </PendingSubmitButton>
-                </form>
-              ) : (
-                <Link
-                  href={`/workspaces/${workspace.id}/billing#upgrade`}
-                  className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-semibold text-[var(--color-text)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
-                  New Whiteboard
-                  <span className="rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--color-secondary)]">Pro</span>
-                </Link>
-              )}
 
-              {/* Advanced options */}
+              {/* New Note dropdown */}
               <details className="group relative">
-                <summary className="flex cursor-pointer list-none items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]">
-                  More
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition group-open:rotate-180"><polyline points="6 9 12 15 18 9" /></svg>
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full bg-[var(--color-secondary)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--color-secondary-hover)]">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                  New Note
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-70 transition group-open:rotate-180"><polyline points="6 9 12 15 18 9" /></svg>
                 </summary>
-                <div className="absolute right-0 top-full z-20 mt-2 w-52 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg">
-                  <p className="px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">Private</p>
+                <div className="absolute left-0 top-full z-20 mt-2 w-52 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg">
                   <form action={createTextNote}>
                     <TimezoneInput />
                     <input type="hidden" name="workspaceId" value={workspace.id} />
                     <input type="hidden" name="visibility" value="PRIVATE" />
-                    <PendingSubmitButton pendingLabel="Creating..." className="w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
-                      Private Text Note
+                    <PendingSubmitButton pendingLabel="Creating..." className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
+                      <LockIcon /> Private
                     </PendingSubmitButton>
                   </form>
-                  <form action={createWhiteboardNote}>
+                  <form action={createTextNote}>
                     <TimezoneInput />
                     <input type="hidden" name="workspaceId" value={workspace.id} />
-                    <input type="hidden" name="visibility" value="PRIVATE" />
-                    <PendingSubmitButton pendingLabel="Creating..." className="w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
-                      Private Whiteboard
+                    <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
+                    <input type="hidden" name="collaboration" value="COLLABORATIVE" />
+                    <PendingSubmitButton pendingLabel="Creating..." className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
+                      <GlobeIcon /> Shared
                     </PendingSubmitButton>
                   </form>
-                  <div className="my-1 border-t border-[var(--color-border)]" />
-                  <p className="px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">View-only Shared</p>
                   <form action={createTextNote}>
                     <TimezoneInput />
                     <input type="hidden" name="workspaceId" value={workspace.id} />
                     <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
                     <input type="hidden" name="collaboration" value="SOLO" />
-                    <PendingSubmitButton pendingLabel="Creating..." className="w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
-                      Shared Text (View-only)
+                    <PendingSubmitButton pendingLabel="Creating..." className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
+                      <EyeIcon /> Shared, Read-Only
+                    </PendingSubmitButton>
+                  </form>
+                </div>
+              </details>
+
+              {/* New Whiteboard dropdown */}
+              <details className="group relative">
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-semibold text-[var(--color-text)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
+                  New Whiteboard
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-50 transition group-open:rotate-180"><polyline points="6 9 12 15 18 9" /></svg>
+                </summary>
+                <div className="absolute left-0 top-full z-20 mt-2 w-52 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg">
+                  <form action={createWhiteboardNote}>
+                    <TimezoneInput />
+                    <input type="hidden" name="workspaceId" value={workspace.id} />
+                    <input type="hidden" name="visibility" value="PRIVATE" />
+                    <PendingSubmitButton pendingLabel="Creating..." className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
+                      <LockIcon /> Private
                     </PendingSubmitButton>
                   </form>
                   {canUseWhiteboard ? (
-                    <form action={createWhiteboardNote}>
-                      <TimezoneInput />
-                      <input type="hidden" name="workspaceId" value={workspace.id} />
-                      <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
-                      <input type="hidden" name="collaboration" value="SOLO" />
-                      <PendingSubmitButton pendingLabel="Creating..." className="w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
-                        Shared Board (View-only)
-                      </PendingSubmitButton>
-                    </form>
+                    <>
+                      <form action={createWhiteboardNote}>
+                        <TimezoneInput />
+                        <input type="hidden" name="workspaceId" value={workspace.id} />
+                        <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
+                        <input type="hidden" name="collaboration" value="COLLABORATIVE" />
+                        <PendingSubmitButton pendingLabel="Creating..." className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
+                          <GlobeIcon /> Shared
+                        </PendingSubmitButton>
+                      </form>
+                      <form action={createWhiteboardNote}>
+                        <TimezoneInput />
+                        <input type="hidden" name="workspaceId" value={workspace.id} />
+                        <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
+                        <input type="hidden" name="collaboration" value="SOLO" />
+                        <PendingSubmitButton pendingLabel="Creating..." className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
+                          <EyeIcon /> Shared, Read-Only
+                        </PendingSubmitButton>
+                      </form>
+                    </>
                   ) : (
-                    <Link href={`/workspaces/${workspace.id}/billing#upgrade`} className="flex items-center justify-between rounded-xl px-3 py-2 text-sm text-[var(--color-muted)] transition hover:bg-[var(--color-surface-low)]">
-                      Shared Board (View-only)
-                      <span className="rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--color-secondary)]">Pro</span>
-                    </Link>
+                    <>
+                      <Link href={`/workspaces/${workspace.id}/billing#upgrade`} className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-[var(--color-muted)] transition hover:bg-[var(--color-surface-low)]">
+                        <GlobeIcon /> Shared <ProBadge />
+                      </Link>
+                      <Link href={`/workspaces/${workspace.id}/billing#upgrade`} className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-[var(--color-muted)] transition hover:bg-[var(--color-surface-low)]">
+                        <EyeIcon /> Shared, Read-Only <ProBadge />
+                      </Link>
+                    </>
                   )}
                 </div>
               </details>
+
+              {/* New Mind Board dropdown */}
+              <details className="group relative">
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-semibold text-[var(--color-text)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]">
+                  <MindboardIcon />
+                  New Mind Board
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-50 transition group-open:rotate-180"><polyline points="6 9 12 15 18 9" /></svg>
+                </summary>
+                <div className="absolute left-0 top-full z-20 mt-2 w-52 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg">
+                  <form action={createMindboardNote}>
+                    <TimezoneInput />
+                    <input type="hidden" name="workspaceId" value={workspace.id} />
+                    <input type="hidden" name="visibility" value="PRIVATE" />
+                    <PendingSubmitButton pendingLabel="Creating..." className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
+                      <LockIcon /> Private
+                    </PendingSubmitButton>
+                  </form>
+                  {canUseWhiteboard ? (
+                    <>
+                      <form action={createMindboardNote}>
+                        <TimezoneInput />
+                        <input type="hidden" name="workspaceId" value={workspace.id} />
+                        <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
+                        <input type="hidden" name="collaboration" value="COLLABORATIVE" />
+                        <PendingSubmitButton pendingLabel="Creating..." className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
+                          <GlobeIcon /> Shared
+                        </PendingSubmitButton>
+                      </form>
+                      <form action={createMindboardNote}>
+                        <TimezoneInput />
+                        <input type="hidden" name="workspaceId" value={workspace.id} />
+                        <input type="hidden" name="visibility" value="WORKSPACE_SHARED" />
+                        <input type="hidden" name="collaboration" value="SOLO" />
+                        <PendingSubmitButton pendingLabel="Creating..." className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-[var(--color-text)] transition hover:bg-[var(--color-surface-low)] disabled:opacity-50">
+                          <EyeIcon /> Shared, Read-Only
+                        </PendingSubmitButton>
+                      </form>
+                    </>
+                  ) : (
+                    <>
+                      <Link href={`/workspaces/${workspace.id}/billing#upgrade`} className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-[var(--color-muted)] transition hover:bg-[var(--color-surface-low)]">
+                        <GlobeIcon /> Shared <ProBadge />
+                      </Link>
+                      <Link href={`/workspaces/${workspace.id}/billing#upgrade`} className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-[var(--color-muted)] transition hover:bg-[var(--color-surface-low)]">
+                        <EyeIcon /> Shared, Read-Only <ProBadge />
+                      </Link>
+                    </>
+                  )}
+                </div>
+              </details>
+
             </div>
           </div>
 
@@ -315,6 +362,10 @@ function NoteSection({
                   {note.type === "WHITEBOARD" ? (
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
                       <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" />
+                    </svg>
+                  ) : note.type === "MINDBOARD" ? (
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
+                      <circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
                     </svg>
                   ) : (
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
@@ -430,6 +481,46 @@ function CollabBadge({ collaboration }: { collaboration: string }) {
   );
 }
 
+function LockIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-60">
+      <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+
+function GlobeIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-60">
+      <circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </svg>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-60">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function ProBadge() {
+  return (
+    <span className="ml-auto rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-[var(--color-secondary)]">
+      Pro
+    </span>
+  );
+}
+
+function MindboardIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+      <circle cx="12" cy="12" r="3" /><path d="M12 4v2M12 18v2M4 12h2M18 12h2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4" />
+    </svg>
+  );
+}
+
 function getNoteStatusMessage(status?: string) {
   switch (status) {
     case "deleted":
@@ -437,6 +528,8 @@ function getNoteStatusMessage(status?: string) {
     case "plan-upgrade-required":
     case "shared-whiteboard-upgrade-required":
       return "Shared whiteboards are a Pro feature. You can still create private whiteboards.";
+    case "shared-mindboard-upgrade-required":
+      return "Shared mind boards are a Pro feature. You can still create private mind boards.";
     case "invalid":
       return "Choose a valid note type and visibility.";
     case "unauthorized":

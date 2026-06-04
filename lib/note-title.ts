@@ -15,14 +15,14 @@ export function createDefaultNoteTitle({
   timeZone,
 }: {
   scope: "PRIVATE" | "WORKSPACE_SHARED";
-  type: "TEXT" | "WHITEBOARD";
+  type: "TEXT" | "WHITEBOARD" | "MINDBOARD";
   collaborative?: boolean;
   date?: Date;
   timeZone?: string;
 }) {
   const scopeLabel =
     scope === "PRIVATE" ? "Private" : collaborative ? "Collaborative" : "Shared";
-  const typeLabel = type === "TEXT" ? "note" : "whiteboard";
+  const typeLabel = type === "TEXT" ? "note" : type === "MINDBOARD" ? "mind board" : "whiteboard";
   const timestamp = date.toLocaleString("en-US", {
     month: "short",
     day: "numeric",

@@ -53,31 +53,43 @@ import { useTldrawYjsStore } from "@/components/tldraw-yjs-store";
 import {
   COVER_TEMPLATES,
   LIGHT_TEMPLATES,
+  ORIENTATION_PRESETS,
+  getOrientationPreset,
   getPageBackgroundShapeId,
   PAGE_H,
   PAGE_W,
   TEMPLATE_LABELS,
+  type PageOrientation,
   type PageTemplate,
 } from "@/lib/tldraw/page-config";
 import {
   PageBackgroundShapeUtil,
   type PageBackgroundShape,
 } from "@/lib/tldraw/page-background-shape";
+import {
+  MindboardBackground,
+  MindboardBgCtx,
+  MindboardTemplatePicker,
+} from "@/lib/tldraw/mindboard-bg";
+import { usePillColors } from "@/lib/tldraw/mindboard-pill-colors";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 const SHAPE_UTILS = [PageBackgroundShapeUtil];
+const MINDBOARD_SHAPE_UTILS: typeof SHAPE_UTILS = [];
 
 type ExportCtxValue = {
   title: string;
   canExportPdf: boolean;
   canUploadAssets: boolean;
+  isMindboard: boolean;
   onRegisterExportPdf: ((fn: (() => Promise<void>) | null) => void) | null;
 };
 const ExportCtx = createContext<ExportCtxValue>({
   title: "",
   canExportPdf: true,
   canUploadAssets: true,
+  isMindboard: false,
   onRegisterExportPdf: null,
 });
 
@@ -136,7 +148,7 @@ function CustomMainMenu(props: TLUiMainMenuProps) {
 function CustomExportMenu() {
   const editor = useEditor();
   const exportAs = useExportAs();
-  const { title, canExportPdf, onRegisterExportPdf } = useContext(ExportCtx);
+  const { title, canExportPdf, isMindboard: isMb, onRegisterExportPdf } = useContext(ExportCtx);
   const [busySvg, setBusySvg] = useState(false);
   const [busyPng, setBusyPng] = useState(false);
   const [busyPdf, setBusyPdf] = useState(false);
@@ -162,7 +174,7 @@ function CustomExportMenu() {
   async function handlePdf() {
     setBusyPdf(true);
     try {
-      await exportWhiteboardPdf(editor, title || "whiteboard");
+      await exportWhiteboardPdf(editor, title || "whiteboard", isMb);
     } finally {
       setBusyPdf(false);
     }
@@ -208,6 +220,15 @@ function CustomExportMenu() {
 
 const TLDRAW_COMPONENTS = {
   InFrontOfTheCanvas: TemplatePicker,
+  MainMenu: CustomMainMenu,
+  MenuPanel: ScribblMenuPanel,
+  StylePanel: null,
+  Toolbar: ScribblToolbar,
+} satisfies TLComponents;
+
+const MINDBOARD_TLDRAW_COMPONENTS = {
+  Background: MindboardBackground,
+  InFrontOfTheCanvas: MindboardTemplatePicker,
   MainMenu: CustomMainMenu,
   MenuPanel: ScribblMenuPanel,
   StylePanel: null,
@@ -380,19 +401,6 @@ function ToolIcon({ tool }: { tool: string }) {
   return null;
 }
 
-function usePillColors() {
-  const isDark = useIsDarkMode();
-  return useMemo(() => ({
-    bg:        isDark ? "#1e1e1e"                  : "#f8f9fa",
-    border:    isDark ? "rgba(255,255,255,0.12)"   : "rgba(0,0,0,0.10)",
-    hover:     isDark ? "rgba(255,255,255,0.08)"   : "rgba(0,0,0,0.06)",
-    active:    isDark ? "rgba(255,255,255,0.16)"   : "rgba(0,0,0,0.10)",
-    divider:   isDark ? "rgba(255,255,255,0.10)"   : "rgba(0,0,0,0.10)",
-    text:      isDark ? "rgba(255,255,255,0.85)"   : "rgba(0,0,0,0.80)",
-    popoverBg: isDark ? "#1e1e1e"                  : "#ffffff",
-    shadow:    isDark ? "0 4px 16px rgba(0,0,0,0.4)" : "0 4px 16px rgba(0,0,0,0.12)",
-  }), [isDark]);
-}
 
 const PILL_BASE: React.CSSProperties = {
   position: "fixed",
@@ -1466,6 +1474,7 @@ export function TldrawWhiteboardEditor({
   onCollapse,
   noteVisibility,
   canChangeVisibility = false,
+  isMindboard = false,
 }: {
   workspaceId: string;
   meetingId?: string;
@@ -1481,10 +1490,11 @@ export function TldrawWhiteboardEditor({
   onCollapse?: () => void;
   noteVisibility?: string;
   canChangeVisibility?: boolean;
+  isMindboard?: boolean;
 }) {
   const room = useRoom();
   const storeWithStatus = useTldrawYjsStore({
-    shapeUtils: SHAPE_UTILS,
+    shapeUtils: isMindboard ? MINDBOARD_SHAPE_UTILS : SHAPE_UTILS,
     initialSnapshot,
   });
   const [titleValue, setTitleValue] = useState(title);
@@ -1512,10 +1522,13 @@ export function TldrawWhiteboardEditor({
     });
   }, [noteId]);
 
-  const yMeta = useMemo(
-    () => getYjsProviderForRoom(room).getYDoc().getMap<string>("note-meta"),
-    [room],
-  );
+  const yDoc = useMemo(() => getYjsProviderForRoom(room).getYDoc(), [room]);
+  const yMeta = useMemo(() => yDoc.getMap<string>("note-meta"), [yDoc]);
+  const yBg = useMemo(() => (isMindboard ? yDoc.getMap<string>("mb-bg") : null), [isMindboard, yDoc]);
+
+  // Track page dimensions for whiteboard orientation (mindboard ignores this)
+  const pageSizeRef = useRef({ w: PAGE_W, h: PAGE_H });
+  const [orientationId, setOrientationId] = useState<PageOrientation>("landscape");
 
   useEffect(() => {
     const provider = getYjsProviderForRoom(room);
@@ -1532,10 +1545,39 @@ export function TldrawWhiteboardEditor({
     function onMeta() {
       const remote = yMeta.get("title") ?? "";
       setTitleValue((prev) => (prev !== remote ? remote : prev));
+
+      if (!isMindboard) {
+        const stored = yMeta.get("orientation") as PageOrientation | undefined;
+        const preset = stored ? ORIENTATION_PRESETS.find((p) => p.id === stored) : undefined;
+        if (preset) {
+          pageSizeRef.current = { w: preset.w, h: preset.h };
+          setOrientationId(preset.id);
+          const ed = editorRef.current;
+          if (ed) {
+            ed.batch(() => {
+              for (const page of ed.getPages()) {
+                const bgId = getPageBackgroundShapeId(page.id as string) as TLShapeId;
+                const bg = ed.getShape(bgId);
+                if (bg) ed.store.put([{ ...bg, props: { ...bg.props, w: preset.w, h: preset.h } }]);
+              }
+            });
+            ed.setCameraOptions({
+              constraints: {
+                bounds: { x: 0, y: 0, w: preset.w, h: preset.h },
+                padding: { x: 64, y: 64 },
+                origin: { x: 0.5, y: 0.5 },
+                initialZoom: "fit-max",
+                baseZoom: "fit-max",
+                behavior: "contain",
+              },
+            });
+          }
+        }
+      }
     }
     yMeta.observe(onMeta);
     return () => yMeta.unobserve(onMeta);
-  }, [yMeta]);
+  }, [yMeta, isMindboard]);
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [isPending, startTransition] = useTransition();
@@ -1634,6 +1676,9 @@ export function TldrawWhiteboardEditor({
     };
   }, [flushPendingSave]);
 
+  const isMindboardRef = useRef(isMindboard);
+  useEffect(() => { isMindboardRef.current = isMindboard; }, [isMindboard]);
+
   const handleMount = useCallback(
     (editor: Editor) => {
       editorRef.current = editor;
@@ -1647,41 +1692,48 @@ export function TldrawWhiteboardEditor({
       }
       window.addEventListener("scribbl:theme", onScribblTheme);
 
-      editor.setCameraOptions({
-        constraints: {
-          bounds: { x: 0, y: 0, w: PAGE_W, h: PAGE_H },
-          padding: { x: 64, y: 64 },
-          origin: { x: 0.5, y: 0.5 },
-          initialZoom: "fit-max",
-          baseZoom: "fit-max",
-          behavior: "contain",
-        },
-      });
+      let unsubPage = () => {};
+      let unsubDelete = () => {};
+      let unsubChange = () => {};
 
-      for (const page of editor.getPages()) {
-        ensurePageBackground(editor, page.id);
+      if (!isMindboardRef.current) {
+        const { w, h } = pageSizeRef.current;
+        editor.setCameraOptions({
+          constraints: {
+            bounds: { x: 0, y: 0, w, h },
+            padding: { x: 64, y: 64 },
+            origin: { x: 0.5, y: 0.5 },
+            initialZoom: "fit-max",
+            baseZoom: "fit-max",
+            behavior: "contain",
+          },
+        });
+
+        for (const page of editor.getPages()) {
+          ensurePageBackground(editor, page.id, pageSizeRef.current.w, pageSizeRef.current.h);
+        }
+
+        unsubPage = editor.sideEffects.registerAfterCreateHandler(
+          "page",
+          (page) => { ensurePageBackground(editor, page.id, pageSizeRef.current.w, pageSizeRef.current.h); },
+        );
+
+        unsubDelete = editor.sideEffects.registerBeforeDeleteHandler(
+          "shape",
+          (shape) => { if (shape.type === "page-background") return false; },
+        );
+
+        unsubChange = editor.sideEffects.registerBeforeChangeHandler(
+          "shape",
+          (_prev, next) => {
+            if (next.type === "page-background" && !next.isLocked) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              return { ...next, isLocked: true } as any;
+            }
+            return next;
+          },
+        );
       }
-
-      const unsubPage = editor.sideEffects.registerAfterCreateHandler(
-        "page",
-        (page) => { ensurePageBackground(editor, page.id); },
-      );
-
-      const unsubDelete = editor.sideEffects.registerBeforeDeleteHandler(
-        "shape",
-        (shape) => { if (shape.type === "page-background") return false; },
-      );
-
-      const unsubChange = editor.sideEffects.registerBeforeChangeHandler(
-        "shape",
-        (_prev, next) => {
-          if (next.type === "page-background" && !next.isLocked) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            return { ...next, isLocked: true } as any;
-          }
-          return next;
-        },
-      );
 
       if (!canEditRef.current) {
         editor.updateInstanceState({ isReadonly: true });
@@ -1727,18 +1779,44 @@ export function TldrawWhiteboardEditor({
     });
   }
 
+  function changeOrientation(id: PageOrientation) {
+    const preset = getOrientationPreset(id);
+    pageSizeRef.current = { w: preset.w, h: preset.h };
+    yMeta.set("orientation", id);
+    setOrientationId(id);
+    const ed = editorRef.current;
+    if (!ed) return;
+    for (const page of ed.getPages()) {
+      const bgId = getPageBackgroundShapeId(page.id as string) as TLShapeId;
+      const bg = ed.getShape(bgId);
+      if (bg) ed.store.put([{ ...bg, props: { ...bg.props, w: preset.w, h: preset.h } }]);
+    }
+    ed.setCameraOptions({
+      constraints: {
+        bounds: { x: 0, y: 0, w: preset.w, h: preset.h },
+        padding: { x: 64, y: 64 },
+        origin: { x: 0.5, y: 0.5 },
+        initialZoom: "fit-max",
+        baseZoom: "fit-max",
+        behavior: "contain",
+      },
+    });
+  }
+
   const canvas = (
     <ToolbarContainerCtx.Provider value={toolbarContainer}>
       <ToolbarCompactCtx.Provider value={variant === "card"}>
-        <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets, onRegisterExportPdf: registerExportPdf }}>
+        <ExportCtx.Provider value={{ title: titleValue, canExportPdf, canUploadAssets, isMindboard, onRegisterExportPdf: registerExportPdf }}>
           <PenSlotCtx.Provider value={{ penSlots, setSlot }}>
-            <TldrawCanvas
-              key={`${noteId}:${variant}`}
-              store={storeWithStatus}
-              shapeUtils={SHAPE_UTILS}
-              onMount={handleMount}
-              components={TLDRAW_COMPONENTS}
-            />
+            <MindboardBgCtx.Provider value={yBg}>
+              <TldrawCanvas
+                key={`${noteId}:${variant}`}
+                store={storeWithStatus}
+                shapeUtils={isMindboard ? MINDBOARD_SHAPE_UTILS : SHAPE_UTILS}
+                onMount={handleMount}
+                components={isMindboard ? MINDBOARD_TLDRAW_COMPONENTS : TLDRAW_COMPONENTS}
+              />
+            </MindboardBgCtx.Provider>
           </PenSlotCtx.Provider>
         </ExportCtx.Provider>
       </ToolbarCompactCtx.Provider>
@@ -1772,6 +1850,26 @@ export function TldrawWhiteboardEditor({
           </div>
           {canChangeVisibility && noteVisibility && (
             <VisibilityDropdown workspaceId={workspaceId} noteId={noteId} current={noteVisibility} />
+          )}
+          {/* Orientation picker — whiteboard only */}
+          {!isMindboard && canEdit && (
+            <div className="flex shrink-0 items-center gap-0.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5">
+              {ORIENTATION_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  title={preset.label}
+                  onClick={() => changeOrientation(preset.id)}
+                  className={`flex h-6 w-7 items-center justify-center rounded-full text-[10px] font-semibold transition ${
+                    orientationId === preset.id
+                      ? "bg-[var(--color-secondary)] text-white"
+                      : "text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)]"
+                  }`}
+                >
+                  <OrientationIcon id={preset.id} />
+                </button>
+              ))}
+            </div>
           )}
           {others.length > 0 && (
             <div className="flex -space-x-1.5">
@@ -1809,7 +1907,7 @@ export function TldrawWhiteboardEditor({
                 setBusyHeaderPdf(true);
                 try {
                   if (fn) await fn();
-                  else await exportWhiteboardPdf(ed!, titleValue || "whiteboard");
+                  else await exportWhiteboardPdf(ed!, titleValue || "whiteboard", isMindboard);
                 } finally {
                   setBusyHeaderPdf(false);
                 }
@@ -1935,7 +2033,7 @@ export function TldrawWhiteboardEditor({
   );
 }
 
-function ensurePageBackground(editor: Editor, pageId: TLPageId) {
+function ensurePageBackground(editor: Editor, pageId: TLPageId, w = PAGE_W, h = PAGE_H) {
   if (!editor.getPage(pageId)) return;
 
   const bgId = getPageBackgroundShapeId(pageId as string) as TLShapeId;
@@ -1948,9 +2046,34 @@ function ensurePageBackground(editor: Editor, pageId: TLPageId) {
     x: 0,
     y: 0,
     isLocked: true,
-    props: { w: PAGE_W, h: PAGE_H, template: "blank" },
+    props: { w, h, template: "blank" },
   });
   editor.sendToBack([bgId]);
+}
+
+function OrientationIcon({ id }: { id: PageOrientation }) {
+  if (id === "landscape") return (
+    <svg width={14} height={10} viewBox="0 0 14 10" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" style={{ display: "block" }}>
+      <rect x={1} y={1} width={12} height={8} rx={1} />
+    </svg>
+  );
+  if (id === "portrait") return (
+    <svg width={10} height={14} viewBox="0 0 10 14" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" style={{ display: "block" }}>
+      <rect x={1} y={1} width={8} height={12} rx={1} />
+    </svg>
+  );
+  if (id === "widescreen") return (
+    <svg width={16} height={10} viewBox="0 0 16 10" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" style={{ display: "block" }}>
+      <rect x={1} y={1} width={14} height={8} rx={1} />
+      <line x1={1} y1={5} x2={15} y2={5} strokeOpacity={0.4} />
+    </svg>
+  );
+  // square
+  return (
+    <svg width={11} height={11} viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" style={{ display: "block" }}>
+      <rect x={1} y={1} width={9} height={9} rx={1} />
+    </svg>
+  );
 }
 
 function getStatusText(saveState: SaveState) {

@@ -28,13 +28,18 @@ vi.mock("@/lib/meeting-lifecycle", () => ({
   canManageMeetingSchedule: vi.fn(() => true),
 }));
 
+vi.mock("@/lib/notifications", () => ({
+  createWorkspaceNotifications: vi.fn().mockResolvedValue(undefined),
+}));
+
 const { scheduleMeeting } = await import("@/app/workspaces/[id]/meetings/actions");
 
 describe("scheduleMeeting duplicate guard", () => {
   const user = makeUser();
   const workspace = makeWorkspace(user.id);
 
-  const startsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  // datetime-local format ("YYYY-MM-DDTHH:MM") — what the browser input sends to the action
+  const startsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16);
 
   beforeEach(() => {
     mockGetCurrentUser.mockResolvedValue(user);

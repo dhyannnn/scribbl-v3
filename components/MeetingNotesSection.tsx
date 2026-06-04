@@ -23,7 +23,7 @@ import {
 
 export type NoteArtifactData = {
   noteId: string;
-  noteType: "TEXT" | "WHITEBOARD";
+  noteType: "TEXT" | "WHITEBOARD" | "MINDBOARD";
   noteTitle: string;
   noteOwnerUserId: string;
   noteCollaboration: string;
@@ -173,7 +173,7 @@ export function MeetingNotesSection({
             canExportPdf={canExportPdf}
             canUploadAssets={canUploadAssets}
             lazy={false}
-            focusMode={selectedType === "WHITEBOARD" ? "whiteboard" : "document"}
+            focusMode={(selectedType === "WHITEBOARD" || selectedType === "MINDBOARD") ? "whiteboard" : "document"}
           />
         </div>
       </section>
@@ -342,28 +342,53 @@ function NoteHeader({
           </PendingSubmitButton>
         </form>
         {canUseWhiteboard ? (
-          <form action={createMeetingNote}>
-            <input type="hidden" name="workspaceId" value={workspaceId} />
-            <input type="hidden" name="meetingId" value={meetingId} />
-            <input type="hidden" name="scope" value={scope} />
-            <input type="hidden" name="type" value="WHITEBOARD" />
-            <TimezoneInput />
-            <PendingSubmitButton
-              className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
-              disabled={disabled}
-              pendingLabel="Creating..."
+          <>
+            <form action={createMeetingNote}>
+              <input type="hidden" name="workspaceId" value={workspaceId} />
+              <input type="hidden" name="meetingId" value={meetingId} />
+              <input type="hidden" name="scope" value={scope} />
+              <input type="hidden" name="type" value="WHITEBOARD" />
+              <TimezoneInput />
+              <PendingSubmitButton
+                className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
+                disabled={disabled}
+                pendingLabel="Creating..."
+              >
+                New Board
+              </PendingSubmitButton>
+            </form>
+            <form action={createMeetingNote}>
+              <input type="hidden" name="workspaceId" value={workspaceId} />
+              <input type="hidden" name="meetingId" value={meetingId} />
+              <input type="hidden" name="scope" value={scope} />
+              <input type="hidden" name="type" value="MINDBOARD" />
+              <TimezoneInput />
+              <PendingSubmitButton
+                className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
+                disabled={disabled}
+                pendingLabel="Creating..."
+              >
+                New Mind Board
+              </PendingSubmitButton>
+            </form>
+          </>
+        ) : (
+          <>
+            <a
+              href={`/workspaces/${workspaceId}/billing#upgrade`}
+              className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
             >
               New Board
-            </PendingSubmitButton>
-          </form>
-        ) : (
-          <a
-            href={`/workspaces/${workspaceId}/billing#upgrade`}
-            className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
-          >
-            New Board
-            <span className="rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--color-secondary)]">Pro</span>
-          </a>
+              <span className="rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--color-secondary)]">Pro</span>
+            </a>
+            <a
+              href={`/workspaces/${workspaceId}/billing#upgrade`}
+              className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
+            >
+              New Mind Board
+              <span className="rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--color-secondary)]">Pro</span>
+            </a>
+          </>
         )}
         {onExpand ? (
           <button
@@ -415,7 +440,7 @@ function FocusedMeetingNoteChrome({
   onToggleFloatingVideo: () => void;
   onCollapse: () => void;
 }) {
-  const isWhiteboard = selected?.noteType === "WHITEBOARD";
+  const isWhiteboard = selected?.noteType === "WHITEBOARD" || selected?.noteType === "MINDBOARD";
 
   return (
     <header
@@ -464,31 +489,59 @@ function FocusedMeetingNoteChrome({
               </PendingSubmitButton>
             </form>
             {canUseWhiteboard ? (
-              <form action={createMeetingNote}>
-                <input type="hidden" name="workspaceId" value={workspaceId} />
-                <input type="hidden" name="meetingId" value={meetingId} />
-                <input type="hidden" name="scope" value={scope} />
-                <input type="hidden" name="type" value="WHITEBOARD" />
-                <input type="hidden" name="noteFocus" value={scope === "SHARED" ? "shared" : "private"} />
-                <TimezoneInput />
-                <PendingSubmitButton
-                  className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
-                  disabled={disabled}
-                  pendingLabel="Creating..."
+              <>
+                <form action={createMeetingNote}>
+                  <input type="hidden" name="workspaceId" value={workspaceId} />
+                  <input type="hidden" name="meetingId" value={meetingId} />
+                  <input type="hidden" name="scope" value={scope} />
+                  <input type="hidden" name="type" value="WHITEBOARD" />
+                  <input type="hidden" name="noteFocus" value={scope === "SHARED" ? "shared" : "private"} />
+                  <TimezoneInput />
+                  <PendingSubmitButton
+                    className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
+                    disabled={disabled}
+                    pendingLabel="Creating..."
+                  >
+                    <SquarePen size={13} />
+                    Board
+                  </PendingSubmitButton>
+                </form>
+                <form action={createMeetingNote}>
+                  <input type="hidden" name="workspaceId" value={workspaceId} />
+                  <input type="hidden" name="meetingId" value={meetingId} />
+                  <input type="hidden" name="scope" value={scope} />
+                  <input type="hidden" name="type" value="MINDBOARD" />
+                  <input type="hidden" name="noteFocus" value={scope === "SHARED" ? "shared" : "private"} />
+                  <TimezoneInput />
+                  <PendingSubmitButton
+                    className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
+                    disabled={disabled}
+                    pendingLabel="Creating..."
+                  >
+                    <SquarePen size={13} />
+                    Mind Board
+                  </PendingSubmitButton>
+                </form>
+              </>
+            ) : (
+              <>
+                <a
+                  href={`/workspaces/${workspaceId}/billing#upgrade`}
+                  className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
                 >
                   <SquarePen size={13} />
                   Board
-                </PendingSubmitButton>
-              </form>
-            ) : (
-              <a
-                href={`/workspaces/${workspaceId}/billing#upgrade`}
-                className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
-              >
-                <SquarePen size={13} />
-                Board
-                <span className="rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--color-secondary)]">Pro</span>
-              </a>
+                  <span className="rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--color-secondary)]">Pro</span>
+                </a>
+                <a
+                  href={`/workspaces/${workspaceId}/billing#upgrade`}
+                  className="flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
+                >
+                  <SquarePen size={13} />
+                  Mind Board
+                  <span className="rounded-full bg-[var(--color-secondary-dim)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--color-secondary)]">Pro</span>
+                </a>
+              </>
             )}
             <button
               onClick={onToggleFloatingVideo}
@@ -757,7 +810,7 @@ function NoteEditorSlot({
     />
   ) : null;
 
-  if (selected.noteType === "WHITEBOARD") {
+  if (selected.noteType === "WHITEBOARD" || selected.noteType === "MINDBOARD") {
     return (
       <>
         {accessRequestPanel}
@@ -774,6 +827,7 @@ function NoteEditorSlot({
             canUploadAssets={canUploadAssets}
             canvasHeight={canvasHeight}
             variant={focusMode === "whiteboard" ? "goodnotes" : "card"}
+            isMindboard={selected.noteType === "MINDBOARD"}
           />
         </LiveblocksRoom>
       </>
@@ -811,7 +865,7 @@ function AccessRequestPanel({
   focusMode?: "document" | "whiteboard";
 }) {
   const isRequested = selected.permissionState === "REQUESTED";
-  const targetType = selected.noteType === "WHITEBOARD" ? "WHITEBOARD" : "SHARED_NOTES";
+  const targetType = (selected.noteType === "WHITEBOARD" || selected.noteType === "MINDBOARD") ? "WHITEBOARD" : "SHARED_NOTES";
   const className =
     focusMode === "document"
       ? "mx-auto mt-4 w-full max-w-[816px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] p-3"
@@ -823,7 +877,7 @@ function AccessRequestPanel({
     <div className={className}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-[var(--color-muted)]">
-          You can view this {selected.noteType === "WHITEBOARD" ? "board" : "note"}. Request edit access from the meeting owner.
+          You can view this {(selected.noteType === "WHITEBOARD" || selected.noteType === "MINDBOARD") ? "board" : "note"}. Request edit access from the meeting owner.
         </p>
         {isRequested ? (
           <p className="shrink-0 text-sm font-medium text-[var(--color-warning)]">Edit access requested.</p>
