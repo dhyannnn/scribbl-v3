@@ -49,6 +49,11 @@ export type ExportNoteInput = {
   workspaceName: string;
   updatedAt: Date;
   contentJson: unknown;
+  orientation?: string | null;
+  marginTop?: number | null;
+  marginBottom?: number | null;
+  marginLeft?: number | null;
+  marginRight?: number | null;
 };
 
 // ── Dimensions ────────────────────────────────────────────────────────────────
@@ -91,23 +96,31 @@ export function createPdfFileName(title: string) {
 // ── Text pages ────────────────────────────────────────────────────────────────
 
 async function createTextPdfBuffer(note: ExportNoteInput): Promise<Buffer> {
+  const isLandscape = note.orientation === "landscape";
+  // Stored as px at 96 dpi; default 72px = 0.75in
+  const pxToIn = (px: number | null | undefined, fallback: number) =>
+    `${((px ?? fallback) / 96).toFixed(4)}in`;
+  const mt = pxToIn(note.marginTop, 72);
+  const mb = pxToIn(note.marginBottom, 72);
+  const ml = pxToIn(note.marginLeft, 72);
+  const mr = pxToIn(note.marginRight, 72);
+
   const browser = await chromium.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
   try {
-    const page = await browser.newPage({ viewport: { width: 816, height: 1056 } });
+    const viewport = isLandscape
+      ? { width: 1056, height: 816 }
+      : { width: 816, height: 1056 };
+    const page = await browser.newPage({ viewport });
     await page.setContent(createTextPdfHtml(note), { waitUntil: "networkidle" });
     const pdf = await page.pdf({
       format: "Letter",
+      landscape: isLandscape,
       printBackground: true,
-      margin: {
-        top: "0.75in",
-        right: "0.75in",
-        bottom: "0.75in",
-        left: "0.75in",
-      },
+      margin: { top: mt, right: mr, bottom: mb, left: ml },
     });
     return Buffer.from(pdf);
   } finally {
@@ -206,7 +219,8 @@ function createTextPdfHtml(note: ExportNoteInput): string {
       .content table th { background: #f5f5f0; font-weight: 600; }
       .content img { display: block; max-width: 100%; height: auto; margin: 0.75em 0; }
       .empty { color: #777970; font-style: italic; }
-      @page { size: Letter; margin: 0.75in; }
+      .tiptap-comment { background: rgba(255, 212, 0, 0.35); border-bottom: 2px solid rgba(200, 160, 0, 0.5); }
+      @page { size: Letter ${note.orientation === "landscape" ? "landscape" : "portrait"}; margin: 0; }
     </style>
   </head>
   <body>
