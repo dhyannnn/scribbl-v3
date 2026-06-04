@@ -18,9 +18,10 @@ type Props = {
   workspaceId: string;
   onClose: () => void;
   onCommentDeleted?: (commentId: string) => void;
+  onCommentResolved?: (commentId: string) => void;
 };
 
-export function NoteCommentsPanel({ noteId, workspaceId, onClose, onCommentDeleted }: Props) {
+export function NoteCommentsPanel({ noteId, workspaceId, onClose, onCommentDeleted, onCommentResolved }: Props) {
   const [comments, setComments] = useState<NoteCommentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export function NoteCommentsPanel({ noteId, workspaceId, onClose, onCommentDelet
   async function resolve(commentId: string) {
     const { resolveNoteComment } = await import("@/app/workspaces/[id]/notes/actions");
     await resolveNoteComment(noteId, workspaceId, commentId);
+    onCommentResolved?.(commentId);
     void load();
   }
 
