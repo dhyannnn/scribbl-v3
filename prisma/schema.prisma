@@ -255,6 +255,8 @@ model User {
   messageReactions          MessageReaction[]
   ownedNotes                Note[]
   noteShares                NoteCollaborator[]
+  noteComments              NoteComment[]
+  noteSnapshots             NoteSnapshot[]
   uploadedFiles             File[]
   createdMeetings           Meeting[]                   @relation("MeetingCreator")
   meetingInvites            MeetingParticipant[]
@@ -413,6 +415,13 @@ model Note {
   storageType   NoteStorageType       @default(JSON)
   contentJson   Json?
   contentFileId String?               @unique @db.Uuid
+  orientation   String                @default("portrait")
+  marginTop     Float                 @default(72)
+  marginBottom  Float                 @default(72)
+  marginLeft    Float                 @default(72)
+  marginRight   Float                 @default(72)
+  shareToken    String?               @unique
+  isPublic      Boolean               @default(false)
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
   deletedAt     DateTime?
@@ -423,9 +432,43 @@ model Note {
 
   collaborators NoteCollaborator[]
   artifacts     MeetingArtifact[]
+  comments      NoteComment[]
+  snapshots     NoteSnapshot[]
 
   @@index([workspaceId])
   @@index([ownerUserId])
+  @@index([shareToken])
+}
+
+model NoteComment {
+  id              String    @id @default(uuid()) @db.Uuid
+  noteId          String    @db.Uuid
+  userId          String    @db.Uuid
+  commentId       String    @unique
+  text            String
+  resolvedAt      DateTime?
+  parentCommentId String?
+  createdAt       DateTime  @default(now())
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([noteId])
+  @@index([userId])
+}
+
+model NoteSnapshot {
+  id          String   @id @default(uuid()) @db.Uuid
+  noteId      String   @db.Uuid
+  userId      String   @db.Uuid
+  contentJson Json
+  createdAt   DateTime @default(now())
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([noteId, createdAt])
+  @@index([userId])
 }
 
 model NoteCollaborator {
