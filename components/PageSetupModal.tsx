@@ -11,6 +11,7 @@ type Props = {
   initialMarginBottom: number;
   initialMarginLeft: number;
   initialMarginRight: number;
+  onSave?: (settings: { orientation: string; marginTop: number; marginBottom: number; marginLeft: number; marginRight: number }) => void;
   onClose: () => void;
 };
 
@@ -24,6 +25,7 @@ export function PageSetupModal({
   noteId, workspaceId,
   initialOrientation,
   initialMarginTop, initialMarginBottom, initialMarginLeft, initialMarginRight,
+  onSave,
   onClose,
 }: Props) {
   const [orientation, setOrientation] = useState(initialOrientation === "landscape" ? "landscape" : "portrait");
@@ -35,15 +37,17 @@ export function PageSetupModal({
 
   async function handleSave() {
     setSaving(true);
+    const settings = {
+      orientation,
+      marginTop: inToPx(mt),
+      marginBottom: inToPx(mb),
+      marginLeft: inToPx(ml),
+      marginRight: inToPx(mr),
+    };
     try {
       const { updateNotePageSetup } = await import("@/app/workspaces/[id]/notes/actions");
-      await updateNotePageSetup(noteId, {
-        orientation,
-        marginTop: inToPx(mt),
-        marginBottom: inToPx(mb),
-        marginLeft: inToPx(ml),
-        marginRight: inToPx(mr),
-      });
+      await updateNotePageSetup(noteId, settings);
+      onSave?.(settings);
       onClose();
     } finally {
       setSaving(false);
