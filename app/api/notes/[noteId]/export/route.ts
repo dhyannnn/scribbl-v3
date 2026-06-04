@@ -68,6 +68,11 @@ export async function GET(_request: NextRequest, { params }: RouteProps) {
     workspaceName: note.workspace.name,
     updatedAt: note.updatedAt,
     contentJson: note.contentJson,
+    orientation: note.orientation,
+    marginTop: note.marginTop,
+    marginBottom: note.marginBottom,
+    marginLeft: note.marginLeft,
+    marginRight: note.marginRight,
   });
   const response = new NextResponse(new Uint8Array(pdfBuffer), {
     headers: {
