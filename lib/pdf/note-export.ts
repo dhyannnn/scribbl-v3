@@ -97,13 +97,16 @@ export function createPdfFileName(title: string) {
 
 async function createTextPdfBuffer(note: ExportNoteInput): Promise<Buffer> {
   const isLandscape = note.orientation === "landscape";
-  // Stored as px at 96 dpi; default 72px = 0.75in
-  const pxToIn = (px: number | null | undefined, fallback: number) =>
-    `${((px ?? fallback) / 96).toFixed(4)}in`;
-  const mt = pxToIn(note.marginTop, 72);
-  const mb = pxToIn(note.marginBottom, 72);
-  const ml = pxToIn(note.marginLeft, 72);
-  const mr = pxToIn(note.marginRight, 72);
+  // px → inches (96 dpi). Defaults: 72px = 0.75in
+  const pxToIn = (px: number | null | undefined, fallback = 72) =>
+    (px ?? fallback) / 96;
+  const layout = {
+    isLandscape,
+    mt: pxToIn(note.marginTop),
+    mb: pxToIn(note.marginBottom),
+    ml: pxToIn(note.marginLeft),
+    mr: pxToIn(note.marginRight),
+  };
 
   const browser = await chromium.launch({
     headless: true,
@@ -111,16 +114,14 @@ async function createTextPdfBuffer(note: ExportNoteInput): Promise<Buffer> {
   });
 
   try {
-    const viewport = isLandscape
-      ? { width: 1056, height: 816 }
-      : { width: 816, height: 1056 };
+    // Viewport matches Letter paper at 96 dpi so line-wrapping is accurate
+    const viewport = isLandscape ? { width: 1056, height: 816 } : { width: 816, height: 1056 };
     const page = await browser.newPage({ viewport });
-    await page.setContent(createTextPdfHtml(note), { waitUntil: "networkidle" });
+    await page.setContent(createTextPdfHtml(note, layout), { waitUntil: "networkidle" });
     const pdf = await page.pdf({
-      format: "Letter",
-      landscape: isLandscape,
+      // CSS @page sets size + orientation; body padding sets margins
+      preferCSSPageSize: true,
       printBackground: true,
-      margin: { top: mt, right: mr, bottom: mb, left: ml },
     });
     return Buffer.from(pdf);
   } finally {
@@ -128,7 +129,10 @@ async function createTextPdfBuffer(note: ExportNoteInput): Promise<Buffer> {
   }
 }
 
-function createTextPdfHtml(note: ExportNoteInput): string {
+type TextLayout = { isLandscape: boolean; mt: number; mb: number; ml: number; mr: number };
+
+function createTextPdfHtml(note: ExportNoteInput, layout: TextLayout): string {
+  const { isLandscape, mt, mb, ml, mr } = layout;
   const content = note.contentJson as TextContent | null;
   const rawHtml =
     content?.type === "tiptap" && typeof content.html === "string" && content.html.trim()
@@ -137,7 +141,6 @@ function createTextPdfHtml(note: ExportNoteInput): string {
         ? `<p>${escapeHtml(content.text).replace(/\r?\n/g, "<br>")}</p>`
         : `<p class="empty">No note body yet.</p>`;
   const bodyHtml = preRenderMath(rawHtml);
-  void note;
 
   return `<!doctype html>
 <html>
@@ -148,6 +151,8 @@ function createTextPdfHtml(note: ExportNoteInput): string {
       * { box-sizing: border-box; }
       html, body { margin: 0; padding: 0; }
       body {
+        /* Margins via padding so @page margin:0 has no conflict */
+        padding: ${mt}in ${mr}in ${mb}in ${ml}in;
         color: #20201d;
         font-family: Arial, Helvetica, sans-serif;
         font-size: 16px;
@@ -220,7 +225,7 @@ function createTextPdfHtml(note: ExportNoteInput): string {
       .content img { display: block; max-width: 100%; height: auto; margin: 0.75em 0; }
       .empty { color: #777970; font-style: italic; }
       .tiptap-comment { background: rgba(255, 212, 0, 0.35); border-bottom: 2px solid rgba(200, 160, 0, 0.5); }
-      @page { size: Letter ${note.orientation === "landscape" ? "landscape" : "portrait"}; margin: 0; }
+      @page { size: Letter ${isLandscape ? "landscape" : "portrait"}; margin: 0; }
     </style>
   </head>
   <body>
