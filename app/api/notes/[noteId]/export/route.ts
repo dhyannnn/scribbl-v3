@@ -61,6 +61,12 @@ export async function GET(_request: NextRequest, { params }: RouteProps) {
     return NextResponse.json({ error: "You do not have permission to export this note." }, { status: 403 });
   }
 
+  const noteComments = await prisma.noteComment.findMany({
+    where: { noteId: note.id, parentCommentId: null, resolvedAt: null },
+    select: { commentId: true, text: true, user: { select: { displayName: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+
   const pdfBuffer = await createNotePdfBuffer({
     title: note.title,
     type: note.type,
@@ -73,6 +79,11 @@ export async function GET(_request: NextRequest, { params }: RouteProps) {
     marginBottom: note.marginBottom,
     marginLeft: note.marginLeft,
     marginRight: note.marginRight,
+    comments: noteComments.map((c) => ({
+      commentId: c.commentId,
+      text: c.text,
+      userName: c.user.displayName,
+    })),
   });
   const response = new NextResponse(new Uint8Array(pdfBuffer), {
     headers: {

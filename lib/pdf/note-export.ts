@@ -42,6 +42,12 @@ type PageSpec = {
   h: number;
 };
 
+export type NoteCommentEntry = {
+  commentId: string;
+  text: string;
+  userName: string;
+};
+
 export type ExportNoteInput = {
   title: string;
   type: "TEXT" | "WHITEBOARD" | "MINDBOARD";
@@ -54,6 +60,7 @@ export type ExportNoteInput = {
   marginBottom?: number | null;
   marginLeft?: number | null;
   marginRight?: number | null;
+  comments?: NoteCommentEntry[];
 };
 
 // ── Dimensions ────────────────────────────────────────────────────────────────
@@ -131,6 +138,30 @@ async function createTextPdfBuffer(note: ExportNoteInput): Promise<Buffer> {
 
 type TextLayout = { isLandscape: boolean; mt: number; mb: number; ml: number; mr: number };
 
+function annotateComments(html: string, comments: NoteCommentEntry[]) {
+  if (comments.length === 0) return { html, annotated: [] as Array<{ num: number; userName: string; text: string }> };
+
+  const byId = new Map(comments.map((c) => [c.commentId, c]));
+  const seenOrder = new Map<string, number>();
+  const annotated: Array<{ num: number; userName: string; text: string }> = [];
+
+  const out = html.replace(
+    /<span\b([^>]*)\bdata-comment-id="([^"]+)"([^>]*)>/g,
+    (_match, pre, commentId, post) => {
+      if (!seenOrder.has(commentId)) {
+        const num = seenOrder.size + 1;
+        seenOrder.set(commentId, num);
+        const c = byId.get(commentId);
+        if (c) annotated.push({ num, userName: c.userName, text: c.text });
+      }
+      const num = seenOrder.get(commentId)!;
+      return `<span${pre}data-comment-id="${commentId}"${post}><sup style="color:#b45309;font-size:0.65em;font-weight:700;margin-left:1px">[${num}]</sup>`;
+    },
+  );
+
+  return { html: out, annotated };
+}
+
 function createTextPdfHtml(note: ExportNoteInput, layout: TextLayout): string {
   const { isLandscape, mt, mb, ml, mr } = layout;
   const content = note.contentJson as TextContent | null;
@@ -140,7 +171,16 @@ function createTextPdfHtml(note: ExportNoteInput, layout: TextLayout): string {
       : typeof content?.text === "string" && content.text.trim()
         ? `<p>${escapeHtml(content.text).replace(/\r?\n/g, "<br>")}</p>`
         : `<p class="empty">No note body yet.</p>`;
-  const bodyHtml = preRenderMath(rawHtml);
+  const { html: annotatedHtml, annotated } = annotateComments(preRenderMath(rawHtml), note.comments ?? []);
+  const bodyHtml = annotatedHtml;
+
+  const commentsSection = annotated.length > 0 ? `
+  <section style="margin-top:2.5em;border-top:2px solid #e4e4dc;padding-top:1.25em">
+    <h2 style="font-size:0.85rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#62645c;margin:0 0 0.75em">Comments</h2>
+    <ol style="margin:0;padding-left:1.25em;font-size:0.875rem;line-height:1.6;color:#20201d">
+      ${annotated.map((c) => `<li style="margin-bottom:0.4em"><strong>${escapeHtml(c.userName)}</strong>: ${escapeHtml(c.text)}</li>`).join("")}
+    </ol>
+  </section>` : "";
 
   return `<!doctype html>
 <html>
@@ -229,7 +269,7 @@ function createTextPdfHtml(note: ExportNoteInput, layout: TextLayout): string {
     </style>
   </head>
   <body>
-    <main class="content">${bodyHtml}</main>
+    <main class="content">${bodyHtml}${commentsSection}</main>
   </body>
 </html>`;
 }
