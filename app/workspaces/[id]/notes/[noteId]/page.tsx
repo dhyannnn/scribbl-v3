@@ -250,6 +250,13 @@ export default async function NoteEditorPage({ params }: PageProps) {
           canUploadAssets={note.workspace?.plan !== "FREE"}
           tldrawSnapshot={tldrawSnapshot}
           members={note.workspace.members.map((m) => ({ id: m.userId, name: m.user.displayName }))}
+          orientation={note.orientation ?? undefined}
+          marginTop={note.marginTop ?? undefined}
+          marginBottom={note.marginBottom ?? undefined}
+          marginLeft={note.marginLeft ?? undefined}
+          marginRight={note.marginRight ?? undefined}
+          shareToken={note.shareToken}
+          isPublic={note.isPublic}
         />
       </div>
     </main>

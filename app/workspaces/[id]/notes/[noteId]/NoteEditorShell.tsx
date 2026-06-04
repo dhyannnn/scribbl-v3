@@ -21,6 +21,13 @@ type Props = {
   canUploadAssets?: boolean;
   tldrawSnapshot: unknown;
   members?: MentionMember[];
+  orientation?: string;
+  marginTop?: number;
+  marginBottom?: number;
+  marginLeft?: number;
+  marginRight?: number;
+  shareToken?: string | null;
+  isPublic?: boolean;
 };
 
 export function NoteEditorShell({
@@ -36,6 +43,13 @@ export function NoteEditorShell({
   canUploadAssets = true,
   tldrawSnapshot,
   members = [],
+  orientation,
+  marginTop,
+  marginBottom,
+  marginLeft,
+  marginRight,
+  shareToken,
+  isPublic,
 }: Props) {
   const [expanded, setExpanded] = useState(true);
   const roomId = createNoteRoomId(workspaceId, noteId);
@@ -79,6 +93,13 @@ export function NoteEditorShell({
                 variant="document"
                 onCollapse={() => setExpanded(false)}
                 members={members}
+                orientation={orientation}
+                marginTop={marginTop}
+                marginBottom={marginBottom}
+                marginLeft={marginLeft}
+                marginRight={marginRight}
+                shareToken={shareToken}
+                isPublic={isPublic}
               />
             ) : (
               <TldrawWhiteboardEditor

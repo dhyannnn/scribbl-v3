@@ -736,13 +736,9 @@ export async function updateNoteVisibility(formData: FormData) {
 
 // ── Embed meta ────────────────────────────────────────────────────────────────
 
-const EMBED_ALLOWED_HOSTS = [
-  "youtube.com", "www.youtube.com", "youtu.be",
-  "loom.com", "www.loom.com",
-  "figma.com", "www.figma.com",
-];
-
 export async function fetchEmbedMeta(rawUrl: string): Promise<{ title: string; provider: string; embedUrl: string } | null> {
+  const { toEmbedUrl, EMBED_ALLOWED_HOSTS } = await import("@/lib/tiptap/embed-url");
+
   let url: URL;
   try { url = new URL(rawUrl); } catch { return null; }
 
@@ -750,8 +746,6 @@ export async function fetchEmbedMeta(rawUrl: string): Promise<{ title: string; p
 
   const provider = url.hostname.replace(/^www\./, "").split(".")[0] ?? "embed";
 
-  // Import the pure converter so we don't duplicate it here
-  const { toEmbedUrl } = await import("@/lib/tiptap/embed-node");
   const embedUrl = toEmbedUrl(rawUrl);
   if (!embedUrl) return null;
 
@@ -876,6 +870,23 @@ export async function resolveNoteComment(noteId: string, workspaceId: string, co
   await prisma.noteComment.updateMany({
     where: { noteId, commentId, resolvedAt: null },
     data: { resolvedAt: new Date() },
+  });
+
+  revalidatePath(`/workspaces/${workspaceId}/notes/${noteId}`);
+}
+
+export async function deleteNoteComment(noteId: string, workspaceId: string, commentId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return;
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+    select: { status: true },
+  });
+  if (membership?.status !== "ACTIVE") return;
+
+  await prisma.noteComment.deleteMany({
+    where: { noteId, commentId },
   });
 
   revalidatePath(`/workspaces/${workspaceId}/notes/${noteId}`);

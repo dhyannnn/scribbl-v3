@@ -163,6 +163,8 @@ export function NoteToolbar({ editor, flat = false, showSearch, onCloseSearch }:
   const [showTextColors, setShowTextColors] = useState(false);
   const [showHighlightColors, setShowHighlightColors] = useState(false);
   const [showCellColors, setShowCellColors] = useState(false);
+  const [showSpacing, setShowSpacing] = useState(false);
+  const spacingBtnRef = useRef<HTMLButtonElement>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [replaceTerm, setReplaceTerm] = useState("");
   const [showReplace, setShowReplace] = useState(false);
@@ -177,6 +179,17 @@ export function NoteToolbar({ editor, flat = false, showSearch, onCloseSearch }:
       (editor.commands as any).setSearchTerm?.("");
     }
   }, [showSearch, editor.commands]);
+
+  useEffect(() => {
+    if (!showSpacing) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (spacingBtnRef.current && !spacingBtnRef.current.contains(e.target as Node)) {
+        setShowSpacing(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showSpacing]);
   const textColorBtnRef = useRef<HTMLButtonElement>(null);
   const highlightBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -302,15 +315,13 @@ export function NoteToolbar({ editor, flat = false, showSearch, onCloseSearch }:
           </button>
           <select
             title="Font size"
-            value={currentSize}
+            value={currentSize || "16px"}
             onChange={(e) => {
-              if (!e.target.value) editor.chain().focus().unsetFontSize().run();
-              else editor.chain().focus().setFontSize(e.target.value).run();
+              editor.chain().focus().setFontSize(e.target.value).run();
             }}
             className="h-7 border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-xs text-[var(--color-muted)] outline-none focus:border-[var(--color-secondary)]"
             style={{ width: "3.2rem" }}
           >
-            <option value="">Size</option>
             {FONT_SIZES.map((s) => (
               <option key={s} value={s}>{s.replace("px", "")}</option>
             ))}
@@ -332,50 +343,82 @@ export function NoteToolbar({ editor, flat = false, showSearch, onCloseSearch }:
           </button>
         </div>
 
-        {/* Line spacing */}
-        <select
-          title="Line spacing"
-          value={(editor.getAttributes("textStyle").lineHeight as string | undefined) ?? ""}
-          onChange={(e) => {
-            if (!e.target.value) editor.chain().focus().unsetLineHeight().run();
-            else editor.chain().focus().setLineHeight(e.target.value).run();
-          }}
-          className={`${selectCls} w-20`}
-        >
-          {LINE_SPACING_OPTIONS.map((o) => (
-            <option key={o.label} value={o.value}>{o.label === "Default" ? "Line ↕" : o.label}</option>
-          ))}
-        </select>
-
-        {/* Letter spacing */}
-        <select
-          title="Letter spacing"
-          value={(editor.getAttributes("textStyle").letterSpacing as string | undefined) ?? ""}
-          onChange={(e) => {
-            if (!e.target.value) editor.chain().focus().unsetLetterSpacing().run();
-            else editor.chain().focus().setLetterSpacing(e.target.value).run();
-          }}
-          className={`${selectCls} w-20`}
-        >
-          {LETTER_SPACING_OPTIONS.map((o) => (
-            <option key={o.label} value={o.value}>{o.label === "Default" ? "Lttr ↔" : o.label}</option>
-          ))}
-        </select>
-
-        {/* Word spacing */}
-        <select
-          title="Word spacing"
-          value={(editor.getAttributes("textStyle").wordSpacing as string | undefined) ?? ""}
-          onChange={(e) => {
-            if (!e.target.value) editor.chain().focus().unsetWordSpacing().run();
-            else editor.chain().focus().setWordSpacing(e.target.value).run();
-          }}
-          className={`${selectCls} w-20`}
-        >
-          {WORD_SPACING_OPTIONS.map((o) => (
-            <option key={o.label} value={o.value}>{o.label === "Default" ? "Word ↔" : o.label}</option>
-          ))}
-        </select>
+        {/* Combined spacing popover */}
+        <div>
+          <button
+            ref={spacingBtnRef}
+            type="button"
+            title="Text spacing"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setShowSpacing((v) => !v);
+            }}
+            className={`${selectCls} flex items-center gap-1 px-2`}
+          >
+            Spacing <ChevronDown size={11} />
+          </button>
+          {showSpacing && spacingBtnRef.current && createPortal(
+            <div
+              style={(() => {
+                const r = spacingBtnRef.current!.getBoundingClientRect();
+                return { top: r.bottom + 4, left: r.left };
+              })()}
+              className="fixed z-[9999] w-56 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-xl"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-subtle)]">Spacing</p>
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center justify-between gap-2 text-xs text-[var(--color-muted)]">
+                  Line
+                  <select
+                    value={(editor.getAttributes("textStyle").lineHeight as string | undefined) ?? ""}
+                    onChange={(e) => {
+                      if (!e.target.value) editor.chain().focus().unsetLineHeight().run();
+                      else editor.chain().focus().setLineHeight(e.target.value).run();
+                    }}
+                    className="h-7 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2 text-xs text-[var(--color-text)] outline-none focus:border-[var(--color-secondary)]"
+                  >
+                    {LINE_SPACING_OPTIONS.map((o) => (
+                      <option key={o.label} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center justify-between gap-2 text-xs text-[var(--color-muted)]">
+                  Letter
+                  <select
+                    value={(editor.getAttributes("textStyle").letterSpacing as string | undefined) ?? ""}
+                    onChange={(e) => {
+                      if (!e.target.value) editor.chain().focus().unsetLetterSpacing().run();
+                      else editor.chain().focus().setLetterSpacing(e.target.value).run();
+                    }}
+                    className="h-7 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2 text-xs text-[var(--color-text)] outline-none focus:border-[var(--color-secondary)]"
+                  >
+                    {LETTER_SPACING_OPTIONS.map((o) => (
+                      <option key={o.label} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center justify-between gap-2 text-xs text-[var(--color-muted)]">
+                  Word
+                  <select
+                    value={(editor.getAttributes("textStyle").wordSpacing as string | undefined) ?? ""}
+                    onChange={(e) => {
+                      if (!e.target.value) editor.chain().focus().unsetWordSpacing().run();
+                      else editor.chain().focus().setWordSpacing(e.target.value).run();
+                    }}
+                    className="h-7 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-2 text-xs text-[var(--color-text)] outline-none focus:border-[var(--color-secondary)]"
+                  >
+                    {WORD_SPACING_OPTIONS.map((o) => (
+                      <option key={o.label} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>,
+            document.body,
+          )}
+        </div>
 
         {sep()}
 
