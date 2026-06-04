@@ -39,10 +39,11 @@ import { RateLimits } from "@/lib/rate-limit";
 
 const participantStatuses = ["ACCEPTED", "DECLINED"] as const;
 const meetingNoteScopes = ["SHARED", "PRIVATE"] as const;
-const meetingNoteTypes = ["TEXT", "WHITEBOARD"] as const;
+const meetingNoteTypes = ["TEXT", "WHITEBOARD", "MINDBOARD"] as const;
 const noteArtifactTypes = {
   TEXT: "NOTE",
   WHITEBOARD: "WHITEBOARD",
+  MINDBOARD: "WHITEBOARD",
 } as const;
 const activeRecordingStatuses = ["STARTING", "ACTIVE", "STOPPING"] as const;
 const meetingPermissionTargets = ["SHARED_NOTES", "WHITEBOARD", "MICROPHONE", "CAMERA", "SCREEN_SHARE"] as const;
@@ -1182,8 +1183,8 @@ export async function createMeetingNote(formData: FormData) {
     return;
   }
 
-  // Shared whiteboards are Pro+ only — private whiteboards are allowed on Free
-  if (type === "WHITEBOARD" && scope === "SHARED") {
+  // Shared whiteboards/mindboards are Pro+ only — private ones are allowed on Free
+  if ((type === "WHITEBOARD" || type === "MINDBOARD") && scope === "SHARED") {
     const workspace = await prisma.workspace.findUnique({
       where: { id: workspaceId },
       select: { plan: true },
@@ -1199,7 +1200,7 @@ export async function createMeetingNote(formData: FormData) {
 
   if (
     scope === "SHARED" &&
-    !(type === "WHITEBOARD" ? canEditMeetingWhiteboard : canEditMeetingSharedNote)({
+    !(type === "WHITEBOARD" || type === "MINDBOARD" ? canEditMeetingWhiteboard : canEditMeetingSharedNote)({
       currentUserId: currentUser.id,
       meetingCreatedByUserId: meeting.createdByUserId,
       currentUserRole: membership.role,
@@ -1228,7 +1229,7 @@ export async function createMeetingNote(formData: FormData) {
       contentJson:
         type === "TEXT"
           ? { type: "tiptap", content: { type: "doc", content: [] }, html: "" }
-          : { strokes: [] },
+          : { strokes: [] }, // placeholder for both WHITEBOARD and MINDBOARD
     },
     select: {
       id: true,
@@ -1419,7 +1420,7 @@ export async function saveMeetingWhiteboard(formData: FormData) {
         },
         note: {
           workspaceId,
-          type: "WHITEBOARD",
+          type: { in: ["WHITEBOARD", "MINDBOARD"] },
           deletedAt: null,
           OR: [
             {

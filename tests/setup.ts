@@ -11,6 +11,11 @@ vi.mock("next/navigation", () => ({
   notFound: vi.fn(() => {
     throw Object.assign(new Error("NOT_FOUND"), { type: "not_found" });
   }),
+  // Re-throws Next.js internal errors (redirect, notFound) so catch blocks don't swallow them
+  unstable_rethrow: vi.fn((err: unknown) => {
+    const e = err as { type?: string };
+    if (e?.type === "redirect" || e?.type === "not_found") throw err;
+  }),
 }));
 
 // Mock Next.js cache

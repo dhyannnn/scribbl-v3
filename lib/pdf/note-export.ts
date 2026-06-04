@@ -44,7 +44,7 @@ type PageSpec = {
 
 export type ExportNoteInput = {
   title: string;
-  type: "TEXT" | "WHITEBOARD";
+  type: "TEXT" | "WHITEBOARD" | "MINDBOARD";
   ownerName: string;
   workspaceName: string;
   updatedAt: Date;

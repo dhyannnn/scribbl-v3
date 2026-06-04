@@ -59,3 +59,32 @@ export function isDarkTemplate(t: string): boolean {
 export function getPageBackgroundShapeId(pageId: string) {
   return `shape:page-bg-${pageId.replace("page:", "")}` as `shape:${string}`;
 }
+
+// ── Page orientations ─────────────────────────────────────────────────────────
+
+export type PageOrientation = "landscape" | "portrait" | "widescreen" | "square";
+
+export interface OrientationPreset {
+  id: PageOrientation;
+  label: string;
+  w: number;
+  h: number;
+}
+
+export const ORIENTATION_PRESETS: OrientationPreset[] = [
+  { id: "landscape",  label: "Landscape",  w: 1600, h: 1000 },
+  { id: "portrait",   label: "Portrait",   w: 1000, h: 1600 },
+  { id: "widescreen", label: "Widescreen", w: 1600, h: 900  },
+  { id: "square",     label: "Square",     w: 1200, h: 1200 },
+];
+
+export function getOrientationPreset(id: PageOrientation): OrientationPreset {
+  return ORIENTATION_PRESETS.find((p) => p.id === id) ?? ORIENTATION_PRESETS[0];
+}
+
+export function detectOrientation(w: number, h: number): PageOrientation {
+  for (const p of ORIENTATION_PRESETS) {
+    if (p.w === w && p.h === h) return p.id;
+  }
+  return w >= h ? "landscape" : "portrait";
+}

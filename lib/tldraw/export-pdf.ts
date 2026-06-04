@@ -3,28 +3,57 @@
 import { Box, getSvgAsImage, type Editor } from "tldraw";
 import { PAGE_H, PAGE_W } from "./page-config";
 
-// Landscape page matching the 8:5 whiteboard ratio
-const PDF_W = 792;
-const PDF_H = Math.round(PDF_W * (PAGE_H / PAGE_W)); // 495
+// PDF points per canvas unit — 72 DPI reference unit
+const PDF_SCALE = 72 / 96; // ≈ 0.75 — maps canvas px to PDF points at 96dpi
+const MAX_PDF_W = 842; // A4 landscape width in points (≈ 11.7in)
 
-// Export scale — higher = better quality JPEG, larger file
+// Export scale — higher = better quality JPEG
 const EXPORT_SCALE = 2;
+
+function canvasToPdfDims(w: number, h: number): { pdfW: number; pdfH: number } {
+  const pdfW = Math.min(Math.round(w * PDF_SCALE), MAX_PDF_W);
+  const pdfH = Math.round(h * (pdfW / w));
+  return { pdfW, pdfH };
+}
 
 export async function exportWhiteboardPdf(
   editor: Editor,
   title: string,
+  isMindboard = false,
 ) {
   const pages = editor.getPages();
   const currentPageId = editor.getCurrentPageId();
-  const pageBlobs: Blob[] = [];
+
+  type PageRecord = { bytes: Uint8Array; pdfW: number; pdfH: number; imgW: number; imgH: number };
+  const pageRecords: PageRecord[] = [];
 
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i];
     editor.setCurrentPage(page.id);
 
     const shapeIds = [...editor.getCurrentPageShapeIds()];
+
+    let bounds: Box;
+    if (isMindboard) {
+      const contentBounds = editor.getCurrentPageBounds();
+      if (!contentBounds || shapeIds.length === 0) continue;
+      const PAD = 48;
+      bounds = new Box(
+        contentBounds.x - PAD,
+        contentBounds.y - PAD,
+        contentBounds.w + PAD * 2,
+        contentBounds.h + PAD * 2,
+      );
+    } else {
+      // Read dimensions from the PageBackgroundShape so orientation is respected
+      const bgShape = editor.getCurrentPageShapes().find((s) => s.type === "page-background");
+      const w = (bgShape?.props as { w?: number } | undefined)?.w ?? PAGE_W;
+      const h = (bgShape?.props as { h?: number } | undefined)?.h ?? PAGE_H;
+      bounds = new Box(0, 0, w, h);
+    }
+
     const svg = await editor.getSvg(shapeIds, {
-      bounds: new Box(0, 0, PAGE_W, PAGE_H),
+      bounds,
       padding: 0,
       background: false,
     });
@@ -32,29 +61,29 @@ export async function exportWhiteboardPdf(
     if (!svg) continue;
 
     const svgString = new XMLSerializer().serializeToString(svg);
+    const { pdfW, pdfH } = canvasToPdfDims(bounds.w, bounds.h);
+    const imgW = Math.round(bounds.w * EXPORT_SCALE);
+    const imgH = Math.round(bounds.h * EXPORT_SCALE);
+
     const blob = await getSvgAsImage(editor, svgString, {
       type: "jpeg",
       quality: 0.92,
       scale: EXPORT_SCALE,
-      width: PAGE_W,
-      height: PAGE_H,
+      width: bounds.w,
+      height: bounds.h,
     });
 
-    if (blob) pageBlobs.push(blob);
+    if (blob) {
+      const bytes = await blobToUint8Array(blob);
+      pageRecords.push({ bytes, pdfW, pdfH, imgW, imgH });
+    }
   }
 
   editor.setCurrentPage(currentPageId);
 
-  if (pageBlobs.length === 0) return;
+  if (pageRecords.length === 0) return;
 
-  const jpegPages = await Promise.all(
-    pageBlobs.map(async (blob) => {
-      const bytes = await blobToUint8Array(blob);
-      return { bytes };
-    }),
-  );
-
-  const pdfBytes = buildJpegPdf(jpegPages, PDF_W, PDF_H, PAGE_W * EXPORT_SCALE, PAGE_H * EXPORT_SCALE);
+  const pdfBytes = buildJpegPdf(pageRecords);
 
   const url = URL.createObjectURL(new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" }));
   const a = document.createElement("a");
@@ -77,19 +106,14 @@ function sanitizeFilename(name: string): string {
 
 // ── PDF builder ────────────────────────────────────────────────────────────────
 // Builds a minimal PDF with one JPEG image per page (DCTDecode filter).
-// Uses Uint8Array throughout so binary JPEG data is never corrupted.
+// Each page can have its own dimensions, supporting mixed orientations.
 
-function buildJpegPdf(
-  pages: { bytes: Uint8Array }[],
-  pdfW: number,
-  pdfH: number,
-  imgW: number,
-  imgH: number,
-): Uint8Array {
+type PageData = { bytes: Uint8Array; pdfW: number; pdfH: number; imgW: number; imgH: number };
+
+function buildJpegPdf(pages: PageData[]): Uint8Array {
   const enc = new TextEncoder();
   const s = (str: string) => enc.encode(str);
 
-  // Collect all chunks and track byte offsets
   const chunks: Uint8Array[] = [];
   let offset = 0;
   const offsets: number[] = [];
@@ -107,12 +131,6 @@ function buildJpegPdf(
 
   push(s("%PDF-1.4\n"));
 
-  // Object IDs:
-  // 1 = Catalog, 2 = Pages
-  // For each page i (0-based):
-  //   imgObjId(i)     = 3 + i * 3
-  //   contentObjId(i) = 3 + i * 3 + 1
-  //   pageObjId(i)    = 3 + i * 3 + 2
   const catalogId = 1;
   const pagesId = 2;
   const imgObjId = (i: number) => 3 + i * 3;
@@ -120,11 +138,9 @@ function buildJpegPdf(
   const pageObjId = (i: number) => 3 + i * 3 + 2;
   const totalObjects = 2 + pages.length * 3;
 
-  // Image + content + page objects for each page
   for (let i = 0; i < pages.length; i++) {
-    const { bytes } = pages[i];
+    const { bytes, pdfW, pdfH, imgW, imgH } = pages[i];
 
-    // Image XObject (JPEG / DCTDecode)
     markObj(imgObjId(i));
     pushStr(`${imgObjId(i)} 0 obj\n`);
     pushStr(
@@ -133,16 +149,13 @@ function buildJpegPdf(
     push(bytes);
     pushStr("\nendstream\nendobj\n");
 
-    // Page content stream: draw the rendered whiteboard image full-page.
     const imgCmd = `q ${pdfW} 0 0 ${pdfH} 0 0 cm /Im${i} Do Q\n`;
-    const contentStream = imgCmd;
 
     markObj(contentObjId(i));
-    pushStr(`${contentObjId(i)} 0 obj\n<< /Length ${contentStream.length} >>\nstream\n`);
-    pushStr(contentStream);
+    pushStr(`${contentObjId(i)} 0 obj\n<< /Length ${imgCmd.length} >>\nstream\n`);
+    pushStr(imgCmd);
     pushStr("endstream\nendobj\n");
 
-    // Page object
     markObj(pageObjId(i));
     pushStr(`${pageObjId(i)} 0 obj\n`);
     pushStr(
@@ -151,16 +164,13 @@ function buildJpegPdf(
     pushStr("endobj\n");
   }
 
-  // Catalog
   markObj(catalogId);
   pushStr(`${catalogId} 0 obj\n<< /Type /Catalog /Pages ${pagesId} 0 R >>\nendobj\n`);
 
-  // Pages
   const pageKids = pages.map((_, i) => `${pageObjId(i)} 0 R`).join(" ");
   markObj(pagesId);
   pushStr(`${pagesId} 0 obj\n<< /Type /Pages /Kids [${pageKids}] /Count ${pages.length} >>\nendobj\n`);
 
-  // xref table
   const xrefOffset = offset;
   const xrefLines = [
     "xref",
@@ -178,7 +188,6 @@ function buildJpegPdf(
   ].join("\n");
   pushStr(xrefLines);
 
-  // Concatenate all chunks
   const total = chunks.reduce((n, c) => n + c.length, 0);
   const result = new Uint8Array(total);
   let pos = 0;

@@ -11,7 +11,7 @@ import { saveTextNote, saveWhiteboardNote } from "../actions";
 type Props = {
   workspaceId: string;
   noteId: string;
-  noteType: "TEXT" | "WHITEBOARD";
+  noteType: "TEXT" | "WHITEBOARD" | "MINDBOARD";
   title: string;
   contentJson: unknown;
   noteVisibility?: string;
@@ -93,6 +93,7 @@ export function NoteEditorShell({
                 noteVisibility={noteVisibility}
                 canChangeVisibility={canChangeVisibility}
                 variant="goodnotes"
+                isMindboard={noteType === "MINDBOARD"}
                 onCollapse={() => setExpanded(false)}
               />
             )}
@@ -137,6 +138,7 @@ export function NoteEditorShell({
               initialSnapshot={tldrawSnapshot}
               saveAction={saveWhiteboardNote}
               canEdit={canEdit}
+              isMindboard={noteType === "MINDBOARD"}
             />
           </section>
         )}
