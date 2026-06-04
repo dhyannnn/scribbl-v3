@@ -133,20 +133,11 @@ body {
 
 /* Document mode: paper uses theme surface color so it adapts to dark/light mode,
    matching the card mode behavior exactly. */
+/* base color only — layout/size in the paper-in-viewport block below */
 .scribbl-document-editor .ProseMirror {
   color: var(--color-text);
-  background-color: var(--color-surface);
-  /* Page margins — injected via CSS vars from the wrapper div */
-  padding: var(--page-mt, 72px) var(--page-mr, 72px) var(--page-mb, 72px) var(--page-ml, 72px);
 }
 
-/* Orientation-aware page width on the viewport */
-.note-editor-viewport .ProseMirror {
-  width: var(--scribbl-page-width, 816px);
-  max-width: 100%;
-  margin-inline: auto;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-}
 
 /* Comment mark highlight */
 .tiptap-comment {
@@ -261,22 +252,24 @@ body {
   box-shadow: 0 4px 24px -4px rgba(26, 27, 32, 0.08), 0 1px 4px rgba(26, 27, 32, 0.04);
   margin: 0 auto;
   max-width: calc(100vw - 2rem);
-  padding: 72px;
-  width: 816px;
+
+  /* Page size and margins — driven by CSS vars set in React */
+  width: var(--scribbl-page-width, 816px);
+  padding: var(--page-mt, 72px) var(--page-mr, 72px) var(--page-mb, 72px) var(--page-ml, 72px);
 
   /* Zoom — controlled via --scribbl-zoom CSS variable from the viewport wrapper */
   zoom: var(--scribbl-zoom, 1);
 
-  /* Page break lines — 1px rule every 1056px (US Letter at 96 dpi) */
-  min-height: 1056px;
+  /* Page break lines */
+  min-height: var(--scribbl-page-height, 1056px);
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0px,
-    transparent 1054px,
-    var(--color-border) 1054px,
-    var(--color-border) 1055px,
-    transparent 1055px,
-    transparent 1056px
+    transparent calc(var(--scribbl-page-height, 1056px) - 2px),
+    var(--color-border) calc(var(--scribbl-page-height, 1056px) - 2px),
+    var(--color-border) calc(var(--scribbl-page-height, 1056px) - 1px),
+    transparent calc(var(--scribbl-page-height, 1056px) - 1px),
+    transparent var(--scribbl-page-height, 1056px)
   );
   background-attachment: local;
 }

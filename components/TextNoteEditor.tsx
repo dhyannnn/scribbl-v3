@@ -661,16 +661,14 @@ function TextNoteEditorInner({
             style={{
               "--scribbl-zoom": String(zoomLevel / 100),
               "--scribbl-page-width": liveOrientation === "landscape" ? "1056px" : "816px",
+              "--scribbl-page-height": liveOrientation === "landscape" ? "816px" : "1056px",
+              "--page-mt": `${liveMarginTop}px`,
+              "--page-mb": `${liveMarginBottom}px`,
+              "--page-ml": `${liveMarginLeft}px`,
+              "--page-mr": `${liveMarginRight}px`,
             } as React.CSSProperties}
           >
-            <div
-              style={{
-                "--page-mt": `${liveMarginTop}px`,
-                "--page-mb": `${liveMarginBottom}px`,
-                "--page-ml": `${liveMarginLeft}px`,
-                "--page-mr": `${liveMarginRight}px`,
-              } as React.CSSProperties}
-            >
+            <div>
               <EditorContent editor={editor} />
             </div>
           </div>
