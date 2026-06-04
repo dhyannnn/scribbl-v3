@@ -13,7 +13,7 @@ type SlashCommand = {
   icon: string;
   keywords: string[];
   // Receives editor + the trigger range so delete + insert happen in one transaction
-  execute: (editor: SuggestionProps["editor"], range: Range) => void;
+  execute: (editor: SuggestionProps["editor"], range: Range) => void | Promise<void>;
 };
 
 const COMMANDS: SlashCommand[] = [
@@ -90,6 +90,20 @@ const COMMANDS: SlashCommand[] = [
     icon: "❝",
     keywords: ["quote", "blockquote", "callout"],
     execute: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run(),
+  },
+  {
+    title: "Embed",
+    description: "Embed YouTube, Loom or Figma",
+    icon: "▶",
+    keywords: ["embed", "video", "youtube", "loom", "figma", "iframe"],
+    execute: async (e, r) => {
+      const url = window.prompt("Paste a YouTube, Loom, or Figma URL:");
+      if (!url) return;
+      const { fetchEmbedMeta } = await import("@/app/workspaces/[id]/notes/actions");
+      const meta = await fetchEmbedMeta(url);
+      if (!meta) { window.alert("That URL isn't supported. Allowed: YouTube, Loom, Figma."); return; }
+      e.chain().focus().deleteRange(r).insertEmbed({ src: meta.embedUrl, title: meta.title, provider: meta.provider }).run();
+    },
   },
 ];
 
@@ -314,7 +328,7 @@ export const SlashCommands = Extension.create({
 
         command({ editor, range, props }) {
           const cmd = props.item as SlashCommand;
-          cmd.execute(editor, range);
+          void Promise.resolve(cmd.execute(editor, range));
         },
 
         render() {
