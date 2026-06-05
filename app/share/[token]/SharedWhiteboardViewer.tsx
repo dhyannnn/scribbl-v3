@@ -3,8 +3,8 @@
 import "tldraw/tldraw.css";
 import "@/lib/tldraw/tldraw-overrides.css";
 import dynamic from "next/dynamic";
-import { useEffect, useRef } from "react";
-import { createTLStore, loadSnapshot, type Editor, type TLStoreSnapshot } from "tldraw";
+import { useMemo } from "react";
+import { createTLStore, loadSnapshot, type Editor, type TLStoreSnapshot, type TLComponents } from "tldraw";
 import { PageBackgroundShapeUtil } from "@/lib/tldraw/page-background-shape";
 
 const TldrawCanvas = dynamic(async () => (await import("tldraw")).Tldraw, {
@@ -18,6 +18,14 @@ const TldrawCanvas = dynamic(async () => (await import("tldraw")).Tldraw, {
 
 const SHAPE_UTILS = [PageBackgroundShapeUtil];
 
+// Hide editing UI but keep zoom controls and canvas interaction
+const COMPONENTS: TLComponents = {
+  MainMenu: null,
+  StylePanel: null,
+  Toolbar: null,
+  PageMenu: null,
+};
+
 export function SharedWhiteboardViewer({
   snapshot,
   isMindboard = false,
@@ -25,19 +33,20 @@ export function SharedWhiteboardViewer({
   snapshot: TLStoreSnapshot;
   isMindboard?: boolean;
 }) {
-  const store = useRef(
-    createTLStore({ shapeUtils: isMindboard ? [] : SHAPE_UTILS }),
-  );
-
-  useEffect(() => {
+  // Load snapshot synchronously so tldraw initializes with content already in the store
+  const store = useMemo(() => {
+    const s = createTLStore({ shapeUtils: isMindboard ? [] : SHAPE_UTILS });
     try {
-      loadSnapshot(store.current, snapshot);
+      loadSnapshot(s, snapshot);
     } catch {
-      // snapshot may be empty or malformed — tldraw renders blank canvas
+      // empty or malformed snapshot — renders blank canvas
     }
-  }, [snapshot]);
+    return s;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleMount(editor: Editor) {
+    // Readonly mode: pan/zoom work, all editing tools are disabled
     editor.updateInstanceState({ isReadonly: true });
     editor.zoomToFit({ animation: { duration: 0 } });
   }
@@ -45,9 +54,9 @@ export function SharedWhiteboardViewer({
   return (
     <div className="h-[70vh] min-h-[400px] overflow-hidden rounded-xl border border-[var(--color-border)]">
       <TldrawCanvas
-        store={store.current}
+        store={store}
         onMount={handleMount}
-        hideUi
+        components={COMPONENTS}
       />
     </div>
   );
