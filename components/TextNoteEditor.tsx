@@ -421,6 +421,46 @@ function TextNoteEditorInner({
     return () => vp.removeEventListener("scroll", onScroll);
   }, [variant]);
 
+  // Browser print isolation — clone the viewport into a clean body element so only
+  // note content prints (no sidebar, page chrome, or fixed-position clipping).
+  useEffect(() => {
+    if (variant !== "document") return;
+
+    function handleBeforePrint() {
+      const viewportEl = viewportRef.current;
+      if (!viewportEl) return;
+      const clone = viewportEl.cloneNode(true) as HTMLElement;
+      clone.style.overflow = "visible";
+      clone.style.maxHeight = "none";
+      clone.style.height = "auto";
+      clone.style.padding = "0";
+      clone.style.background = "none";
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "scribbl-document-editor";
+      wrapper.style.cssText = "display:block;height:auto;overflow:visible;";
+      wrapper.appendChild(clone);
+
+      const root = document.createElement("div");
+      root.id = "scribbl-print-root";
+      root.appendChild(wrapper);
+      document.body.appendChild(root);
+      document.documentElement.dataset.printing = "1";
+    }
+
+    function handleAfterPrint() {
+      document.getElementById("scribbl-print-root")?.remove();
+      delete document.documentElement.dataset.printing;
+    }
+
+    window.addEventListener("beforeprint", handleBeforePrint);
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => {
+      window.removeEventListener("beforeprint", handleBeforePrint);
+      window.removeEventListener("afterprint", handleAfterPrint);
+    };
+  }, [variant]);
+
   function zoomIn() {
     const next = ZOOM_LEVELS.find((z) => z > zoomLevel);
     if (next !== undefined) setZoomLevel(next);
