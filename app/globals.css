@@ -400,28 +400,19 @@ body.scribbl-video-split-active [data-split-stack] {
 @page { margin: 0; }
 
 @media print {
-  .note-toolbar,
-  .note-editor-topbar,
-  .note-editor-bottombar { display: none !important; }
+  /* When the JS print hook fires, it appends #scribbl-print-root to <body>
+     and sets data-printing on <html>. Hide everything else. */
+  html[data-printing] body > *:not(#scribbl-print-root) { display: none !important; }
 
-  .note-editor-expanded-shell {
-    position: static !important;
-    height: auto !important;
-    overflow: visible !important;
-  }
+  html[data-printing] #scribbl-print-root { display: block !important; }
 
-  .note-editor-expanded-inner {
-    height: auto !important;
-    overflow: visible !important;
-  }
-
-  .scribbl-document-editor {
+  html[data-printing] #scribbl-print-root .scribbl-document-editor {
     display: block !important;
     height: auto !important;
     overflow: visible !important;
   }
 
-  .note-editor-viewport {
+  html[data-printing] #scribbl-print-root .note-editor-viewport {
     display: block !important;
     overflow: visible !important;
     max-height: none !important;
@@ -430,13 +421,11 @@ body.scribbl-video-split-active [data-split-stack] {
     background: none !important;
   }
 
-  .scribbl-document-editor .ProseMirror {
+  html[data-printing] #scribbl-print-root .scribbl-document-editor .ProseMirror {
     box-shadow: none !important;
     border: none !important;
     zoom: 1 !important;
     background-image: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    /* Keep CSS var padding (page margins) — do NOT zero it out */
+    /* CSS var padding (page margins) is preserved — set as inline style on clone */
   }
 }
