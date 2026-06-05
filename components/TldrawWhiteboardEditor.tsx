@@ -1781,6 +1781,11 @@ export function TldrawWhiteboardEditor({
   async function handleShare() {
     setShareLoading(true);
     try {
+      // Flush the latest snapshot to DB before toggling share so the share
+      // page always reflects the current canvas state
+      const fd = buildFormData();
+      if (fd) await saveAction(fd);
+
       const { toggleNoteShare } = await import("@/app/workspaces/[id]/notes/actions");
       const result = await toggleNoteShare(noteId, workspaceId);
       setIsPublic(result.isPublic);
