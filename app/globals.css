@@ -397,15 +397,37 @@ body.scribbl-video-split-active [data-split-stack] {
 .search-result-current { background-color: #fbbf24; border-radius: 2px; outline: 2px solid #f59e0b; }
 
 /* ── Print ───────────────────────────────────────────────────────────── */
+@page { margin: 0; }
+
 @media print {
   .note-toolbar,
   .note-editor-topbar,
   .note-editor-bottombar { display: none !important; }
 
+  .note-editor-expanded-shell {
+    position: static !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .note-editor-expanded-inner {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .scribbl-document-editor {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
   .note-editor-viewport {
+    display: block !important;
     overflow: visible !important;
     max-height: none !important;
     height: auto !important;
+    padding: 0 !important;
+    background: none !important;
   }
 
   .scribbl-document-editor .ProseMirror {
@@ -415,6 +437,6 @@ body.scribbl-video-split-active [data-split-stack] {
     background-image: none !important;
     width: 100% !important;
     max-width: 100% !important;
-    padding: 0 !important;
+    /* Keep CSS var padding (page margins) — do NOT zero it out */
   }
 }
