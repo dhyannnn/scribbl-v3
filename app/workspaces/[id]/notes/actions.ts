@@ -411,7 +411,7 @@ export async function saveWhiteboardNote(formData: FormData) {
       where: {
         id: noteId,
         workspaceId,
-        type: "WHITEBOARD",
+        type: { in: ["WHITEBOARD", "MINDBOARD"] },
         deletedAt: null,
         OR: [
           {
