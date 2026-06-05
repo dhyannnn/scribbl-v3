@@ -20,10 +20,14 @@ import { TaskItem } from "@tiptap/extension-task-item";
 import CharacterCount from "@tiptap/extension-character-count";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
+import MentionExtension from "@tiptap/extension-mention";
 import { InlineMathNode } from "@aarkue/tiptap-math-extension";
 import { FontSize } from "@/lib/tiptap/font-size";
 import { LineHeight } from "@/lib/tiptap/line-height";
 import { LetterSpacing } from "@/lib/tiptap/letter-spacing";
+import { CommentMark } from "@/lib/tiptap/comment-mark";
+import { EmbedNode } from "@/lib/tiptap/embed-node";
+import { Indent } from "@/lib/tiptap/indent";
 
 const MathNode = InlineMathNode.extend({ renderText() { return " "; } }).configure({ evaluation: false });
 
@@ -50,6 +54,8 @@ export function SharedNoteViewer({ contentJson }: { contentJson: unknown }) {
       TableRow, TableHeaderBase, TableCellBase,
       TaskList, TaskItem.configure({ nested: true }),
       CharacterCount, Subscript, Superscript, MathNode,
+      CommentMark, EmbedNode, Indent,
+      MentionExtension.configure({ suggestion: { items: () => [] } }),
     ],
   });
 
