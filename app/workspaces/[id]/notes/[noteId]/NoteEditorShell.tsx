@@ -76,8 +76,8 @@ export function NoteEditorShell({
 
   if (expanded) {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col">
-        <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="note-editor-expanded-shell fixed inset-0 z-50 flex flex-col">
+        <div className="note-editor-expanded-inner min-h-0 flex-1 overflow-hidden">
           <LiveblocksRoom roomId={roomId}>
             {noteType === "TEXT" ? (
               <TextNoteEditor
