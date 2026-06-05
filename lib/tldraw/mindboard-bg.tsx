@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useEditor, useValue } from "tldraw";
 import { useIsDarkMode } from "@tldraw/editor";
 import type * as Y from "yjs";
@@ -138,6 +139,8 @@ export function MindboardTemplatePicker() {
   const yBg = useContext(MindboardBgCtx);
   const c = usePillColors();
   const [open, setOpen] = useState(false);
+  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const isReadonly = useValue("mb-readonly", () => editor.getInstanceState().isReadonly, [editor]);
 
   const pageId = useValue("mb-page-id", () => editor.getCurrentPageId() as string, [editor]);
@@ -161,6 +164,19 @@ export function MindboardTemplatePicker() {
     setOpen(false);
   }
 
+  function handleOpen() {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPopoverStyle({
+        position: "fixed",
+        bottom: window.innerHeight - rect.top + 8,
+        left: rect.left,
+        zIndex: 99999,
+      });
+    }
+    setOpen((v) => !v);
+  }
+
   const sectionLabel: React.CSSProperties = {
     fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
     textTransform: "uppercase", color: c.text, opacity: 0.38, marginBottom: 7,
@@ -171,11 +187,11 @@ export function MindboardTemplatePicker() {
       style={{ position: "absolute", bottom: 56, left: 8, zIndex: 500 }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <>
-          <div style={{ position: "fixed", inset: 0, zIndex: 590 }} onPointerDown={() => setOpen(false)} />
+          <div style={{ position: "fixed", inset: 0, zIndex: 99998 }} onPointerDown={() => setOpen(false)} />
           <div style={{
-            position: "absolute", bottom: "calc(100% + 8px)", left: 0, zIndex: 600,
+            ...popoverStyle,
             background: c.popoverBg, border: `1px solid ${c.border}`,
             boxShadow: c.shadow, borderRadius: 14, padding: 12, width: 200,
           }}>
@@ -205,10 +221,12 @@ export function MindboardTemplatePicker() {
               ))}
             </div>
           </div>
-        </>
+        </>,
+        document.body,
       )}
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={triggerRef}
+        onClick={handleOpen}
         onPointerDown={(e) => e.stopPropagation()}
         style={{
           display: "flex", alignItems: "center", gap: 6,
