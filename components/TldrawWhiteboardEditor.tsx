@@ -1239,9 +1239,9 @@ function ScribblToolbar() {
 
 // ── Template picker ───────────────────────────────────────────────────────────
 
-type PillColors = ReturnType<typeof usePillColors>;
+export type PillColors = ReturnType<typeof usePillColors>;
 
-function TemplateTile({
+export function TemplateTile({
   template, active, c, onClick,
 }: { template: PageTemplate; active: boolean; c: PillColors; onClick: () => void }) {
   return (
@@ -1397,7 +1397,7 @@ const COVER_COLORS_MAP: Record<string, string> = {
   "cover-dark": "#1c1917",
 };
 
-function TemplateIcon({ template, size = 16 }: { template: PageTemplate; size?: number }) {
+export function TemplateIcon({ template, size = 16 }: { template: PageTemplate; size?: number }) {
   const s = size;
 
   if (COVER_TEMPLATES.includes(template)) {

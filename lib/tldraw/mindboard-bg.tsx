@@ -132,38 +132,45 @@ export function MindboardBackground() {
 // ── MindboardTemplatePicker — tldraw TLComponents.InFrontOfTheCanvas slot ─────
 
 import { usePillColors } from "./mindboard-pill-colors";
+import { TemplateTile, TemplateIcon } from "@/components/TldrawWhiteboardEditor";
+import { TEMPLATE_LABELS, type PageTemplate } from "./page-config";
 
 export function MindboardTemplatePicker() {
   const editor = useEditor();
   const yBg = useContext(MindboardBgCtx);
   const c = usePillColors();
   const [open, setOpen] = useState(false);
-  const isReadonly = useValue("mb-readonly", () => editor.getInstanceState().isReadonly, [editor]);
 
   const pageId = useValue("mb-page-id", () => editor.getCurrentPageId() as string, [editor]);
-  const [template, setTemplate] = useState<MindboardTemplate>("blank");
+  const [current, setCurrent] = useState<MindboardTemplate>("blank");
 
   useEffect(() => {
     if (!yBg) return;
     function sync() {
       const t = (yBg!.get(pageId) as MindboardTemplate | undefined) ?? "blank";
-      setTemplate(t);
+      setCurrent(t);
     }
     sync();
     yBg.observe(sync);
     return () => yBg.unobserve(sync);
   }, [yBg, pageId]);
 
+  const isReadonly = editor.getInstanceState().isReadonly;
   if (isReadonly || !yBg) return null;
 
-  function applyTemplate(t: MindboardTemplate) {
+  function apply(t: MindboardTemplate) {
     yBg!.set(pageId, t);
     setOpen(false);
   }
 
   const sectionLabel: React.CSSProperties = {
-    fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-    textTransform: "uppercase", color: c.text, opacity: 0.38, marginBottom: 7,
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.07em",
+    textTransform: "uppercase",
+    color: c.text,
+    opacity: 0.38,
+    marginBottom: 7,
   };
 
   return (
@@ -179,32 +186,17 @@ export function MindboardTemplatePicker() {
             bottom: "calc(100% + 8px)",
             left: 0,
             zIndex: 600,
-            background: c.popoverBg, border: `1px solid ${c.border}`,
-            boxShadow: c.shadow, borderRadius: 14, padding: 12, width: 200,
+            background: c.popoverBg,
+            border: `1px solid ${c.border}`,
+            boxShadow: c.shadow,
+            borderRadius: 14,
+            padding: 12,
+            width: 216,
           }}>
             <p style={sectionLabel}>Background</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5 }}>
               {MINDBOARD_TEMPLATES.map((t) => (
-                <button
-                  key={t}
-                  title={MINDBOARD_TEMPLATE_LABELS[t]}
-                  onClick={() => applyTemplate(t)}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  style={{
-                    display: "flex", flexDirection: "column", alignItems: "center",
-                    gap: 4, padding: "5px 3px 4px", borderRadius: 8,
-                    border: `1.5px solid ${template === t ? c.text : "transparent"}`,
-                    background: template === t ? c.active : "transparent",
-                    cursor: "pointer", outline: "none",
-                  }}
-                  onMouseEnter={(e) => { if (template !== t) (e.currentTarget as HTMLButtonElement).style.background = c.hover; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = template === t ? c.active : "transparent"; }}
-                >
-                  <MindboardTemplateIcon template={t} size={36} isDark={false} />
-                  <span style={{ fontSize: 9, fontWeight: 500, color: c.text, opacity: template === t ? 1 : 0.55, letterSpacing: "0.01em", lineHeight: 1 }}>
-                    {MINDBOARD_TEMPLATE_LABELS[t]}
-                  </span>
-                </button>
+                <TemplateTile key={t} template={t as PageTemplate} active={current === t} c={c} onClick={() => apply(t)} />
               ))}
             </div>
           </div>
@@ -214,71 +206,28 @@ export function MindboardTemplatePicker() {
         onClick={() => setOpen((v) => !v)}
         onPointerDown={(e) => e.stopPropagation()}
         style={{
-          display: "flex", alignItems: "center", gap: 6,
-          padding: "5px 12px 5px 9px", borderRadius: 999,
-          border: `1px solid ${c.border}`, background: c.bg,
-          boxShadow: c.shadow, color: c.text, fontSize: 12,
-          fontWeight: 500, cursor: "pointer", letterSpacing: "0.01em",
-          whiteSpace: "nowrap", outline: "none",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "5px 12px 5px 9px",
+          borderRadius: 999,
+          border: `1px solid ${c.border}`,
+          background: c.bg,
+          boxShadow: c.shadow,
+          color: c.text,
+          fontSize: 12,
+          fontWeight: 500,
+          cursor: "pointer",
+          letterSpacing: "0.01em",
+          whiteSpace: "nowrap",
+          outline: "none",
         }}
         onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = c.hover; }}
         onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = c.bg; }}
       >
-        <MindboardTemplateIcon template={template} size={14} isDark={false} />
-        {MINDBOARD_TEMPLATE_LABELS[template]}
+        <TemplateIcon template={current as PageTemplate} size={14} />
+        {TEMPLATE_LABELS[current as PageTemplate]}
       </button>
     </div>
-  );
-}
-
-// ── Template preview icons ─────────────────────────────────────────────────────
-
-function MindboardTemplateIcon({ template, size, isDark }: { template: MindboardTemplate; size: number; isDark: boolean }) {
-  const s = size;
-  const bg = isDark ? "#1a1a1a" : "white";
-  const border = isDark ? "rgba(255,255,255,0.25)" : "#d1d5db";
-  const lineStroke = isDark ? "rgba(255,255,255,0.18)" : "#cbd5e1";
-  const dotFill = isDark ? "rgba(255,255,255,0.3)" : "#94a3b8";
-
-  if (template === "blank") {
-    return (
-      <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-        <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
-      </svg>
-    );
-  }
-  if (template === "lined") {
-    return (
-      <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-        <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
-        {[2.5, 5, 7.5].map((y) => (
-          <line key={y} x1={2} y1={y} x2={14} y2={y} stroke={lineStroke} strokeWidth={0.8} />
-        ))}
-      </svg>
-    );
-  }
-  if (template === "dotted") {
-    return (
-      <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-        <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
-        {[3, 7, 11].flatMap((x) =>
-          [2.5, 5, 7.5].map((y) => (
-            <circle key={`${x}-${y}`} cx={x} cy={y} r={0.7} fill={dotFill} />
-          )),
-        )}
-      </svg>
-    );
-  }
-  // grid
-  return (
-    <svg width={s} height={s * 0.625} viewBox="0 0 16 10" style={{ display: "block" }}>
-      <rect width={16} height={10} rx={1} fill={bg} stroke={border} strokeWidth={0.5} />
-      {[4, 8, 12].map((x) => (
-        <line key={`v${x}`} x1={x} y1={0} x2={x} y2={10} stroke={lineStroke} strokeWidth={0.5} />
-      ))}
-      {[2.5, 5, 7.5].map((y) => (
-        <line key={`h${y}`} x1={0} y1={y} x2={16} y2={y} stroke={lineStroke} strokeWidth={0.5} />
-      ))}
-    </svg>
   );
 }
