@@ -1475,6 +1475,8 @@ export function TldrawWhiteboardEditor({
   noteVisibility,
   canChangeVisibility = false,
   isMindboard = false,
+  shareToken: initialShareToken = null,
+  isPublic: initialIsPublic = false,
 }: {
   workspaceId: string;
   meetingId?: string;
@@ -1491,6 +1493,8 @@ export function TldrawWhiteboardEditor({
   noteVisibility?: string;
   canChangeVisibility?: boolean;
   isMindboard?: boolean;
+  shareToken?: string | null;
+  isPublic?: boolean;
 }) {
   const room = useRoom();
   const storeWithStatus = useTldrawYjsStore({
@@ -1582,6 +1586,9 @@ export function TldrawWhiteboardEditor({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [isPending, startTransition] = useTransition();
   const [linkCopied, setLinkCopied] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [_shareToken, setShareToken] = useState<string | null>(initialShareToken);
+  const [isPublic, setIsPublic] = useState(initialIsPublic);
   const [busyHeaderPdf, setBusyHeaderPdf] = useState(false);
   const [zoomPct, setZoomPct] = useState(100);
   const others = useOthers();
@@ -1771,12 +1778,23 @@ export function TldrawWhiteboardEditor({
     editorRef.current?.updateInstanceState({ isReadonly: !canEdit });
   }, [canEdit]);
 
-  function handleShare() {
-    void navigator.clipboard.writeText(window.location.href).then(() => {
-      setLinkCopied(true);
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-      copyTimeoutRef.current = setTimeout(() => setLinkCopied(false), 2000);
-    });
+  async function handleShare() {
+    setShareLoading(true);
+    try {
+      const { toggleNoteShare } = await import("@/app/workspaces/[id]/notes/actions");
+      const result = await toggleNoteShare(noteId, workspaceId);
+      setIsPublic(result.isPublic);
+      setShareToken(result.shareToken ?? null);
+      if (result.isPublic && result.shareToken) {
+        const url = `${window.location.origin}/share/${result.shareToken}`;
+        await navigator.clipboard.writeText(url);
+        setLinkCopied(true);
+        if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+        copyTimeoutRef.current = setTimeout(() => setLinkCopied(false), 2000);
+      }
+    } finally {
+      setShareLoading(false);
+    }
   }
 
   function changeOrientation(id: PageOrientation) {
@@ -1919,14 +1937,17 @@ export function TldrawWhiteboardEditor({
           )}
           <button
             type="button"
-            onClick={handleShare}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+            onClick={() => void handleShare()}
+            disabled={shareLoading}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
               linkCopied
                 ? "bg-[var(--color-success)] text-white"
-                : "bg-[var(--color-secondary)] text-white hover:bg-[var(--color-secondary-hover)]"
+                : isPublic
+                ? "border border-[var(--color-secondary)] bg-transparent text-[var(--color-secondary)] hover:bg-[var(--color-secondary-dim)]"
+                : "bg-[var(--color-secondary)] text-white hover:opacity-90"
             }`}
           >
-            {linkCopied ? "Copied!" : "Share"}
+            {linkCopied ? "Copied!" : isPublic ? "Shared ✓" : "Share"}
           </button>
           {onCollapse && (
             <button

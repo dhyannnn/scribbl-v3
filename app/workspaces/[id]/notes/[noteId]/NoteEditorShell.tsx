@@ -116,6 +116,8 @@ export function NoteEditorShell({
                 variant="goodnotes"
                 isMindboard={noteType === "MINDBOARD"}
                 onCollapse={() => setExpanded(false)}
+                shareToken={shareToken}
+                isPublic={isPublic}
               />
             )}
           </LiveblocksRoom>
