@@ -298,12 +298,9 @@ export function VideoPopoutShell({
       {showCallOverlay ? (
         <CallerWaitingOverlay
           callPending={callPending}
-          onCancel={() => {
-            setCallOverlayDismissed(true);
-          }}
-          onDeclined={() => {
-            setCallDeclined(true);
-          }}
+          workspaceId={workspaceId}
+          onCancel={() => setCallOverlayDismissed(true)}
+          onDeclined={() => setCallDeclined(true)}
         />
       ) : null}
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-5 sm:px-8 lg:px-10">
@@ -988,22 +985,39 @@ function getInitials(name: string) {
 
 function CallerWaitingOverlay({
   callPending,
+  workspaceId,
   onCancel,
   onDeclined,
 }: {
   callPending: CallPendingProps;
+  workspaceId: string;
   onCancel: () => void;
   onDeclined: () => void;
 }) {
+  const router = useRouter();
   const [secondsLeft, setSecondsLeft] = useState(() =>
     Math.max(0, Math.round((new Date(callPending.expiresAt).getTime() - Date.now()) / 1000)),
   );
   const [toast, setToast] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Play ringtone for caller while waiting
+  useEffect(() => {
+    const audio = new Audio("/sounds/mixkit-marimba-ringtone-1359.wav");
+    audio.loop = true;
+    audio.play().catch(() => {});
+    audioRef.current = audio;
+    return () => {
+      audio.pause();
+      audioRef.current = null;
+    };
+  }, []);
 
   // Countdown tick
   useEffect(() => {
     if (secondsLeft <= 0) {
+      audioRef.current?.pause();
       onDeclined();
       setToast("Call wasn't answered");
       return;
@@ -1023,6 +1037,7 @@ function CallerWaitingOverlay({
         // 404 means row was deleted — either declined or accepted
         if (res.status === 404 && !cancelled) {
           clearInterval(interval);
+          audioRef.current?.pause();
           onDeclined();
           setToast("Call wasn't answered");
         }
@@ -1043,8 +1058,10 @@ function CallerWaitingOverlay({
 
   async function handleCancel() {
     setCancelling(true);
+    audioRef.current?.pause();
     await cancelCall(callPending.pendingCallId);
     onCancel();
+    router.push(`/workspaces/${workspaceId}/calls`);
   }
 
   return (
