@@ -30,6 +30,7 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
           <SharedWhiteboardViewer
             snapshot={getTldrawSnapshot(note.contentJson)}
             isMindboard={note.type === "MINDBOARD"}
+            mindboardBg={getMindboardBg(note.contentJson)}
           />
         ) : (
           <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-8 shadow-sm">
@@ -44,4 +45,12 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
 function getTldrawSnapshot(contentJson: unknown): TLStoreSnapshot {
   const c = contentJson as { type?: string; snapshot?: unknown } | null;
   return (c?.type === "tldraw" ? c.snapshot : {}) as TLStoreSnapshot;
+}
+
+function getMindboardBg(contentJson: unknown): Record<string, string> {
+  const c = contentJson as { mindboardBg?: unknown } | null;
+  if (c?.mindboardBg && typeof c.mindboardBg === "object" && !Array.isArray(c.mindboardBg)) {
+    return c.mindboardBg as Record<string, string>;
+  }
+  return {};
 }

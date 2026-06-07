@@ -1600,6 +1600,8 @@ export function TldrawWhiteboardEditor({
   const hasPendingSaveRef = useRef(false);
   const titleValueRef = useRef(titleValue);
   const canEditRef = useRef(canEdit);
+  const yBgRef = useRef(yBg);
+  useEffect(() => { yBgRef.current = yBg; }, [yBg]);
   const canUploadAssetsRef = useRef(canUploadAssets);
   const queueAutosaveRef = useRef<() => void>(() => {});
   const exportPdfFnRef = useRef<(() => Promise<void>) | null>(null);
@@ -1623,6 +1625,9 @@ export function TldrawWhiteboardEditor({
     if (meetingId) fd.set("meetingId", meetingId);
     fd.set("title", titleValueRef.current);
     fd.set("snapshotJson", JSON.stringify(snapshot));
+    if (yBgRef.current) {
+      fd.set("mindboardBgJson", JSON.stringify(Object.fromEntries(yBgRef.current.entries())));
+    }
     return fd;
   }, [workspaceId, noteId, meetingId]);
 

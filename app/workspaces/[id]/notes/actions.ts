@@ -388,6 +388,7 @@ export async function saveWhiteboardNote(formData: FormData) {
   const noteId = String(formData.get("noteId") ?? "");
   const title = sanitizeNoteTitle(formData.get("title"), "Untitled whiteboard");
   const snapshotJson = String(formData.get("snapshotJson") ?? "");
+  const mindboardBgJson = String(formData.get("mindboardBgJson") ?? "");
 
   if (!workspaceId || !noteId || !snapshotJson) {
     return;
@@ -485,13 +486,22 @@ export async function saveWhiteboardNote(formData: FormData) {
     return;
   }
 
+  let mindboardBg: Record<string, string> | undefined;
+  if (mindboardBgJson) {
+    try {
+      mindboardBg = JSON.parse(mindboardBgJson) as Record<string, string>;
+    } catch {
+      // ignore malformed bg data
+    }
+  }
+
   await prisma.note.update({
     where: {
       id: note.id,
     },
     data: {
       title,
-      contentJson: { type: "tldraw", snapshot } as Prisma.InputJsonValue,
+      contentJson: { type: "tldraw", snapshot, ...(mindboardBg ? { mindboardBg } : {}) } as Prisma.InputJsonValue,
     },
   });
 
