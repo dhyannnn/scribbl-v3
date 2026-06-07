@@ -40,7 +40,6 @@ const WHITEBOARD_COMPONENTS: TLComponents = {
   MainMenu: null,
   StylePanel: null,
   Toolbar: null,
-  PageMenu: null,
 };
 
 const MINDBOARD_COMPONENTS: TLComponents = {
