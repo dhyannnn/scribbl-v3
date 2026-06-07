@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 
 export type IncomingCall = {
   pendingCallId: string;
@@ -21,49 +20,53 @@ export function useIncomingCall(userId: string) {
   useEffect(() => {
     if (!userId) return;
 
-    const supabase = createClient();
+    let cleanup: (() => void) | undefined;
 
-    const channel = supabase
-      .channel(`pending-calls:${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "PendingCall",
-          filter: `calleeId=eq.${userId}`,
-        },
-        async (payload) => {
-          if (payload.eventType === "INSERT") {
-            const row = payload.new as { id: string };
-            if (fetchedIds.current.has(row.id)) return;
-            fetchedIds.current.add(row.id);
+    import("@/lib/supabase/client").then(({ createClient }) => {
+      const supabase = createClient();
 
-            try {
-              const res = await fetch(`/api/pending-call/${row.id}`, {
-                credentials: "same-origin",
-              });
-              if (!res.ok) return;
-              const data = await res.json() as IncomingCall & { pendingCallId: string };
-              setIncomingCall(data);
-            } catch {
-              // network error — skip
+      const channel = supabase
+        .channel(`pending-calls:${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "PendingCall",
+            filter: `calleeId=eq.${userId}`,
+          },
+          async (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+            if (payload.eventType === "INSERT") {
+              const row = payload.new as { id: string };
+              if (fetchedIds.current.has(row.id)) return;
+              fetchedIds.current.add(row.id);
+
+              try {
+                const res = await fetch(`/api/pending-call/${row.id}`, {
+                  credentials: "same-origin",
+                });
+                if (!res.ok) return;
+                const data = await res.json() as IncomingCall & { pendingCallId: string };
+                setIncomingCall(data);
+              } catch {
+                // network error — skip
+              }
             }
-          }
 
-          if (payload.eventType === "DELETE") {
-            const row = payload.old as { id: string };
-            setIncomingCall((prev) =>
-              prev?.pendingCallId === row.id ? null : prev,
-            );
-          }
-        },
-      )
-      .subscribe();
+            if (payload.eventType === "DELETE") {
+              const row = payload.old as { id: string };
+              setIncomingCall((prev) =>
+                prev?.pendingCallId === row.id ? null : prev,
+              );
+            }
+          },
+        )
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      cleanup = () => supabase.removeChannel(channel);
+    });
+
+    return () => cleanup?.();
   }, [userId]);
 
   function clearIncomingCall() {
