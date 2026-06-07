@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
+import { LocalTime } from "@/components/LocalTime";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
+
+const STALE_CALL_MS = 2 * 60 * 60 * 1000; // 2 hours — calls older than this with no endsAt are considered ended
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -91,9 +94,11 @@ export default async function CallsPage({ params }: PageProps) {
                   .join("")
                   .slice(0, 2)
                   .toUpperCase() ?? "?";
+                const isStale = !call.endsAt && (Date.now() - call.startsAt.getTime() > STALE_CALL_MS);
                 const duration = call.endsAt
                   ? formatDuration(call.endsAt.getTime() - call.startsAt.getTime())
                   : null;
+                const isInProgress = !duration && !isStale;
 
                 return (
                   <div key={call.id} className="flex items-center gap-4 px-6 py-4">
@@ -119,27 +124,20 @@ export default async function CallsPage({ params }: PageProps) {
                         {other?.user.displayName ?? "Unknown"}
                       </p>
                       <p className="mt-0.5 font-mono text-xs text-[var(--color-subtle)]">
-                        {call.startsAt.toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                        {" · "}
-                        {call.startsAt.toLocaleTimeString("en-US", {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
+                        <LocalTime date={call.startsAt} short />
                       </p>
                     </div>
 
                     {/* Duration */}
                     <div className="shrink-0 text-right">
-                      {duration ? (
-                        <p className="font-mono text-xs text-[var(--color-muted)]">{duration}</p>
-                      ) : (
+                      {isInProgress ? (
                         <span className="rounded-full bg-green-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-green-700">
                           In progress
                         </span>
+                      ) : duration ? (
+                        <p className="font-mono text-xs text-[var(--color-muted)]">{duration}</p>
+                      ) : (
+                        <p className="font-mono text-xs text-[var(--color-subtle)]">Missed</p>
                       )}
                     </div>
 
