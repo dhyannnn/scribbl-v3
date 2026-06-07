@@ -1,7 +1,12 @@
+import dynamic from "next/dynamic";
 import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { WorkspaceSidebarShell } from "@/components/WorkspaceSidebarShell";
-import { IncomingCallListener } from "@/components/IncomingCallListener";
 import { getCurrentUser } from "@/lib/current-user";
+
+const IncomingCallListener = dynamic(
+  () => import("@/components/IncomingCallListener").then((m) => m.IncomingCallListener),
+  { ssr: false },
+);
 
 type WorkspaceLayoutProps = {
   children: React.ReactNode;
