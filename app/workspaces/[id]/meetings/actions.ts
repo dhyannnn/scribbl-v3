@@ -52,9 +52,17 @@ export async function startCall(formData: FormData) {
     redirect(`/workspaces/${workspaceId}`);
   }
 
-  // Block if callee is already in an active video session
+  // Block if callee is already in an active video session.
+  // Exclude sessions whose meeting has ended/been canceled, and sessions older
+  // than 4 hours (zombie sessions from clients that didn't cleanly disconnect).
+  const sessionCutoff = new Date(Date.now() - 4 * 60 * 60 * 1000);
   const calleeActiveSession = await prisma.meetingVideoSession.findFirst({
-    where: { userId: calleeUserId, disconnectedAt: null },
+    where: {
+      userId: calleeUserId,
+      disconnectedAt: null,
+      connectedAt: { gte: sessionCutoff },
+      meeting: { canceledAt: null, endsAt: null },
+    },
     select: { id: true },
   });
   if (calleeActiveSession) {
