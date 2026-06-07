@@ -3,6 +3,7 @@ import { Hanken_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import "@livekit/components-styles";
 import { CommandPalette } from "@/components/CommandPalette";
 import { NotificationListener } from "@/components/NotificationListener";
+import { IncomingCallListenerLoader } from "@/components/IncomingCallListenerLoader";
 import { ActiveMeetingProvider } from "@/components/ActiveMeetingContext";
 import { AppVideoOverlay } from "@/components/AppVideoOverlay";
 import { getCurrentUser } from "@/lib/current-user";
@@ -72,6 +73,7 @@ export default async function RootLayout({
           <Providers>{children}</Providers>
           <CommandPalette />
           <NotificationListener />
+          {user ? <IncomingCallListenerLoader currentUserId={user.id} /> : null}
           <AppVideoOverlay />
         </ActiveMeetingProvider>
       </body>

@@ -1027,7 +1027,7 @@ function CallerWaitingOverlay({
     return () => clearTimeout(t);
   }, [secondsLeft, onDeclined, callPending.pendingCallId]);
 
-  // Poll to detect if callee declined (row deleted server-side)
+  // Poll to detect if callee accepted or declined (row deleted server-side)
   useEffect(() => {
     let cancelled = false;
     const interval = setInterval(async () => {
@@ -1035,8 +1035,16 @@ function CallerWaitingOverlay({
         const res = await fetch(`/api/pending-call/${callPending.pendingCallId}`, {
           credentials: "same-origin",
         });
-        // 404 means row was deleted — either declined or accepted
-        if (res.status === 404 && !cancelled) {
+        if (cancelled) return;
+        if (res.status === 410) {
+          // Row gone — callee accepted. Dismiss overlay and refresh so the
+          // caller's video room picks up the callee joining.
+          clearInterval(interval);
+          audioRef.current?.pause();
+          onDeclined();
+          router.refresh();
+        } else if (res.status === 404) {
+          // Unknown id — shouldn't happen; treat same as declined
           clearInterval(interval);
           audioRef.current?.pause();
           onDeclined();

@@ -26,7 +26,9 @@ export async function GET(
   });
 
   if (!pendingCall) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+    // 410 = row is gone (accepted or declined). The caller can differentiate
+    // this from a real 404 (unknown id) to decide how to react.
+    return NextResponse.json({ error: "gone" }, { status: 410 });
   }
 
   // Only the caller or callee may fetch this
