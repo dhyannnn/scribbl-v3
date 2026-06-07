@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { NavLink } from "@/components/NavLink";
 import { StatusPickerAvatar } from "@/components/StatusPickerAvatar";
 import { NewDmButton } from "@/components/NewDmButton";
+import { DeleteDmButton } from "@/components/DeleteDmButton";
 
 type WorkspaceSidebarProps = {
   workspaceId: string;
@@ -41,9 +42,8 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
           dmUser2Id: true,
           dmUser1: { select: { id: true, displayName: true, avatarUrl: true } },
           dmUser2: { select: { id: true, displayName: true, avatarUrl: true } },
-          meeting: {
-            select: { title: true, startsAt: true },
-          },
+          meeting: { select: { title: true, startsAt: true } },
+          seriesMeetings: { select: { id: true }, take: 1 },
         },
         orderBy: { createdAt: "asc" },
       },
@@ -56,12 +56,19 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
   const canManage = membership?.role === "OWNER" || membership?.role === "ADMIN";
 
   const announcementChannels = workspace.channels.filter((c) => !c.meetingId && c.type === "ANNOUNCEMENT");
-  const workspaceChannels = workspace.channels.filter((c) => !c.meetingId && c.type === "CHAT");
+  // Series channels have no meetingId but have seriesMeetings — keep them out of regular channels
+  const seriesChannelIds = new Set(
+    workspace.channels.filter((c) => c.seriesMeetings.length > 0).map((c) => c.id),
+  );
+  const workspaceChannels = workspace.channels.filter(
+    (c) => !c.meetingId && c.type === "CHAT" && !seriesChannelIds.has(c.id),
+  );
   const dmChannels = workspace.channels.filter((c) => c.type === "DIRECT");
   const meetingChannels = workspace.channels
     .filter((c) => c.meetingId)
     .sort((a, b) => (b.meeting?.startsAt?.getTime() ?? 0) - (a.meeting?.startsAt?.getTime() ?? 0))
     .slice(0, 15);
+  const seriesChannels = workspace.channels.filter((c) => seriesChannelIds.has(c.id));
 
   // Unread indicators
   const channelIds = workspace.channels.map((c) => c.id);
@@ -263,12 +270,12 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
               const other = channel.dmUser1Id === currentUser.id ? channel.dmUser2 : channel.dmUser1;
               const initials = other?.displayName?.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() ?? "?";
               return (
-                <li key={channel.id}>
+                <li key={channel.id} className="group/dm relative">
                   <NavLink
                     href={`/workspaces/${workspaceId}/chat/${channel.id}`}
                     exact
-                    activeClassName="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium bg-[var(--color-secondary)] text-white"
-                    inactiveClassName="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)] transition"
+                    activeClassName="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium bg-[var(--color-secondary)] text-white pr-8"
+                    inactiveClassName="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)] transition pr-8"
                   >
                     {other?.avatarUrl ? (
                       <img src={other.avatarUrl} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" />
@@ -282,11 +289,48 @@ export async function WorkspaceSidebar({ workspaceId }: WorkspaceSidebarProps) {
                       <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-[var(--color-secondary)]" />
                     ) : null}
                   </NavLink>
+                  <DeleteDmButton
+                    channelId={channel.id}
+                    workspaceId={workspaceId}
+                    otherUserName={other?.displayName ?? "this person"}
+                  />
                 </li>
               );
             })}
           </ul>
         </div>
+
+        {/* Series chats — one channel per recurring meeting series */}
+        {seriesChannels.length > 0 ? (
+          <div className="px-3 pb-2">
+            <p className="mb-1 px-4 font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">
+              Recurring Chats
+            </p>
+            <ul className="space-y-0.5">
+              {seriesChannels.map((channel) => (
+                <li key={channel.id}>
+                  <NavLink
+                    href={`/workspaces/${workspaceId}/chat/${channel.id}`}
+                    exact
+                    activeClassName="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium bg-[var(--color-secondary)] text-white"
+                    inactiveClassName="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-[var(--color-muted)] hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-text)] transition"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-60">
+                      <polygon points="23 7 16 12 23 17 23 7" />
+                      <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                    </svg>
+                    <span className="truncate">
+                      {channel.name.replace(/^Meeting:\s*/i, "")}
+                    </span>
+                    {unreadChannelIds.has(channel.id) ? (
+                      <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-[var(--color-secondary)]" />
+                    ) : null}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         {/* Meeting chats */}
         {meetingChannels.length > 0 ? (

@@ -358,9 +358,10 @@ model Channel {
   createdBy User      @relation("ChannelCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   dmUser1   User?     @relation("DmUser1", fields: [dmUser1Id], references: [id], onDelete: SetNull)
   dmUser2   User?     @relation("DmUser2", fields: [dmUser2Id], references: [id], onDelete: SetNull)
-  messages  Message[]
-  polls     Poll[]
-  lastReads ChannelLastRead[]
+  messages       Message[]
+  polls          Poll[]
+  lastReads      ChannelLastRead[]
+  seriesMeetings Meeting[]         @relation("SeriesChannel")
 
   @@index([workspaceId])
 }
@@ -527,6 +528,7 @@ model Meeting {
   canceledByUserId   String?   @db.Uuid
   cancellationReason String?
   seriesId           String?              @db.Uuid
+  seriesChannelId    String?              @db.Uuid
   recurrence         RecurrenceFrequency?
   seriesIndex        Int?
   recurrenceEndsAt   DateTime?
@@ -534,9 +536,10 @@ model Meeting {
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
-  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  group     Group?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  createdBy User       @relation("MeetingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  workspace     Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  group         Group?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  createdBy     User       @relation("MeetingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  seriesChannel Channel?   @relation("SeriesChannel", fields: [seriesChannelId], references: [id], onDelete: SetNull)
 
   participants        MeetingParticipant[]
   videoSessions       MeetingVideoSession[]

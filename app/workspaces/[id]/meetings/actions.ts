@@ -166,6 +166,9 @@ export async function scheduleMeeting(formData: FormData) {
       sessionCount: slots.length,
     };
 
+    // One shared channel for the whole series (no meetingId — it belongs to the series)
+    const seriesChannelId = crypto.randomUUID();
+
     const meetingsData = slots.map((slot, i) => {
       const id = meetingIds[i];
       return {
@@ -181,6 +184,7 @@ export async function scheduleMeeting(formData: FormData) {
         meetingUrl: `/workspaces/${workspace.id}/meetings/${id}/video`,
         createdByUserId: currentUser.id,
         seriesId,
+        seriesChannelId,
         recurrence: recurrenceRaw as "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY",
         seriesIndex: i + 1,
         recurrenceEndsAt: recurrenceEndsAtDate,
@@ -196,18 +200,18 @@ export async function scheduleMeeting(formData: FormData) {
       })),
     );
 
-    const channelsData = meetingIds.map((id) => ({
-      workspaceId: workspace.id,
-      meetingId: id,
-      name: formatMeetingChannelName(title),
-      type: "CHAT" as const,
-      createdByUserId: currentUser.id,
-    }));
-
     await prisma.$transaction([
+      prisma.channel.create({
+        data: {
+          id: seriesChannelId,
+          workspaceId: workspace.id,
+          name: formatMeetingChannelName(title),
+          type: "CHAT",
+          createdByUserId: currentUser.id,
+        },
+      }),
       prisma.meeting.createMany({ data: meetingsData }),
       prisma.meetingParticipant.createMany({ data: participantsData }),
-      prisma.channel.createMany({ data: channelsData }),
     ]);
   } else {
     // ── Single meeting ───────────────────────────────────────────────────────

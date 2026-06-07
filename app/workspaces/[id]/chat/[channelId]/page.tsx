@@ -5,6 +5,7 @@ import { PendingSubmitButton } from "@/components/PendingSubmitButton";
 import { RealtimeChatPanel } from "@/components/RealtimeChatPanel";
 import { ChatPanelResizer } from "@/components/ChatPanelResizer";
 import { MarkChannelRead } from "@/components/MarkChannelRead";
+import { DeleteDmButton } from "@/components/DeleteDmButton";
 import { getCurrentUser } from "@/lib/current-user";
 import { createChatRoomId } from "@/lib/liveblocks-room";
 import { shapePoll } from "@/lib/polls";
@@ -203,6 +204,14 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
               Delete channel
             </PendingSubmitButton>
           </form>
+        ) : null}
+        {isDm ? (
+          <DeleteDmButton
+            channelId={channelId}
+            workspaceId={workspaceId}
+            otherUserName={dmOtherUser?.displayName ?? "this person"}
+            alwaysVisible
+          />
         ) : null}
       </header>
 

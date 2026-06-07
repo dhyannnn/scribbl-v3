@@ -185,7 +185,7 @@ export async function deleteChannel(formData: FormData) {
     }),
     prisma.channel.findFirst({
       where: { id: channelId, workspaceId, meetingId: null },
-      select: { id: true, type: true },
+      select: { id: true, type: true, dmUser1Id: true, dmUser2Id: true },
     }),
   ]);
 
@@ -193,14 +193,19 @@ export async function deleteChannel(formData: FormData) {
     redirect(`/workspaces/${workspaceId}/chat?chat=unauthorized`);
   }
 
-  if (membership.role !== "OWNER" && membership.role !== "ADMIN") {
+  // DMs: any participant can close; regular channels require OWNER/ADMIN
+  const isDm = channel.type === "DIRECT";
+  const isDmParticipant = isDm && (channel.dmUser1Id === currentUser.id || channel.dmUser2Id === currentUser.id);
+  const canManageChannel = membership.role === "OWNER" || membership.role === "ADMIN";
+
+  if (!isDmParticipant && !canManageChannel) {
     redirect(`/workspaces/${workspaceId}/chat?chat=unauthorized`);
   }
 
   // Protect the last CHAT channel
   if (channel.type === "CHAT") {
     const chatCount = await prisma.channel.count({
-      where: { workspaceId, type: "CHAT", meetingId: null },
+      where: { workspaceId, type: "CHAT", meetingId: null, seriesMeetings: { none: {} } },
     });
     if (chatCount <= 1) {
       redirect(`/workspaces/${workspaceId}/chat/${channelId}?chat=last-channel`);
