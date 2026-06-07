@@ -15,12 +15,12 @@ import { startCall } from "@/app/workspaces/[id]/meetings/actions";
 
 type PageProps = {
   params: Promise<{ id: string; channelId: string }>;
-  searchParams: Promise<{ chat?: string }>;
+  searchParams: Promise<{ chat?: string; call?: string }>;
 };
 
 export default async function ChannelPage({ params, searchParams }: PageProps) {
   const { id: workspaceId, channelId } = await params;
-  const { chat: chatStatus } = await searchParams;
+  const { chat: chatStatus, call: callStatus } = await searchParams;
   const currentUser = await getCurrentUser();
 
   if (!currentUser) return <ProtectedPageMessage />;
@@ -197,6 +197,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
             <form action={startCall} className="ml-1">
               <input type="hidden" name="workspaceId" value={workspaceId} />
               <input type="hidden" name="calleeUserId" value={dmOtherUser.id} />
+              <input type="hidden" name="channelId" value={channelId} />
               <PendingSubmitButton
                 pendingLabel="…"
                 className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-subtle)] transition hover:bg-[var(--color-surface-mid)] hover:text-[var(--color-secondary)] disabled:opacity-60"
@@ -230,6 +231,12 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
           />
         ) : null}
       </header>
+
+      {callStatus === "busy" ? (
+        <div className="shrink-0 border-b border-[var(--color-border)] bg-[var(--color-warning-dim)] px-5 py-2.5 text-sm font-medium text-[var(--color-warning)]">
+          {dmOtherUser?.displayName ?? "This person"} is already in a call.
+        </div>
+      ) : null}
 
       {/* Body — padded, gap between cards */}
       <div className="flex min-h-0 flex-1 gap-3 overflow-hidden p-3">

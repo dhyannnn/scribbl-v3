@@ -228,13 +228,29 @@ export async function endMeetingVideoSession({
 
     if (activeSessionCount === 0) {
       await tx.meetingParticipant.update({
-        where: {
-          id: participant.id,
-        },
-        data: {
-          leftAt: now,
+        where: { id: participant.id },
+        data: { leftAt: now },
+      });
+
+      // For 1:1 calls: set endsAt when all participants have left
+      const meeting = await tx.meeting.findUnique({
+        where: { id: meetingId },
+        select: {
+          type: true,
+          endsAt: true,
+          participants: { select: { leftAt: true } },
         },
       });
+
+      if (meeting?.type === "ONE_ON_ONE" && !meeting.endsAt) {
+        const allLeft = meeting.participants.every((p) => p.leftAt !== null);
+        if (allLeft) {
+          await tx.meeting.update({
+            where: { id: meetingId },
+            data: { endsAt: now },
+          });
+        }
+      }
     }
 
     return {

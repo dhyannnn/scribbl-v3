@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useIncomingCall } from "@/lib/hooks/useIncomingCall";
+import { declineCall } from "@/app/workspaces/[id]/meetings/actions";
 import { IncomingCallModal } from "./IncomingCallModal";
 
 type Props = {
@@ -12,11 +14,21 @@ export function IncomingCallListener({ currentUserId }: Props) {
   const { incomingCall, clearIncomingCall } = useIncomingCall(currentUserId);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const pathname = usePathname();
+  const isInVideoRoom = pathname?.endsWith("/video") ?? false;
+
+  // Auto-decline if already in a video room
+  useEffect(() => {
+    if (incomingCall && isInVideoRoom) {
+      void declineCall(incomingCall.pendingCallId);
+      clearIncomingCall();
+    }
+  }, [incomingCall, isInVideoRoom, clearIncomingCall]);
 
   // Start/stop ringtone in sync with incoming call state
   useEffect(() => {
-    if (incomingCall) {
-      const audio = new Audio("/sounds/ringtone.mp3");
+    if (incomingCall && !isInVideoRoom) {
+      const audio = new Audio("/sounds/mixkit-marimba-ringtone-1359.wav");
       audio.loop = true;
       audio.play().catch(() => {});
       audioRef.current = audio;
@@ -29,7 +41,7 @@ export function IncomingCallListener({ currentUserId }: Props) {
       audioRef.current?.pause();
       audioRef.current = null;
     };
-  }, [incomingCall]);
+  }, [incomingCall, isInVideoRoom]);
 
   // Auto-dismiss toast after 3s
   useEffect(() => {
@@ -38,7 +50,7 @@ export function IncomingCallListener({ currentUserId }: Props) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  if (!incomingCall && !toast) return null;
+  if ((!incomingCall || isInVideoRoom) && !toast) return null;
 
   return (
     <>

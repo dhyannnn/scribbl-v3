@@ -18,6 +18,7 @@ import { prisma } from "@/lib/prisma";
 export async function startCall(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
   const calleeUserId = String(formData.get("calleeUserId") ?? "");
+  const channelId = String(formData.get("channelId") ?? "");
 
   if (!workspaceId || !calleeUserId) {
     redirect(workspaceId ? `/workspaces/${workspaceId}` : "/");
@@ -49,6 +50,18 @@ export async function startCall(formData: FormData) {
 
   if (callerMembership?.status !== "ACTIVE" || calleeMembership?.status !== "ACTIVE") {
     redirect(`/workspaces/${workspaceId}`);
+  }
+
+  // Block if callee is already in an active video session
+  const calleeActiveSession = await prisma.meetingVideoSession.findFirst({
+    where: { userId: calleeUserId, disconnectedAt: null },
+    select: { id: true },
+  });
+  if (calleeActiveSession) {
+    const busyRedirect = channelId
+      ? `/workspaces/${workspaceId}/chat/${channelId}?call=busy`
+      : `/workspaces/${workspaceId}?call=busy`;
+    redirect(busyRedirect);
   }
 
   // Clean up any expired pending calls the caller left behind
@@ -124,14 +137,34 @@ export async function declineCall(pendingCallId: string) {
 
   const pendingCall = await prisma.pendingCall.findUnique({
     where: { id: pendingCallId },
-    select: { calleeId: true },
+    select: { calleeId: true, callerId: true, meetingId: true, meeting: { select: { workspaceId: true } } },
   });
 
   if (!pendingCall || pendingCall.calleeId !== currentUser.id) {
     return { error: "not_found" };
   }
 
-  await prisma.pendingCall.delete({ where: { id: pendingCallId } });
+  const workspaceId = pendingCall.meeting.workspaceId;
+  const now = new Date();
+
+  await prisma.$transaction([
+    prisma.pendingCall.delete({ where: { id: pendingCallId } }),
+    prisma.meeting.update({
+      where: { id: pendingCall.meetingId },
+      data: { canceledAt: now, canceledByUserId: currentUser.id, cancellationReason: "Callee declined" },
+    }),
+    prisma.notification.create({
+      data: {
+        userId: pendingCall.callerId,
+        workspaceId,
+        actorUserId: currentUser.id,
+        type: "CALL_INCOMING",
+        title: `${currentUser.displayName} declined your call`,
+        href: `/workspaces/${workspaceId}/calls`,
+      },
+    }),
+  ]);
+
   return { ok: true };
 }
 
@@ -141,22 +174,72 @@ export async function cancelCall(pendingCallId: string) {
 
   const pendingCall = await prisma.pendingCall.findUnique({
     where: { id: pendingCallId },
-    select: { callerId: true, meetingId: true, meeting: { select: { workspaceId: true } } },
+    select: { callerId: true, calleeId: true, meetingId: true, meeting: { select: { workspaceId: true } } },
   });
 
   if (!pendingCall || pendingCall.callerId !== currentUser.id) {
     return { error: "not_found" };
   }
 
+  const workspaceId = pendingCall.meeting.workspaceId;
+  const now = new Date();
+
   await prisma.$transaction([
     prisma.pendingCall.delete({ where: { id: pendingCallId } }),
     prisma.meeting.update({
       where: { id: pendingCall.meetingId },
-      data: { canceledAt: new Date(), canceledByUserId: currentUser.id, cancellationReason: "Caller canceled" },
+      data: { canceledAt: now, canceledByUserId: currentUser.id, cancellationReason: "Caller canceled" },
+    }),
+    prisma.notification.create({
+      data: {
+        userId: pendingCall.calleeId,
+        workspaceId,
+        actorUserId: currentUser.id,
+        type: "CALL_INCOMING",
+        title: `Missed call from ${currentUser.displayName}`,
+        href: `/workspaces/${workspaceId}/calls`,
+      },
     }),
   ]);
 
-  return { ok: true, workspaceId: pendingCall.meeting.workspaceId };
+  return { ok: true, workspaceId };
+}
+
+export async function expireCall(pendingCallId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return { error: "unauthorized" };
+
+  const pendingCall = await prisma.pendingCall.findUnique({
+    where: { id: pendingCallId },
+    select: { callerId: true, calleeId: true, meetingId: true, meeting: { select: { workspaceId: true } } },
+  });
+
+  if (!pendingCall || pendingCall.callerId !== currentUser.id) {
+    return { error: "not_found" };
+  }
+
+  const workspaceId = pendingCall.meeting.workspaceId;
+  const now = new Date();
+
+  await prisma.$transaction([
+    prisma.pendingCall.delete({ where: { id: pendingCallId } }),
+    prisma.meeting.update({
+      where: { id: pendingCall.meetingId },
+      data: { canceledAt: now, canceledByUserId: currentUser.id, cancellationReason: "No answer" },
+    }),
+    prisma.notification.create({
+      data: {
+        userId: pendingCall.calleeId,
+        workspaceId,
+        actorUserId: currentUser.id,
+        type: "CALL_INCOMING",
+        title: `Missed call from ${currentUser.displayName}`,
+        href: `/workspaces/${workspaceId}/calls`,
+      },
+    }),
+  ]);
+
+  return { ok: true, workspaceId };
 }
 
 export async function acceptCall(pendingCallId: string) {
