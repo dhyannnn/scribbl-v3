@@ -41,6 +41,7 @@ export default async function CallsPage({ params }: PageProps) {
     where: {
       workspaceId,
       type: "ONE_ON_ONE",
+      canceledAt: null,
       participants: { some: { userId: currentUser.id } },
     },
     select: {

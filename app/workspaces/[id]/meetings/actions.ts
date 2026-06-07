@@ -141,15 +141,22 @@ export async function cancelCall(pendingCallId: string) {
 
   const pendingCall = await prisma.pendingCall.findUnique({
     where: { id: pendingCallId },
-    select: { callerId: true },
+    select: { callerId: true, meetingId: true, meeting: { select: { workspaceId: true } } },
   });
 
   if (!pendingCall || pendingCall.callerId !== currentUser.id) {
     return { error: "not_found" };
   }
 
-  await prisma.pendingCall.delete({ where: { id: pendingCallId } });
-  return { ok: true };
+  await prisma.$transaction([
+    prisma.pendingCall.delete({ where: { id: pendingCallId } }),
+    prisma.meeting.update({
+      where: { id: pendingCall.meetingId },
+      data: { canceledAt: new Date(), canceledByUserId: currentUser.id, cancellationReason: "Caller canceled" },
+    }),
+  ]);
+
+  return { ok: true, workspaceId: pendingCall.meeting.workspaceId };
 }
 
 export async function acceptCall(pendingCallId: string) {

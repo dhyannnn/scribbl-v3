@@ -207,17 +207,17 @@ export default async function ChannelPage({ params, searchParams }: PageProps) {
           </form>
         ) : null}
         {isDm && dmOtherUser ? (
-          <form action={startCall} className="flex items-center">
+          <form action={startCall}>
             <input type="hidden" name="workspaceId" value={workspaceId} />
             <input type="hidden" name="calleeUserId" value={dmOtherUser.id} />
             <PendingSubmitButton
-              pendingLabel="Calling…"
-              className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-60"
+              pendingLabel="…"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-low)] text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-60"
+              aria-label="Call"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.26 9.91 19.79 19.79 0 0 1 1.17 1.27 2 2 0 0 1 3.14 0h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 14.92z"/>
               </svg>
-              Call
             </PendingSubmitButton>
           </form>
         ) : null}
