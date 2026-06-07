@@ -56,8 +56,15 @@ export default async function CallsPage({ params }: PageProps) {
       participants: {
         select: {
           userId: true,
+          joinedAt: true,
+          leftAt: true,
           user: { select: { displayName: true, avatarUrl: true } },
         },
+      },
+      videoSessions: {
+        where: { disconnectedAt: null },
+        select: { id: true },
+        take: 1,
       },
     },
     orderBy: { startsAt: "desc" },
@@ -96,11 +103,14 @@ export default async function CallsPage({ params }: PageProps) {
                   .join("")
                   .slice(0, 2)
                   .toUpperCase() ?? "?";
-                const isStale = !call.endsAt && (Date.now() - call.startsAt.getTime() > STALE_CALL_MS);
+                const hasActiveSession = call.videoSessions.length > 0;
+                const allLeft = call.participants.every((p) => p.leftAt !== null);
+                const noneJoined = call.participants.every((p) => p.joinedAt === null);
+                const isStale = !call.endsAt && !hasActiveSession && (Date.now() - call.startsAt.getTime() > STALE_CALL_MS);
                 const duration = call.endsAt
                   ? formatDuration(call.endsAt.getTime() - call.startsAt.getTime())
                   : null;
-                const isInProgress = !duration && !isStale;
+                const isInProgress = !duration && !isStale && !allLeft && !noneJoined && hasActiveSession;
 
                 return (
                   <div key={call.id} className="flex items-center gap-4 px-6 py-4">
