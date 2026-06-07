@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PermissionSubmitButton } from "@/components/PermissionSubmitButton";
 import { RealtimeChatPanel, type RealtimeChatChannel } from "@/components/RealtimeChatPanel";
 import { admitAllToMeeting, admitToMeeting, setMeetingPermissionOverride } from "@/app/workspaces/[id]/meetings/[meetingId]/actions";
-import { cancelCall } from "@/app/workspaces/[id]/meetings/actions";
+import { cancelCall, expireCall } from "@/app/workspaces/[id]/meetings/actions";
 import { hasRecentActiveVideoSession, MeetingVideoRoom } from "./MeetingVideoRoom";
 
 type WaitingUser = {
@@ -1014,17 +1014,18 @@ function CallerWaitingOverlay({
     };
   }, []);
 
-  // Countdown tick
+  // Countdown tick — fire expireCall when it hits 0 to cancel meeting + send missed call notification
   useEffect(() => {
     if (secondsLeft <= 0) {
       audioRef.current?.pause();
+      void expireCall(callPending.pendingCallId);
       onDeclined();
       setToast("Call wasn't answered");
       return;
     }
     const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [secondsLeft, onDeclined]);
+  }, [secondsLeft, onDeclined, callPending.pendingCallId]);
 
   // Poll to detect if callee declined (row deleted server-side)
   useEffect(() => {

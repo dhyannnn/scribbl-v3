@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProtectedPageMessage } from "@/components/ProtectedPageMessage";
 import { LocalTime } from "@/components/LocalTime";
+import { PendingSubmitButton } from "@/components/PendingSubmitButton";
+import { startCall } from "@/app/workspaces/[id]/meetings/actions";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 
@@ -128,7 +130,7 @@ export default async function CallsPage({ params }: PageProps) {
                       </p>
                     </div>
 
-                    {/* Duration */}
+                    {/* Duration / status */}
                     <div className="shrink-0 text-right">
                       {isInProgress ? (
                         <span className="rounded-full bg-green-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-green-700">
@@ -141,13 +143,30 @@ export default async function CallsPage({ params }: PageProps) {
                       )}
                     </div>
 
-                    {/* Link */}
-                    <Link
-                      href={`/workspaces/${workspaceId}/meetings/${call.id}`}
-                      className="shrink-0 rounded-full border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
-                    >
-                      View
-                    </Link>
+                    {/* Actions */}
+                    <div className="flex shrink-0 items-center gap-2">
+                      {!isInProgress && !duration && other ? (
+                        <form action={startCall}>
+                          <input type="hidden" name="workspaceId" value={workspaceId} />
+                          <input type="hidden" name="calleeUserId" value={other.userId} />
+                          <PendingSubmitButton
+                            pendingLabel="Calling…"
+                            className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-60"
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.26 9.91 19.79 19.79 0 0 1 1.17 1.27 2 2 0 0 1 3.14 0h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 14.92z"/>
+                            </svg>
+                            Call back
+                          </PendingSubmitButton>
+                        </form>
+                      ) : null}
+                      <Link
+                        href={`/workspaces/${workspaceId}/meetings/${call.id}`}
+                        className="shrink-0 rounded-full border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)]"
+                      >
+                        View
+                      </Link>
+                    </div>
                   </div>
                 );
               })}
