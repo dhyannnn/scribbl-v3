@@ -119,7 +119,7 @@ export default async function Home({
             workspaceId: { in: workspaceIds },
             canceledAt: null,
             OR: [
-              { startsAt: { gte: fallbackLiveStartsAt } },
+              { startsAt: { gte: fallbackLiveStartsAt }, endsAt: null },
               { endsAt: { gte: now } },
             ],
             AND: [
