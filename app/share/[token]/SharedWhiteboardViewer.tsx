@@ -4,7 +4,7 @@ import "tldraw/tldraw.css";
 import "@/lib/tldraw/tldraw-overrides.css";
 import dynamic from "next/dynamic";
 import { useMemo } from "react";
-import { createTLStore, loadSnapshot, type Editor, type TLStoreSnapshot, type TLComponents } from "tldraw";
+import { createTLStore, defaultShapeUtils, loadSnapshot, type Editor, type TLStoreSnapshot, type TLComponents } from "tldraw";
 import { PageBackgroundShapeUtil } from "@/lib/tldraw/page-background-shape";
 
 const TldrawCanvas = dynamic(async () => (await import("tldraw")).Tldraw, {
@@ -35,7 +35,7 @@ export function SharedWhiteboardViewer({
 }) {
   // Load snapshot synchronously so tldraw initializes with content already in the store
   const store = useMemo(() => {
-    const s = createTLStore({ shapeUtils: isMindboard ? [] : SHAPE_UTILS });
+    const s = createTLStore({ shapeUtils: isMindboard ? [...defaultShapeUtils] : [...defaultShapeUtils, ...SHAPE_UTILS] });
     try {
       loadSnapshot(s, snapshot);
     } catch {
