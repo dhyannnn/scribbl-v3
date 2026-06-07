@@ -106,6 +106,7 @@ export function makeMeeting(workspaceId: string, createdByUserId: string, overri
     seriesIndex: null,
     recurrenceEndsAt: null,
     waitingRoom: false,
+    type: "GROUP" as const,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

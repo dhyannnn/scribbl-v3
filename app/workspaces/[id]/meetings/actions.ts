@@ -15,6 +15,165 @@ import { canManageMeetingSchedule, getMeetingLifecycle } from "@/lib/meeting-lif
 import { createWorkspaceNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
+export async function startCall(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const calleeUserId = String(formData.get("calleeUserId") ?? "");
+
+  if (!workspaceId || !calleeUserId) {
+    redirect(workspaceId ? `/workspaces/${workspaceId}` : "/");
+  }
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    redirect(`/login`);
+  }
+
+  const [callerMembership, calleeMembership] = await Promise.all([
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { status: true },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: calleeUserId } },
+      select: {
+        status: true,
+        user: {
+          select: {
+            displayName: true,
+            notificationPreference: { select: { calls: true } },
+          },
+        },
+      },
+    }),
+  ]);
+
+  if (callerMembership?.status !== "ACTIVE" || calleeMembership?.status !== "ACTIVE") {
+    redirect(`/workspaces/${workspaceId}`);
+  }
+
+  // Clean up any expired pending calls the caller left behind
+  await prisma.pendingCall.deleteMany({
+    where: { callerId: currentUser.id, expiresAt: { lt: new Date() } },
+  });
+
+  const callsEnabled = calleeMembership.user.notificationPreference?.calls ?? true;
+
+  let meetingId = "";
+
+  await prisma.$transaction(async (tx) => {
+    const meeting = await tx.meeting.create({
+      data: {
+        workspaceId,
+        title: "Call",
+        startsAt: new Date(),
+        provider: "livekit",
+        createdByUserId: currentUser.id,
+        waitingRoom: false,
+        type: "ONE_ON_ONE",
+        participants: {
+          create: [
+            { userId: currentUser.id, status: "ACCEPTED" },
+            { userId: calleeUserId, status: "ACCEPTED" },
+          ],
+        },
+      },
+      select: { id: true },
+    });
+
+    meetingId = meeting.id;
+    const roomName = createLiveKitMeetingRoomName(meeting.id);
+    const videoUrl = `/workspaces/${workspaceId}/meetings/${meeting.id}/video`;
+
+    await tx.meeting.update({
+      where: { id: meeting.id },
+      data: {
+        providerMeetingId: roomName,
+        meetingUrl: videoUrl,
+      },
+    });
+
+    await tx.pendingCall.create({
+      data: {
+        meetingId: meeting.id,
+        callerId: currentUser.id,
+        calleeId: calleeUserId,
+        expiresAt: new Date(Date.now() + 30_000),
+      },
+    });
+
+    if (callsEnabled) {
+      await tx.notification.create({
+        data: {
+          userId: calleeUserId,
+          workspaceId,
+          actorUserId: currentUser.id,
+          type: "CALL_INCOMING",
+          title: `${currentUser.displayName} is calling you`,
+          href: videoUrl,
+        },
+      });
+    }
+  });
+
+  redirect(`/workspaces/${workspaceId}/meetings/${meetingId}/video`);
+}
+
+export async function declineCall(pendingCallId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return { error: "unauthorized" };
+
+  const pendingCall = await prisma.pendingCall.findUnique({
+    where: { id: pendingCallId },
+    select: { calleeId: true },
+  });
+
+  if (!pendingCall || pendingCall.calleeId !== currentUser.id) {
+    return { error: "not_found" };
+  }
+
+  await prisma.pendingCall.delete({ where: { id: pendingCallId } });
+  return { ok: true };
+}
+
+export async function cancelCall(pendingCallId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return { error: "unauthorized" };
+
+  const pendingCall = await prisma.pendingCall.findUnique({
+    where: { id: pendingCallId },
+    select: { callerId: true },
+  });
+
+  if (!pendingCall || pendingCall.callerId !== currentUser.id) {
+    return { error: "not_found" };
+  }
+
+  await prisma.pendingCall.delete({ where: { id: pendingCallId } });
+  return { ok: true };
+}
+
+export async function acceptCall(pendingCallId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return { error: "unauthorized" };
+
+  const pendingCall = await prisma.pendingCall.findUnique({
+    where: { id: pendingCallId },
+    select: { calleeId: true, meetingId: true, expiresAt: true, meeting: { select: { workspaceId: true } } },
+  });
+
+  if (!pendingCall || pendingCall.calleeId !== currentUser.id) {
+    return { error: "not_found" };
+  }
+
+  if (pendingCall.expiresAt < new Date()) {
+    await prisma.pendingCall.delete({ where: { id: pendingCallId } });
+    return { error: "expired" };
+  }
+
+  await prisma.pendingCall.delete({ where: { id: pendingCallId } });
+  return { meetingId: pendingCall.meetingId, workspaceId: pendingCall.meeting.workspaceId };
+}
+
 export async function scheduleMeeting(formData: FormData) {
   const workspaceId = String(formData.get("workspaceId") ?? "");
   const title = String(formData.get("title") ?? "").trim();
