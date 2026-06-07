@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 const readNotificationRetentionDays = 90;
 const maxReadNotificationsPerUser = 500;
 
-export type NotificationPreferenceKey = "announcements" | "chatMessages" | "meetings" | "files" | "notes";
+export type NotificationPreferenceKey = "announcements" | "chatMessages" | "meetings" | "files" | "notes" | "calls";
 
 export const notificationPreferenceDefaults: Record<NotificationPreferenceKey, boolean> = {
   announcements: true,
@@ -14,6 +14,7 @@ export const notificationPreferenceDefaults: Record<NotificationPreferenceKey, b
   meetings: true,
   files: true,
   notes: true,
+  calls: true,
 };
 
 type CreateWorkspaceNotificationsInput = {

@@ -55,6 +55,7 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
         orderBy: { createdAt: "asc" },
       },
       meetings: {
+        where: { type: "GROUP" },
         select: {
           id: true,
           title: true,

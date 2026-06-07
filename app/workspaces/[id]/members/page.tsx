@@ -20,6 +20,7 @@ import {
   updateWorkspaceMemberRole,
 } from "../actions";
 import { findOrCreateDmChannel } from "../chat/actions";
+import { startCall } from "../meetings/actions";
 
 type MembersPageProps = {
   params: Promise<{ id: string }>;
@@ -260,6 +261,22 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
                             className="min-h-8 rounded-full border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
                           >
                             Message
+                          </PendingSubmitButton>
+                        </form>
+                      ) : null}
+
+                      {!isCurrentUser ? (
+                        <form action={startCall}>
+                          <input type="hidden" name="workspaceId" value={workspace.id} />
+                          <input type="hidden" name="calleeUserId" value={member.userId} />
+                          <PendingSubmitButton
+                            pendingLabel="…"
+                            className="flex min-h-8 items-center gap-1.5 rounded-full border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-secondary)] disabled:opacity-50"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.26 9.91 19.79 19.79 0 0 1 1.17 1.27 2 2 0 0 1 3.14 0h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 14.92z"/>
+                            </svg>
+                            Call
                           </PendingSubmitButton>
                         </form>
                       ) : null}

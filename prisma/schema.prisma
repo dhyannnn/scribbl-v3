@@ -125,6 +125,11 @@ enum NoteExportAccess {
   WORKSPACE_MEMBERS
 }
 
+enum MeetingType {
+  GROUP
+  ONE_ON_ONE
+}
+
 enum MeetingParticipantStatus {
   INVITED
   ACCEPTED
@@ -215,6 +220,7 @@ enum NotificationType {
   FILE_SHARED
   NOTE_SHARED
   NOTE_MENTION
+  CALL_INCOMING
 }
 
 model User {
@@ -533,6 +539,7 @@ model Meeting {
   seriesIndex        Int?
   recurrenceEndsAt   DateTime?
   waitingRoom        Boolean              @default(false)
+  type               MeetingType          @default(GROUP)
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
@@ -551,6 +558,7 @@ model Meeting {
   admissions          MeetingAdmission[]
   waitingUsers        MeetingWaitingUser[]
   polls               Poll[]
+  pendingCall         PendingCall?
 
   @@index([workspaceId, startsAt])
   @@index([groupId])
@@ -750,11 +758,26 @@ model NotificationPreference {
   meetings      Boolean  @default(true)
   files         Boolean  @default(true)
   notes         Boolean  @default(true)
+  calls         Boolean  @default(true)
   soundEnabled  Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PendingCall {
+  id        String   @id @default(uuid()) @db.Uuid
+  meetingId String   @unique @db.Uuid
+  callerId  String   @db.Uuid
+  calleeId  String   @db.Uuid
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([calleeId])
+  @@index([expiresAt])
 }
 
 // ── Groups ────────────────────────────────────────────────────────────────────

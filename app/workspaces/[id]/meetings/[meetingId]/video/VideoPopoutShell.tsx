@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PermissionSubmitButton } from "@/components/PermissionSubmitButton";
 import { RealtimeChatPanel, type RealtimeChatChannel } from "@/components/RealtimeChatPanel";
 import { admitAllToMeeting, admitToMeeting, setMeetingPermissionOverride } from "@/app/workspaces/[id]/meetings/[meetingId]/actions";
+import { cancelCall } from "@/app/workspaces/[id]/meetings/actions";
 import { hasRecentActiveVideoSession, MeetingVideoRoom } from "./MeetingVideoRoom";
 
 type WaitingUser = {
@@ -13,6 +14,12 @@ type WaitingUser = {
   displayName: string;
   avatarUrl: string | null;
   requestedAt: string;
+};
+
+type CallPendingProps = {
+  pendingCallId: string;
+  calleeDisplayName: string;
+  expiresAt: string;
 };
 
 type VideoPopoutShellProps = {
@@ -33,6 +40,7 @@ type VideoPopoutShellProps = {
   accessRequests: VideoMeetingAccessRequest[];
   context: VideoMeetingContextProps;
   chat: VideoMeetingChatProps;
+  callPending?: CallPendingProps;
 };
 
 export type MeetingVideoRecording = {
@@ -159,9 +167,12 @@ export function VideoPopoutShell({
   accessRequests,
   context,
   chat,
+  callPending,
 }: VideoPopoutShellProps) {
   const router = useRouter();
   const [isReturning, setIsReturning] = useState(false);
+  const [callOverlayDismissed, setCallOverlayDismissed] = useState(false);
+  const [callDeclined, setCallDeclined] = useState(false);
   const [waitingUsers, setWaitingUsers] = useState<WaitingUser[]>([]);
   const waitingPollRef = useRef<number | null>(null);
   const [wasOpenedByHub, setWasOpenedByHub] = useState(false);
@@ -280,8 +291,21 @@ export function VideoPopoutShell({
     };
   }, [canModerate, waitingRoom, meetingId]);
 
+  const showCallOverlay = !!callPending && !callOverlayDismissed && !callDeclined;
+
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
+      {showCallOverlay ? (
+        <CallerWaitingOverlay
+          callPending={callPending}
+          onCancel={() => {
+            setCallOverlayDismissed(true);
+          }}
+          onDeclined={() => {
+            setCallDeclined(true);
+          }}
+        />
+      ) : null}
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-5 sm:px-8 lg:px-10">
         <header className="flex flex-col gap-4 border-b border-[var(--color-border)] pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -960,4 +984,111 @@ function getInitials(name: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+function CallerWaitingOverlay({
+  callPending,
+  onCancel,
+  onDeclined,
+}: {
+  callPending: CallPendingProps;
+  onCancel: () => void;
+  onDeclined: () => void;
+}) {
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    Math.max(0, Math.round((new Date(callPending.expiresAt).getTime() - Date.now()) / 1000)),
+  );
+  const [toast, setToast] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  // Countdown tick
+  useEffect(() => {
+    if (secondsLeft <= 0) {
+      onDeclined();
+      setToast("Call wasn't answered");
+      return;
+    }
+    const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [secondsLeft, onDeclined]);
+
+  // Poll to detect if callee declined (row deleted server-side)
+  useEffect(() => {
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/pending-call/${callPending.pendingCallId}`, {
+          credentials: "same-origin",
+        });
+        // 404 means row was deleted — either declined or accepted
+        if (res.status === 404 && !cancelled) {
+          clearInterval(interval);
+          onDeclined();
+          setToast("Call wasn't answered");
+        }
+      } catch { /* network error — ignore */ }
+    }, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [callPending.pendingCallId, onDeclined]);
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  async function handleCancel() {
+    setCancelling(true);
+    await cancelCall(callPending.pendingCallId);
+    onCancel();
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
+        <div className="w-full max-w-[320px] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl">
+          <div className="flex flex-col items-center px-8 pb-6 pt-8 text-center">
+            {/* Animated calling rings */}
+            <div className="relative mb-5 flex items-center justify-center">
+              <span className="absolute inline-flex h-16 w-16 animate-ping rounded-full bg-[var(--color-secondary)] opacity-20" />
+              <div className="relative z-10 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-secondary-dim)]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-secondary)]">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.26 9.91 19.79 19.79 0 0 1 1.17 1.27 2 2 0 0 1 3.14 0h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 14.92z"/>
+                </svg>
+              </div>
+            </div>
+
+            <p className="text-sm text-[var(--color-muted)]">Calling</p>
+            <h2 className="mt-1 font-display text-lg font-bold text-[var(--color-text)]">
+              {callPending.calleeDisplayName}
+            </h2>
+            <p className="mt-1 font-mono text-xs text-[var(--color-subtle)]">
+              {secondsLeft}s
+            </p>
+          </div>
+
+          <div className="border-t border-[var(--color-border)] px-6 py-4">
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="w-full rounded-full bg-red-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-60"
+            >
+              {cancelling ? "Cancelling…" : "Cancel"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {toast ? (
+        <div className="fixed bottom-6 right-6 z-50 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-lg">
+          <p className="text-sm text-[var(--color-text)]">{toast}</p>
+        </div>
+      ) : null}
+    </>
+  );
 }

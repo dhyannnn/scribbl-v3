@@ -556,10 +556,10 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
       >
         <header id="meeting-overview" className="scroll-mt-6">
           <Link
-            href={`/workspaces/${id}/meetings`}
+            href={meeting.type === "ONE_ON_ONE" ? `/workspaces/${id}/calls` : `/workspaces/${id}/meetings`}
             className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)] transition hover:text-[var(--color-secondary)]"
           >
-            ← Meetings
+            {meeting.type === "ONE_ON_ONE" ? "← Calls" : "← Meetings"}
           </Link>
           <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
@@ -597,6 +597,37 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           <p className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-muted)]">
             {getRecordingStatusMessage(recordingStatus)}
           </p>
+        ) : null}
+
+        {meeting.type === "ONE_ON_ONE" ? (
+          <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
+            <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-subtle)]">1:1 Call</p>
+            <div className="mt-3 flex flex-wrap items-center gap-4">
+              {meeting.participants.map((p) => (
+                <div key={p.id} className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-secondary-dim)] font-mono text-xs font-semibold text-[var(--color-secondary)]">
+                    {p.user.displayName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <span className="text-sm font-medium text-[var(--color-text)]">{p.user.displayName}</span>
+                </div>
+              ))}
+              {meeting.endsAt ? (
+                <span className="ml-auto font-mono text-xs text-[var(--color-subtle)]">
+                  {formatCallDuration(meeting.startsAt, meeting.endsAt)}
+                </span>
+              ) : isSessionOpen ? (
+                <span className="ml-auto rounded-full bg-green-100 px-2.5 py-0.5 font-mono text-xs font-semibold text-green-700">In progress</span>
+              ) : null}
+            </div>
+            {isSessionOpen ? (
+              <Link
+                href={`/workspaces/${id}/meetings/${meeting.id}/video`}
+                className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--color-secondary)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--color-secondary-hover)]"
+              >
+                Rejoin call
+              </Link>
+            ) : null}
+          </section>
         ) : null}
 
         {isCanceled ? (
@@ -654,7 +685,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           </section>
         ) : null}
 
-        {canManageSchedule ? (
+        {canManageSchedule && meeting.type !== "ONE_ON_ONE" ? (
           <section className="grid gap-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
             <h2 className="font-display text-lg font-semibold text-[var(--color-text)]">Meeting Settings</h2>
             <form action={updateMeetingDetails} className="grid gap-4 lg:grid-cols-[1fr_250px_160px_auto]">
@@ -1003,16 +1034,18 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           lazy
         />
 
-        <section id="meeting-polls" className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm scroll-mt-6">
-          <PollsPanel
-            roomId={chatRoomId}
-            initialPolls={initialPolls}
-            currentUserId={currentUser.id}
-            canCreate={canCreatePoll}
-            workspaceId={id}
-            meetingId={meetingId}
-          />
-        </section>
+        {meeting.type !== "ONE_ON_ONE" ? (
+          <section id="meeting-polls" className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm scroll-mt-6">
+            <PollsPanel
+              roomId={chatRoomId}
+              initialPolls={initialPolls}
+              currentUserId={currentUser.id}
+              canCreate={canCreatePoll}
+              workspaceId={id}
+              meetingId={meetingId}
+            />
+          </section>
+        ) : null}
 
         <MeetingNotesSection
           workspaceId={id}
@@ -1838,4 +1871,14 @@ function isLockedMeetingNoteArtifact(
     artifact.note?.visibility === "WORKSPACE_SHARED" &&
     !canEditMeetingNotes(state)
   );
+}
+
+function formatCallDuration(startsAt: Date, endsAt: Date) {
+  const totalSeconds = Math.floor((endsAt.getTime() - startsAt.getTime()) / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  if (minutes > 0) return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+  return `${seconds}s`;
 }

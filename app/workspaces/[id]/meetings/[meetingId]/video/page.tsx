@@ -46,6 +46,9 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
       workspaceId: id,
     },
     include: {
+      pendingCall: {
+        select: { id: true, calleeId: true, expiresAt: true },
+      },
       workspace: {
         include: {
           members: {
@@ -351,6 +354,20 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
     noteType: artifact.note?.type ?? null,
   }));
 
+  // Only show the waiting overlay to the caller (not the callee)
+  const pendingCall = meeting.pendingCall;
+  const callPending =
+    pendingCall &&
+    pendingCall.calleeId !== currentUser.id &&
+    pendingCall.expiresAt > new Date()
+      ? {
+          pendingCallId: pendingCall.id,
+          calleeDisplayName:
+            participants.find((p) => p.userId === pendingCall.calleeId)?.user.displayName ?? "them",
+          expiresAt: pendingCall.expiresAt.toISOString(),
+        }
+      : undefined;
+
   return (
     <>
       <MeetingRouteRefresher />
@@ -391,6 +408,7 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
           canCreatePolls: canCreatePoll,
           openInChannelsHref: meetingChannel ? `/workspaces/${id}/chat?channel=${meetingChannel.id}` : undefined,
         }}
+        callPending={callPending}
       />
     </>
   );
