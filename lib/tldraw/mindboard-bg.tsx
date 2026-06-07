@@ -41,7 +41,7 @@ function svgUri(content: string, size: number): string {
     .replace(/\n/g, "")}")`;
 }
 
-function buildBgStyle(
+export function buildBgStyle(
   template: MindboardTemplate,
   cx: number,
   cy: number,
