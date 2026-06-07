@@ -101,6 +101,7 @@ export function makeMeeting(workspaceId: string, createdByUserId: string, overri
     canceledByUserId: null,
     cancellationReason: null,
     seriesId: null,
+    seriesChannelId: null,
     recurrence: null,
     seriesIndex: null,
     recurrenceEndsAt: null,
