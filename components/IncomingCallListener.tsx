@@ -17,17 +17,22 @@ export function IncomingCallListener({ currentUserId }: Props) {
   const pathname = usePathname();
   const isInVideoRoom = pathname?.endsWith("/video") ?? false;
 
-  // Auto-decline if already in a video room
+  // Auto-decline only when in a *different* video room — not the incoming call's own room.
+  // Without this guard, clicking the notification (which navigates to the call's video URL)
+  // would immediately trigger a decline before the callee could join.
+  const isInDifferentVideoRoom =
+    isInVideoRoom && !!incomingCall && !pathname.includes(incomingCall.meetingId);
+
   useEffect(() => {
-    if (incomingCall && isInVideoRoom) {
+    if (incomingCall && isInDifferentVideoRoom) {
       void declineCall(incomingCall.pendingCallId);
       clearIncomingCall();
     }
-  }, [incomingCall, isInVideoRoom, clearIncomingCall]);
+  }, [incomingCall, isInDifferentVideoRoom, clearIncomingCall]);
 
-  // Start/stop ringtone in sync with incoming call state
+  // Play ringtone while there's an incoming call and we haven't navigated to its room yet
   useEffect(() => {
-    if (incomingCall && !isInVideoRoom) {
+    if (incomingCall && !isInDifferentVideoRoom) {
       const audio = new Audio("/sounds/mixkit-marimba-ringtone-1359.wav");
       audio.loop = true;
       audio.play().catch(() => {});
@@ -41,7 +46,7 @@ export function IncomingCallListener({ currentUserId }: Props) {
       audioRef.current?.pause();
       audioRef.current = null;
     };
-  }, [incomingCall, isInVideoRoom]);
+  }, [incomingCall, isInDifferentVideoRoom]);
 
   // Auto-dismiss toast after 3s
   useEffect(() => {
@@ -50,11 +55,14 @@ export function IncomingCallListener({ currentUserId }: Props) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  if ((!incomingCall || isInVideoRoom) && !toast) return null;
+  // Suppress modal if the callee has already navigated to this call's video room
+  const isInThisCallsRoom =
+    isInVideoRoom && !!incomingCall && pathname.includes(incomingCall.meetingId);
+  if ((!incomingCall || isInThisCallsRoom) && !toast) return null;
 
   return (
     <>
-      {incomingCall ? (
+      {incomingCall && !isInThisCallsRoom ? (
         <IncomingCallModal
           call={incomingCall}
           onDismiss={clearIncomingCall}

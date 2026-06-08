@@ -18,12 +18,12 @@ import { DeleteWorkspaceForm } from "./DeleteWorkspaceForm";
 
 type WorkspacePageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ workspace?: string }>;
+  searchParams: Promise<{ workspace?: string; call?: string }>;
 };
 
 export default async function WorkspacePage({ params, searchParams }: WorkspacePageProps) {
   const { id } = await params;
-  const { workspace: workspaceStatus } = await searchParams;
+  const { workspace: workspaceStatus, call: callStatus } = await searchParams;
 
   if (!isUuid(id)) notFound();
 
@@ -209,7 +209,11 @@ export default async function WorkspacePage({ params, searchParams }: WorkspaceP
           </div>
 
           {/* Status messages */}
-          {getWorkspaceStatusMessage(workspaceStatus) ? (
+          {callStatus === "busy" ? (
+            <p className="mt-4 rounded-xl border border-[var(--color-warning-dim)] bg-[var(--color-warning-dim)] px-4 py-3 text-sm font-medium text-[var(--color-warning)]">
+              That person is already in a call.
+            </p>
+          ) : getWorkspaceStatusMessage(workspaceStatus) ? (
             <p className="mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-muted)]">
               {getWorkspaceStatusMessage(workspaceStatus)}
             </p>
