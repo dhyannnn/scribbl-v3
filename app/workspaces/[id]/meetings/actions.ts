@@ -113,16 +113,18 @@ export async function startCall(formData: FormData) {
       },
     });
 
-    await tx.pendingCall.create({
-      data: {
-        meetingId: meeting.id,
-        callerId: currentUser.id,
-        calleeId: calleeUserId,
-        expiresAt: new Date(Date.now() + 30_000),
-      },
-    });
-
+    // Only ring the callee if they have calls enabled. When disabled, skip the
+    // PendingCall entirely so the realtime listener never fires on their end.
     if (callsEnabled) {
+      await tx.pendingCall.create({
+        data: {
+          meetingId: meeting.id,
+          callerId: currentUser.id,
+          calleeId: calleeUserId,
+          expiresAt: new Date(Date.now() + 30_000),
+        },
+      });
+
       await tx.notification.create({
         data: {
           userId: calleeUserId,
@@ -156,7 +158,7 @@ export async function declineCall(pendingCallId: string) {
   const now = new Date();
 
   await prisma.$transaction([
-    prisma.pendingCall.delete({ where: { id: pendingCallId } }),
+    prisma.pendingCall.deleteMany({ where: { id: pendingCallId } }),
     prisma.meeting.update({
       where: { id: pendingCall.meetingId },
       data: { canceledAt: now, canceledByUserId: currentUser.id, cancellationReason: "Callee declined" },
@@ -193,7 +195,7 @@ export async function cancelCall(pendingCallId: string) {
   const now = new Date();
 
   await prisma.$transaction([
-    prisma.pendingCall.delete({ where: { id: pendingCallId } }),
+    prisma.pendingCall.deleteMany({ where: { id: pendingCallId } }),
     prisma.meeting.update({
       where: { id: pendingCall.meetingId },
       data: { canceledAt: now, canceledByUserId: currentUser.id, cancellationReason: "Caller canceled" },
@@ -230,7 +232,7 @@ export async function expireCall(pendingCallId: string) {
   const now = new Date();
 
   await prisma.$transaction([
-    prisma.pendingCall.delete({ where: { id: pendingCallId } }),
+    prisma.pendingCall.deleteMany({ where: { id: pendingCallId } }),
     prisma.meeting.update({
       where: { id: pendingCall.meetingId },
       data: { canceledAt: now, canceledByUserId: currentUser.id, cancellationReason: "No answer" },
@@ -264,11 +266,11 @@ export async function acceptCall(pendingCallId: string) {
   }
 
   if (pendingCall.expiresAt < new Date()) {
-    await prisma.pendingCall.delete({ where: { id: pendingCallId } });
+    await prisma.pendingCall.deleteMany({ where: { id: pendingCallId } });
     return { error: "expired" };
   }
 
-  await prisma.pendingCall.delete({ where: { id: pendingCallId } });
+  await prisma.pendingCall.deleteMany({ where: { id: pendingCallId } });
   return { meetingId: pendingCall.meetingId, workspaceId: pendingCall.meeting.workspaceId };
 }
 
