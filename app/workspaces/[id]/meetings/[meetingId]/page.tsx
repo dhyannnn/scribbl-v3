@@ -260,6 +260,25 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           },
         },
       },
+      seriesChannel: {
+        select: {
+          id: true,
+          name: true,
+          messages: {
+            select: {
+              id: true, channelId: true, senderUserId: true, body: true,
+              createdAt: true, editedAt: true, deletedAt: true,
+              isPinned: true, replyToId: true,
+              sender: { select: { displayName: true, avatarUrl: true } },
+              replyTo: { select: { id: true, body: true, sender: { select: { displayName: true } } } },
+              reactions: { select: { emoji: true, userId: true } },
+              attachmentFile: { select: { id: true, name: true, mimeType: true, sizeBytes: true, publicUrl: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 100,
+          },
+        },
+      },
       moderationSettings: true,
       permissionOverrides: {
         select: {
@@ -459,11 +478,12 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
     ["STARTING", "ACTIVE", "STOPPING"].includes(recording.status),
   );
   const latestRecording = activeRecording ?? meeting.recordings[0];
-  const meetingChannel = meeting.channel
+  const rawChannel = meeting.channel ?? meeting.seriesChannel;
+  const meetingChannel = rawChannel
     ? {
-        id: meeting.channel.id,
-        name: meeting.channel.name,
-        messages: [...meeting.channel.messages].reverse().map((message) => {
+        id: rawChannel.id,
+        name: rawChannel.name,
+        messages: [...rawChannel.messages].reverse().map((message) => {
           const reactionMap = new Map<string, string[]>();
           for (const r of message.reactions) {
             const arr = reactionMap.get(r.emoji) ?? [];
