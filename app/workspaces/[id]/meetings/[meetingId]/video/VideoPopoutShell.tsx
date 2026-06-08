@@ -325,6 +325,10 @@ export function VideoPopoutShell({
           callPending={callPending}
           workspaceId={workspaceId}
           onCancel={() => setCallOverlayDismissed(true)}
+          onAccepted={() => {
+            setCallOverlayDismissed(true);
+            router.refresh();
+          }}
           onDeclined={() => {
             setCallDeclined(true);
             router.push(callsHref);
@@ -1026,11 +1030,13 @@ function CallerWaitingOverlay({
   workspaceId,
   onCancel,
   onDeclined,
+  onAccepted,
 }: {
   callPending: CallPendingProps;
   workspaceId: string;
   onCancel: () => void;
   onDeclined: () => void;
+  onAccepted: () => void;
 }) {
   const router = useRouter();
   const [secondsLeft, setSecondsLeft] = useState(() =>
@@ -1074,12 +1080,11 @@ function CallerWaitingOverlay({
         });
         if (cancelled) return;
         if (res.status === 410) {
-          // Row gone — callee accepted. Dismiss overlay and refresh so the
-          // caller's video room picks up the callee joining.
+          // Row gone — callee accepted or declined. Dismiss overlay and
+          // refresh; if they accepted they'll appear in the LiveKit room.
           clearInterval(interval);
           audioRef.current?.pause();
-          router.refresh();
-          onDeclined();
+          onAccepted();
         } else if (res.status === 404) {
           clearInterval(interval);
           audioRef.current?.pause();
@@ -1091,7 +1096,7 @@ function CallerWaitingOverlay({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [callPending.pendingCallId, onDeclined, router]);
+  }, [callPending.pendingCallId, onAccepted, onDeclined]);
 
   // Auto-dismiss toast
   useEffect(() => {
