@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PermissionSubmitButton } from "@/components/PermissionSubmitButton";
 import { RealtimeChatPanel, type RealtimeChatChannel } from "@/components/RealtimeChatPanel";
+import { IncomingCallModal } from "@/components/IncomingCallModal";
 import { admitAllToMeeting, admitToMeeting, setMeetingPermissionOverride } from "@/app/workspaces/[id]/meetings/[meetingId]/actions";
 import { cancelCall, expireCall } from "@/app/workspaces/[id]/meetings/actions";
 import { hasRecentActiveVideoSession, MeetingVideoRoom } from "./MeetingVideoRoom";
@@ -19,6 +20,16 @@ type WaitingUser = {
 type CallPendingProps = {
   pendingCallId: string;
   calleeDisplayName: string;
+  expiresAt: string;
+};
+
+type CallIncomingProps = {
+  pendingCallId: string;
+  callerId: string;
+  callerName: string;
+  callerAvatarUrl: string | null;
+  meetingId: string;
+  workspaceId: string;
   expiresAt: string;
 };
 
@@ -41,6 +52,7 @@ type VideoPopoutShellProps = {
   context: VideoMeetingContextProps;
   chat: VideoMeetingChatProps;
   callPending?: CallPendingProps;
+  callIncoming?: CallIncomingProps;
 };
 
 export type MeetingVideoRecording = {
@@ -168,11 +180,13 @@ export function VideoPopoutShell({
   context,
   chat,
   callPending,
+  callIncoming,
 }: VideoPopoutShellProps) {
   const router = useRouter();
   const [isReturning, setIsReturning] = useState(false);
   const [callOverlayDismissed, setCallOverlayDismissed] = useState(false);
   const [callDeclined, setCallDeclined] = useState(false);
+  const [callIncomingDismissed, setCallIncomingDismissed] = useState(false);
   const [waitingUsers, setWaitingUsers] = useState<WaitingUser[]>([]);
   const waitingPollRef = useRef<number | null>(null);
   const [wasOpenedByHub, setWasOpenedByHub] = useState(false);
@@ -292,6 +306,7 @@ export function VideoPopoutShell({
   }, [canModerate, waitingRoom, meetingId]);
 
   const showCallOverlay = !!callPending && !callOverlayDismissed && !callDeclined;
+  const showIncomingOverlay = !!callIncoming && !callIncomingDismissed;
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
@@ -301,6 +316,16 @@ export function VideoPopoutShell({
           workspaceId={workspaceId}
           onCancel={() => setCallOverlayDismissed(true)}
           onDeclined={() => setCallDeclined(true)}
+        />
+      ) : null}
+      {showIncomingOverlay ? (
+        <IncomingCallModal
+          call={callIncoming}
+          onDismiss={() => {
+            setCallIncomingDismissed(true);
+            router.push(hubHref);
+          }}
+          onToast={() => {}}
         />
       ) : null}
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-5 sm:px-8 lg:px-10">
