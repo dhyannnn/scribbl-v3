@@ -305,8 +305,18 @@ export function VideoPopoutShell({
     };
   }, [canModerate, waitingRoom, meetingId]);
 
+  const callsHref = `/workspaces/${workspaceId}/calls`;
   const showCallOverlay = !!callPending && !callOverlayDismissed && !callDeclined;
   const showIncomingOverlay = !!callIncoming && !callIncomingDismissed;
+
+  // When the caller cancels or the call expires server-side, callIncoming disappears
+  // (MeetingRouteRefresher re-renders the page). Redirect the callee to the calls page.
+  const hadIncomingCall = useRef(!!callIncoming);
+  useEffect(() => {
+    if (hadIncomingCall.current && !callIncoming && !callIncomingDismissed) {
+      router.push(callsHref);
+    }
+  }, [callIncoming, callIncomingDismissed, callsHref, router]);
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
@@ -315,7 +325,10 @@ export function VideoPopoutShell({
           callPending={callPending}
           workspaceId={workspaceId}
           onCancel={() => setCallOverlayDismissed(true)}
-          onDeclined={() => setCallDeclined(true)}
+          onDeclined={() => {
+            setCallDeclined(true);
+            router.push(callsHref);
+          }}
         />
       ) : null}
       {showIncomingOverlay ? (
@@ -323,7 +336,7 @@ export function VideoPopoutShell({
           call={callIncoming}
           onDismiss={() => {
             setCallIncomingDismissed(true);
-            router.push(hubHref);
+            router.push(callsHref);
           }}
           onToast={() => {}}
         />
@@ -1045,7 +1058,6 @@ function CallerWaitingOverlay({
       audioRef.current?.pause();
       void expireCall(callPending.pendingCallId);
       onDeclined();
-      setToast("Call wasn't answered");
       return;
     }
     const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
@@ -1066,14 +1078,12 @@ function CallerWaitingOverlay({
           // caller's video room picks up the callee joining.
           clearInterval(interval);
           audioRef.current?.pause();
-          onDeclined();
           router.refresh();
+          onDeclined();
         } else if (res.status === 404) {
-          // Unknown id — shouldn't happen; treat same as declined
           clearInterval(interval);
           audioRef.current?.pause();
           onDeclined();
-          setToast("Call wasn't answered");
         }
       } catch { /* network error — ignore */ }
     }, 2000);
@@ -1081,7 +1091,7 @@ function CallerWaitingOverlay({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [callPending.pendingCallId, onDeclined]);
+  }, [callPending.pendingCallId, onDeclined, router]);
 
   // Auto-dismiss toast
   useEffect(() => {
