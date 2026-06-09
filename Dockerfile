@@ -9,7 +9,6 @@ RUN npm ci
 
 COPY . .
 RUN npm run build
-RUN DATABASE_URL=postgresql://placeholder:placeholder@localhost/placeholder npx prisma generate
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM node:20-slim AS runner
@@ -40,16 +39,13 @@ ENV CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
 COPY package*.json .npmrc ./
 COPY prisma ./prisma
-RUN npm ci --omit=dev --ignore-scripts
+# prisma is now a prod dep — npm ci installs CLI + engines, postinstall runs prisma generate
+RUN DATABASE_URL=postgresql://placeholder:placeholder@localhost/placeholder npm ci --omit=dev
 
-# Copy built output, generated Prisma client, and Prisma CLI from builder stage
+# Copy built output from builder stage
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
 
 EXPOSE 3000
 ENV NODE_ENV=production
