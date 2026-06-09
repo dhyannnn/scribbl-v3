@@ -27,6 +27,7 @@ export function shapePoll(
   },
   currentUserId: string,
 ): PollData {
+  if (!Array.isArray(poll.options)) return { id: poll.id, question: poll.question, options: [], createdByUserId: poll.createdByUserId, createdByName: poll.createdBy.displayName, closedAt: poll.closedAt?.toISOString() ?? null, createdAt: poll.createdAt.toISOString(), myVote: null, votes: [] };
   const opts = poll.options as string[];
   return {
     id: poll.id,

@@ -390,7 +390,7 @@ export async function startMeetingRecording(formData: FormData) {
     }
   }
 
-  if (!RateLimits.recordingStart(currentUser.id)) {
+  if (!await RateLimits.recordingStart(currentUser.id)) {
     return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
   }
 
@@ -511,7 +511,7 @@ export async function stopMeetingRecording(formData: FormData) {
     return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
   }
 
-  if (!RateLimits.recordingStop(currentUser.id)) {
+  if (!await RateLimits.recordingStop(currentUser.id)) {
     return finishRecordingAction(formData, workspaceId, meetingId, "unauthorized");
   }
 
@@ -1561,7 +1561,7 @@ export async function raiseHand(formData: FormData) {
   const handRaiseEnabled = meeting.moderationSettings?.handRaiseEnabled ?? true;
 
   if (!isModerator && !handRaiseEnabled) return;
-  if (!RateLimits.handRaise(currentUser.id)) return;
+  if (!await RateLimits.handRaise(currentUser.id)) return;
 
   await prisma.meetingParticipant.update({
     where: { id: participant.id },

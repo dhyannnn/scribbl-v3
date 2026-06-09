@@ -370,6 +370,7 @@ model Channel {
   seriesMeetings Meeting[]         @relation("SeriesChannel")
 
   @@index([workspaceId])
+  @@unique([dmUser1Id, dmUser2Id])
 }
 
 model Message {
@@ -445,6 +446,7 @@ model Note {
   @@index([workspaceId])
   @@index([ownerUserId])
   @@index([shareToken])
+  @@index([workspaceId, visibility, deletedAt])
 }
 
 model NoteComment {
@@ -516,6 +518,7 @@ model File {
 
   @@index([workspaceId])
   @@index([uploadedByUserId])
+  @@index([workspaceId, visibility])
 }
 
 model Meeting {
@@ -899,4 +902,17 @@ model ChannelLastRead {
 
   @@id([channelId, userId])
   @@index([userId])
+}
+
+// ── Infrastructure ────────────────────────────────────────────────────────────
+
+model RateLimitEntry {
+  key         String   @id
+  count       Int      @default(1)
+  windowStart DateTime @default(now())
+}
+
+model StripeEventLog {
+  eventId    String   @id
+  processedAt DateTime @default(now())
 }

@@ -60,8 +60,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Upload failed." }, { status: 500 });
   }
 
-  const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(storagePath);
-
   const fileRecord = await prisma.file.create({
     data: {
       workspaceId,
@@ -72,7 +70,7 @@ export async function POST(request: Request) {
       visibility: "WORKSPACE_SHARED",
       storageBucket: bucket,
       storageKey: storagePath,
-      publicUrl: urlData.publicUrl,
+      publicUrl: null,
     },
     select: { id: true, name: true, mimeType: true, sizeBytes: true, publicUrl: true },
   });

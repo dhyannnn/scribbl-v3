@@ -98,7 +98,7 @@ export async function uploadWorkspaceFile(formData: FormData) {
     }
   }
 
-  if (!RateLimits.fileUpload(currentUser.id)) {
+  if (!await RateLimits.fileUpload(currentUser.id)) {
     redirect(`/workspaces/${workspace.id}/files?file=upload-rate-limited`);
   }
 

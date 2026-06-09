@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { writeAuditLog } from "@/lib/audit-log";
+import { broadcastWorkspaceKick } from "@/lib/liveblocks-kick";
 import { createAppUrl } from "@/lib/app-url";
 import { FREE_MEMBER_LIMIT } from "@/lib/billing";
 import { RateLimits } from "@/lib/rate-limit";
@@ -127,7 +128,7 @@ export async function addWorkspaceMember(formData: FormData) {
     redirect(`/workspaces/${workspace.id}/members?invite=plan-limit`);
   }
 
-  if (!RateLimits.inviteCreate(currentUser.id)) {
+  if (!await RateLimits.inviteCreate(currentUser.id)) {
     redirect(`/workspaces/${workspace.id}/members?invite=rate-limited`);
   }
 
@@ -292,6 +293,8 @@ export async function removeWorkspaceMember(formData: FormData) {
     workspaceId: membership.workspaceId,
     targetId: membership.userId,
   });
+
+  void broadcastWorkspaceKick(membership.workspaceId, membership.userId).catch(console.error);
 
   revalidatePath(`/workspaces/${membership.workspaceId}`);
   revalidatePath(`/workspaces/${membership.workspaceId}/members`);
@@ -577,7 +580,7 @@ export async function resendWorkspaceInvite(formData: FormData) {
     return;
   }
 
-  if (!RateLimits.inviteResend(currentUser.id)) {
+  if (!await RateLimits.inviteResend(currentUser.id)) {
     redirect(`/workspaces/${workspaceId}/members?invite=rate-limited`);
   }
 
