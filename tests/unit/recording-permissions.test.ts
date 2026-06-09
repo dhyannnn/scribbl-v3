@@ -55,6 +55,8 @@ describe("startMeetingRecording", () => {
 
   beforeEach(() => {
     mockGetCurrentUser.mockResolvedValue(owner);
+    // checkRateLimit uses $queryRaw — mock it to return count=1 (within limit)
+    prismaMock.$queryRaw.mockResolvedValue([{ count: BigInt(1) }] as never);
   });
 
   it("redirects to login when the user is unauthenticated", async () => {

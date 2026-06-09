@@ -88,6 +88,7 @@ describe("acceptWorkspaceInvite", () => {
 
   beforeEach(() => {
     mockGetCurrentUser.mockResolvedValue(invitee);
+    prismaMock.$queryRaw.mockResolvedValue([{ count: BigInt(1) }] as never);
   });
 
   it("redirects unauthenticated users to login", async () => {
@@ -185,6 +186,7 @@ describe("resendWorkspaceInvite", () => {
   it("refreshes token and expiry on resend", async () => {
     mockGetCurrentUser.mockResolvedValue(owner);
     prismaMock.workspaceMember.findUnique.mockResolvedValue(ownerMembership);
+    prismaMock.$queryRaw.mockResolvedValue([{ count: BigInt(1) }] as never);
 
     const invite = {
       ...makeInvite(workspace.id, owner.id),
