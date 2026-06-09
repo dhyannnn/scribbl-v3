@@ -33,6 +33,14 @@ export async function POST(request: NextRequest) {
     return new Response("Invalid webhook signature", { status: 400 });
   }
 
+  // Idempotency guard — Stripe retries on network failure; prevent double-processing
+  try {
+    await prisma.stripeEventLog.create({ data: { eventId: event.id } });
+  } catch {
+    // Unique constraint violation = already processed
+    return new Response("ok", { status: 200 });
+  }
+
   try {
     switch (event.type) {
       case "customer.subscription.created":
@@ -106,7 +114,7 @@ export async function POST(request: NextRequest) {
                 to: owner.email,
                 workspaceName: sub.workspace?.name ?? "your workspace",
                 manageUrl: `${appUrl}/workspaces/${sub.workspaceId}/billing`,
-              });
+              }).catch((err) => console.error("[stripe webhook] sendPaymentFailedEmail failed", err));
             }
           }
         }
@@ -244,7 +252,7 @@ async function cancelSubscription(subscription: Stripe.Subscription) {
         workspaceName: existing.workspace?.name ?? "your workspace",
         planName: previousPlan.charAt(0) + previousPlan.slice(1).toLowerCase(),
         periodEnd: periodEnd ? new Date(periodEnd * 1000) : undefined,
-      });
+      }).catch((err) => console.error("[stripe webhook] sendCancellationEmail failed", err));
     }
   }
 }

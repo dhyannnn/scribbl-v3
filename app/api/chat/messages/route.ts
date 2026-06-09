@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  if (!RateLimits.chatSend(currentUser.id)) {
+  if (!await RateLimits.chatSend(currentUser.id)) {
     return NextResponse.json({ error: "Too many messages. Slow down." }, { status: 429 });
   }
 

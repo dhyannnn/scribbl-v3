@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/current-user";
 import { parseChatRoomId, parseMeetingChatRoomId, parseNoteRoomId } from "@/lib/liveblocks-room";
 import { canEditMeetingNotes, getMeetingLifecycle } from "@/lib/meeting-lifecycle";
 import { logger } from "@/lib/logger";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 
 const liveblocksSecret = process.env.LIVEBLOCKS_SECRET_KEY;
@@ -42,6 +43,10 @@ export async function POST(request: Request) {
 
   if (!currentUser) {
     return Response.json({ error: "forbidden", reason: "Unknown user." }, { status: 403 });
+  }
+
+  if (!await checkRateLimit(`liveblocks-auth:${currentUser.id}`, 30, 60_000)) {
+    return Response.json({ error: "forbidden", reason: "Rate limit exceeded." }, { status: 429 });
   }
 
   const session = liveblocks.prepareSession(currentUser.id, {

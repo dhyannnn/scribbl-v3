@@ -44,7 +44,7 @@ export async function createGroup(formData: FormData) {
     redirect(`/workspaces/${workspaceId}/groups?group=plan-limit`);
   }
 
-  if (!RateLimits.groupCreate(currentUser.id)) {
+  if (!await RateLimits.groupCreate(currentUser.id)) {
     redirect(`/workspaces/${workspaceId}/groups?group=rate-limited`);
   }
 
@@ -105,7 +105,7 @@ export async function deleteGroup(formData: FormData) {
     redirect(`/workspaces/${workspaceId}/groups?group=not-found`);
   }
 
-  if (!RateLimits.groupDelete(currentUser.id)) {
+  if (!await RateLimits.groupDelete(currentUser.id)) {
     redirect(`/workspaces/${workspaceId}/groups?group=rate-limited`);
   }
 
@@ -169,7 +169,7 @@ export async function addGroupMember(formData: FormData) {
     redirect(`/workspaces/${workspaceId}/groups?group=member-not-found`);
   }
 
-  if (!RateLimits.groupMemberAdd(currentUser.id)) {
+  if (!await RateLimits.groupMemberAdd(currentUser.id)) {
     redirect(`/workspaces/${workspaceId}/groups?group=rate-limited`);
   }
 
@@ -228,7 +228,7 @@ export async function removeGroupMember(formData: FormData) {
     redirect(`/workspaces/${workspaceId}/groups?group=not-found`);
   }
 
-  if (!RateLimits.groupMemberRemove(currentUser.id)) {
+  if (!await RateLimits.groupMemberRemove(currentUser.id)) {
     redirect(`/workspaces/${workspaceId}/groups?group=rate-limited`);
   }
 

@@ -775,6 +775,7 @@ export async function fetchEmbedMeta(rawUrl: string): Promise<{ title: string; p
 
 export async function updateNotePageSetup(
   noteId: string,
+  workspaceId: string,
   data: {
     orientation: string;
     marginTop: number;
@@ -787,7 +788,7 @@ export async function updateNotePageSetup(
   if (!currentUser) return;
 
   const note = await prisma.note.findFirst({
-    where: { id: noteId, deletedAt: null },
+    where: { id: noteId, workspaceId, deletedAt: null },
     select: { id: true, ownerUserId: true, workspaceId: true },
   });
   if (!note) return;
@@ -818,11 +819,19 @@ export async function toggleNoteShare(
   const currentUser = await getCurrentUser();
   if (!currentUser) return { isPublic: false, shareToken: null };
 
-  const note = await prisma.note.findFirst({
-    where: { id: noteId, workspaceId, deletedAt: null },
-    select: { id: true, ownerUserId: true, isPublic: true, shareToken: true },
-  });
-  if (!note || note.ownerUserId !== currentUser.id) return { isPublic: false, shareToken: null };
+  const [note, membership] = await Promise.all([
+    prisma.note.findFirst({
+      where: { id: noteId, workspaceId, deletedAt: null },
+      select: { id: true, ownerUserId: true, isPublic: true, shareToken: true },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { status: true },
+    }),
+  ]);
+  if (!note || note.ownerUserId !== currentUser.id || membership?.status !== "ACTIVE") {
+    return { isPublic: false, shareToken: null };
+  }
 
   const newIsPublic = !note.isPublic;
   const newToken = newIsPublic ? (note.shareToken ?? crypto.randomUUID()) : note.shareToken;
@@ -848,11 +857,17 @@ export async function addNoteComment(
   const currentUser = await getCurrentUser();
   if (!currentUser || !commentId.trim() || !text.trim()) return;
 
-  const membership = await prisma.workspaceMember.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
-    select: { status: true },
-  });
-  if (membership?.status !== "ACTIVE") return;
+  const [membership, note] = await Promise.all([
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { status: true },
+    }),
+    prisma.note.findFirst({
+      where: { id: noteId, workspaceId, deletedAt: null },
+      select: { id: true },
+    }),
+  ]);
+  if (membership?.status !== "ACTIVE" || !note) return;
 
   await prisma.noteComment.create({
     data: {
@@ -871,11 +886,22 @@ export async function resolveNoteComment(noteId: string, workspaceId: string, co
   const currentUser = await getCurrentUser();
   if (!currentUser) return;
 
-  const membership = await prisma.workspaceMember.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
-    select: { status: true },
-  });
+  const [membership, comment] = await Promise.all([
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { status: true, role: true },
+    }),
+    prisma.noteComment.findFirst({
+      where: { noteId, commentId },
+      select: { userId: true },
+    }),
+  ]);
   if (membership?.status !== "ACTIVE") return;
+  if (!comment) return;
+
+  const isAuthor = comment.userId === currentUser.id;
+  const isAdminOrOwner = membership.role === "ADMIN" || membership.role === "OWNER";
+  if (!isAuthor && !isAdminOrOwner) return;
 
   await prisma.noteComment.updateMany({
     where: { noteId, commentId, resolvedAt: null },
@@ -889,11 +915,22 @@ export async function deleteNoteComment(noteId: string, workspaceId: string, com
   const currentUser = await getCurrentUser();
   if (!currentUser) return;
 
-  const membership = await prisma.workspaceMember.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
-    select: { status: true },
-  });
+  const [membership, comment] = await Promise.all([
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { status: true, role: true },
+    }),
+    prisma.noteComment.findFirst({
+      where: { noteId, commentId },
+      select: { userId: true },
+    }),
+  ]);
   if (membership?.status !== "ACTIVE") return;
+  if (!comment) return;
+
+  const isAuthor = comment.userId === currentUser.id;
+  const isAdminOrOwner = membership.role === "ADMIN" || membership.role === "OWNER";
+  if (!isAuthor && !isAdminOrOwner) return;
 
   await prisma.noteComment.deleteMany({
     where: { noteId, commentId },
@@ -919,10 +956,16 @@ export async function saveNoteSnapshot(noteId: string, contentJson: unknown) {
 
   const note = await prisma.note.findFirst({
     where: { id: noteId, deletedAt: null },
-    select: { id: true, ownerUserId: true, collaboration: true },
+    select: { id: true, ownerUserId: true, collaboration: true, workspaceId: true },
   });
-  if (!note) return;
+  if (!note || !note.workspaceId) return;
   if (note.ownerUserId !== currentUser.id && note.collaboration !== "COLLABORATIVE") return;
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId: note.workspaceId, userId: currentUser.id } },
+    select: { status: true },
+  });
+  if (membership?.status !== "ACTIVE") return;
 
   await prisma.$transaction(async (tx) => {
     await tx.noteSnapshot.create({

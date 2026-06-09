@@ -256,22 +256,25 @@ export async function acceptCall(pendingCallId: string) {
   const currentUser = await getCurrentUser();
   if (!currentUser) return { error: "unauthorized" };
 
-  const pendingCall = await prisma.pendingCall.findUnique({
-    where: { id: pendingCallId },
-    select: { calleeId: true, meetingId: true, expiresAt: true, meeting: { select: { workspaceId: true } } },
+  const result = await prisma.$transaction(async (tx) => {
+    const call = await tx.pendingCall.findUnique({
+      where: { id: pendingCallId },
+      select: { calleeId: true, meetingId: true, expiresAt: true, meeting: { select: { workspaceId: true } } },
+    });
+
+    if (!call || call.calleeId !== currentUser.id) return { error: "not_found" as const };
+    if (call.expiresAt < new Date()) {
+      await tx.pendingCall.deleteMany({ where: { id: pendingCallId } });
+      return { error: "expired" as const };
+    }
+
+    const deleted = await tx.pendingCall.deleteMany({ where: { id: pendingCallId } });
+    if (deleted.count === 0) return { error: "already_accepted" as const };
+
+    return { meetingId: call.meetingId, workspaceId: call.meeting.workspaceId };
   });
 
-  if (!pendingCall || pendingCall.calleeId !== currentUser.id) {
-    return { error: "not_found" };
-  }
-
-  if (pendingCall.expiresAt < new Date()) {
-    await prisma.pendingCall.deleteMany({ where: { id: pendingCallId } });
-    return { error: "expired" };
-  }
-
-  await prisma.pendingCall.deleteMany({ where: { id: pendingCallId } });
-  return { meetingId: pendingCall.meetingId, workspaceId: pendingCall.meeting.workspaceId };
+  return result;
 }
 
 export async function scheduleMeeting(formData: FormData) {
@@ -342,7 +345,7 @@ export async function scheduleMeeting(formData: FormData) {
     redirect(`/workspaces/${workspaceId}/meetings?meeting=unauthorized`);
   }
 
-  if (!RateLimits.meetingSchedule(currentUser.id)) {
+  if (!await RateLimits.meetingSchedule(currentUser.id)) {
     redirect(`/workspaces/${workspaceId}/meetings?meeting=rate-limited`);
   }
 
@@ -389,13 +392,18 @@ export async function scheduleMeeting(formData: FormData) {
   }
 
   // Parse optional recurrence
+  const VALID_RECURRENCES = ["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY"] as const;
+  type RecurrenceFrequency = (typeof VALID_RECURRENCES)[number];
   const recurrenceRaw = String(formData.get("recurrence") ?? "").trim();
+  const recurrence = VALID_RECURRENCES.includes(recurrenceRaw as RecurrenceFrequency)
+    ? (recurrenceRaw as RecurrenceFrequency)
+    : null;
   const recurrenceEndsAtRaw = String(formData.get("recurrenceEndsAt") ?? "").trim();
   const recurrenceEndsAtDate = recurrenceEndsAtRaw
     ? parseLocalDateTimeInZone(recurrenceEndsAtRaw + "T23:59", userTimezone)
     : null;
   const isRecurringSeries =
-    Boolean(recurrenceRaw) &&
+    recurrence !== null &&
     recurrenceEndsAtDate !== null &&
     !isNaN(recurrenceEndsAtDate.getTime()) &&
     recurrenceEndsAtDate > startsAt;
@@ -411,7 +419,7 @@ export async function scheduleMeeting(formData: FormData) {
     // (pgBouncer connection-pooling breaks async-callback transactions).
     const seriesId = crypto.randomUUID();
     const durationMs = safeDuration * 60 * 1000;
-    const slots = generateSeriesDates(startsAt, durationMs, recurrenceRaw, recurrenceEndsAtDate!);
+    const slots = generateSeriesDates(startsAt, durationMs, recurrence!, recurrenceEndsAtDate!);
 
     if (slots.length === 0) {
       redirect(`/workspaces/${workspaceId}/meetings?meeting=invalid`);
@@ -444,7 +452,7 @@ export async function scheduleMeeting(formData: FormData) {
         createdByUserId: currentUser.id,
         seriesId,
         seriesChannelId,
-        recurrence: recurrenceRaw as "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY",
+        recurrence: recurrence!,
         seriesIndex: i + 1,
         recurrenceEndsAt: recurrenceEndsAtDate,
         waitingRoom,
@@ -561,7 +569,7 @@ export async function scheduleMeeting(formData: FormData) {
         durationMinutes: safeDuration,
         firstSessionAt: capturedSeriesInfo.firstSlot,
         lastSessionAt: capturedSeriesInfo.lastSlot,
-        recurrence: recurrenceRaw,
+        recurrence: recurrence!,
         recipients: emailRecipientMembers.map((member) => member.user.email),
         scheduledByName: currentUser.displayName,
         sessionCount: capturedSeriesInfo.sessionCount,
@@ -1081,11 +1089,10 @@ function getDurationMinutes(startsAt: Date, endsAt?: Date | null) {
 }
 
 function runAfterResponse(task: () => Promise<void>) {
+  const run = () => task().catch((err) => console.error("[runAfterResponse]", err));
   try {
-    after(() => {
-      void task();
-    });
+    after(run);
   } catch {
-    void task();
+    void run();
   }
 }

@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { LsonObject } from "@liveblocks/client";
-import { ClientSideSuspense, RoomProvider, useErrorListener, useStatus } from "@liveblocks/react/suspense";
+import { ClientSideSuspense, RoomProvider, useErrorListener, useEventListener, useStatus } from "@liveblocks/react/suspense";
 import { isLiveblocksTimingVerbose, liveblocksNow, logLiveblocksClientTiming } from "@/lib/liveblocks-timing";
 
 export function LiveblocksRoom({
   children,
+  currentUserId,
   fallback,
   initialStorage,
   lazy = false,
@@ -16,6 +18,7 @@ export function LiveblocksRoom({
   roomId,
 }: {
   children: ReactNode;
+  currentUserId?: string;
   fallback?: ReactNode;
   initialStorage?: LsonObject;
   lazy?: boolean;
@@ -59,9 +62,28 @@ export function LiveblocksRoom({
   return (
     <RoomProvider key={providerKey ?? roomId} id={roomId} initialPresence={{}} initialStorage={initialStorage}>
       <LiveblocksRoomTiming roomId={roomId} providerKey={providerKey} />
+      {currentUserId && <KickListener currentUserId={currentUserId} />}
       <ClientSideSuspense fallback={connectionFallback}>{children}</ClientSideSuspense>
     </RoomProvider>
   );
+}
+
+function KickListener({ currentUserId }: { currentUserId: string }) {
+  const router = useRouter();
+
+  useEventListener(({ event }) => {
+    if (
+      event !== null &&
+      typeof event === "object" &&
+      !Array.isArray(event) &&
+      event.type === "WORKSPACE_KICK" &&
+      event.userId === currentUserId
+    ) {
+      router.push("/dashboard");
+    }
+  });
+
+  return null;
 }
 
 function LiveblocksRoomTiming({ roomId, providerKey }: { roomId: string; providerKey?: string }) {

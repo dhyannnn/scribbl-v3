@@ -173,7 +173,7 @@ export async function updateAccountPassword(formData: FormData) {
     redirect("/login?next=/account");
   }
 
-  if (!RateLimits.passwordUpdate(authUser.id)) {
+  if (!await RateLimits.passwordUpdate(authUser.id)) {
     redirect("/account?message=Too many password update attempts. Try again later.");
   }
 
@@ -202,7 +202,7 @@ export async function deleteAccount(formData: FormData) {
     redirect("/login");
   }
 
-  if (!RateLimits.accountDelete(currentUser.id)) {
+  if (!await RateLimits.accountDelete(currentUser.id)) {
     redirect("/account?message=Too many deletion attempts. Try again later.");
   }
 

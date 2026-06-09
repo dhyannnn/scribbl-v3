@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { FREE_MEMBER_LIMIT } from "@/lib/billing";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
@@ -160,6 +161,13 @@ export async function downgradeToFree(formData: FormData) {
     if (hasActivePaidSub) {
       redirect(`/workspaces/${workspaceId}/billing?billing=use-portal-to-change`);
     }
+  }
+
+  const activeMemberCount = await prisma.workspaceMember.count({
+    where: { workspaceId, status: "ACTIVE" },
+  });
+  if (activeMemberCount > FREE_MEMBER_LIMIT) {
+    redirect(`/workspaces/${workspaceId}/billing?billing=too-many-members`);
   }
 
   await prisma.workspace.update({ where: { id: workspaceId }, data: { plan: "FREE" } });

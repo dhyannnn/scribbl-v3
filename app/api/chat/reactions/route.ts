@@ -44,7 +44,8 @@ export async function POST(request: Request) {
 
   const { messageId, emoji } = parseBody(body);
   if (!messageId || !emoji) return NextResponse.json({ error: "messageId and emoji are required." }, { status: 400 });
-  if ([...emoji].length > 2) return NextResponse.json({ error: "Invalid emoji." }, { status: 400 });
+  const graphemes = [...new Intl.Segmenter().segment(emoji)];
+  if (graphemes.length !== 1) return NextResponse.json({ error: "Invalid emoji." }, { status: 400 });
 
   if (!(await canAccessMessage(messageId, currentUser.id))) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });

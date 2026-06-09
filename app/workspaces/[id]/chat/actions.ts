@@ -139,7 +139,7 @@ export async function createChannel(formData: FormData) {
     redirect(`/workspaces/${workspaceId}/chat?chat=unauthorized`);
   }
 
-  if (!RateLimits.channelCreate(currentUser.id)) {
+  if (!await RateLimits.channelCreate(currentUser.id)) {
     redirect(`/workspaces/${workspaceId}/chat?chat=rate-limited`);
   }
 
@@ -212,7 +212,7 @@ export async function deleteChannel(formData: FormData) {
     }
   }
 
-  if (!RateLimits.channelDelete(currentUser.id)) {
+  if (!await RateLimits.channelDelete(currentUser.id)) {
     redirect(`/workspaces/${workspaceId}/chat?chat=rate-limited`);
   }
 
@@ -380,6 +380,8 @@ export async function deleteMessage(formData: FormData) {
         id: true,
         channelId: true,
         senderUserId: true,
+        attachmentFileId: true,
+        attachmentFile: { select: { storageBucket: true, storageKey: true } },
       },
     }),
   ]);
@@ -398,6 +400,15 @@ export async function deleteMessage(formData: FormData) {
       deletedAt: new Date(),
     },
   });
+
+  // Clean up attachment file from storage and DB
+  if (message.attachmentFileId && message.attachmentFile) {
+    const { createAdminClient, getStorageBucketName } = await import("@/lib/supabase/admin");
+    const supabase = createAdminClient();
+    const bucket = message.attachmentFile.storageBucket ?? getStorageBucketName();
+    await supabase.storage.from(bucket).remove([message.attachmentFile.storageKey]);
+    await prisma.file.delete({ where: { id: message.attachmentFileId } });
+  }
 
   revalidateChatPaths(workspaceId, message.channelId, returnTo);
   redirect(getChatRedirectPath(workspaceId, message.channelId, "deleted", returnTo));

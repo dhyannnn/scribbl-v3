@@ -34,6 +34,7 @@ export async function GET(_request: NextRequest, { params }: RouteProps) {
       visibility: true,
       storageBucket: true,
       storageKey: true,
+      recordingFor: { select: { meetingId: true } },
     },
   });
 
@@ -59,6 +60,17 @@ export async function GET(_request: NextRequest, { params }: RouteProps) {
 
   if (file.visibility === "PRIVATE" && file.uploadedByUserId !== currentUser.id) {
     return NextResponse.json({ error: "You do not have access to this file." }, { status: 403 });
+  }
+
+  // Recording files are only accessible to meeting participants
+  if (file.recordingFor) {
+    const participant = await prisma.meetingParticipant.findFirst({
+      where: { meetingId: file.recordingFor.meetingId, userId: currentUser.id },
+      select: { id: true },
+    });
+    if (!participant) {
+      return NextResponse.json({ error: "You do not have access to this file." }, { status: 403 });
+    }
   }
 
   if (file.storageKey.startsWith("uploads/")) {
@@ -97,15 +109,11 @@ async function serveLegacyPublicUpload(file: {
     return new NextResponse(fileBuffer, {
       headers: {
         "Cache-Control": "no-store",
-        "Content-Disposition": `inline; filename="${sanitizeHeaderValue(file.name)}"`,
+        "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
         "Content-Type": file.mimeType || "application/octet-stream",
       },
     });
   } catch {
     return NextResponse.json({ error: "Could not open this file." }, { status: 404 });
   }
-}
-
-function sanitizeHeaderValue(value: string) {
-  return value.replaceAll(/["\r\n]/g, "");
 }

@@ -22,13 +22,21 @@ export async function createPoll(formData: FormData): Promise<{ poll?: PollData;
   const meetingId = String(formData.get("meetingId") ?? "") || null;
   const channelId = String(formData.get("channelId") ?? "") || null;
   const question = String(formData.get("question") ?? "").trim();
-  const options: string[] = [];
-  for (let i = 0; i < 4; i++) {
+  const rawOptions: string[] = [];
+  for (let i = 0; i < 10; i++) {
     const opt = String(formData.get(`option_${i}`) ?? "").trim();
-    if (opt) options.push(opt);
+    if (opt) rawOptions.push(opt);
+  }
+  // Deduplicate, enforce length, strip HTML
+  const seen = new Set<string>();
+  const options: string[] = [];
+  for (const opt of rawOptions) {
+    if (opt.length > 200) return { error: "invalid" };
+    const safe = opt.replace(/<[^>]*>/g, "");
+    if (!seen.has(safe)) { seen.add(safe); options.push(safe); }
   }
 
-  if (!workspaceId || !question || options.length < 2) return { error: "invalid" };
+  if (!workspaceId || !question.trim() || question.length > 500 || options.length < 2 || options.length > 10) return { error: "invalid" };
 
   const currentUser = await getCurrentUser();
   if (!currentUser) return { error: "unauthenticated" };

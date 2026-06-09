@@ -47,6 +47,7 @@ describe("scheduleMeeting duplicate guard", () => {
       ...workspace,
       members: [{ userId: user.id, user: { email: user.email } }],
     } as never);
+    prismaMock.$queryRaw.mockResolvedValue([{ count: BigInt(1) }] as never);
   });
 
   it("blocks non-members from scheduling meetings", async () => {

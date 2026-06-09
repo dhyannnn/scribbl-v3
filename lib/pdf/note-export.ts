@@ -117,6 +117,7 @@ async function createTextPdfBuffer(note: ExportNoteInput): Promise<Buffer> {
 
   const browser = await chromium.launch({
     headless: true,
+    executablePath: process.env.CHROMIUM_EXECUTABLE_PATH,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 

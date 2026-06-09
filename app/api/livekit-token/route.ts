@@ -179,10 +179,18 @@ export async function POST(request: Request) {
     }
   }
 
+  const ttlSeconds = meeting.endsAt
+    ? (() => {
+        const remaining = Math.round((meeting.endsAt.getTime() - Date.now()) / 1000);
+        if (remaining <= 300) return 300;
+        return remaining + 15 * 60;
+      })()
+    : 7200;
+
   const token = new AccessToken(livekitApiKey, livekitApiSecret, {
     identity: currentUser.id,
     name: currentUser.displayName,
-    ttl: "2h",
+    ttl: ttlSeconds,
   });
 
   token.addGrant({

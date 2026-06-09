@@ -1,4 +1,5 @@
-FROM mcr.microsoft.com/playwright:v1.59.1-noble
+# ── Stage 1: build ────────────────────────────────────────────────────────────
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
@@ -8,6 +9,42 @@ RUN npm ci
 
 COPY . .
 RUN npm run build
+
+# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+FROM node:20-slim AS runner
+
+WORKDIR /app
+
+# Install Chromium + its system dependencies (required for Playwright PDF export)
+RUN apt-get update && apt-get install -y \
+  chromium \
+  libglib2.0-0 \
+  libnss3 \
+  libatk1.0-0 \
+  libatk-bridge2.0-0 \
+  libcups2 \
+  libdrm2 \
+  libxkbcommon0 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxfixes3 \
+  libxrandr2 \
+  libgbm1 \
+  libasound2 \
+  --no-install-recommends && \
+  rm -rf /var/lib/apt/lists/*
+
+# Point our app's Playwright launch to the system Chromium
+ENV CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+
+COPY package*.json .npmrc ./
+COPY prisma ./prisma
+RUN npm ci --omit=dev
+
+# Copy built output from builder stage
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 
 EXPOSE 3000
 ENV NODE_ENV=production

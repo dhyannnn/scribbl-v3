@@ -1,9 +1,10 @@
 import "server-only";
 
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async function getCurrentUser() {
   const authUser = await getSupabaseAuthUser();
 
   if (authUser?.email) {
@@ -58,7 +59,7 @@ export async function getCurrentUser() {
   }
 
   return null;
-}
+});
 
 export async function getSupabaseAuthUser() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
