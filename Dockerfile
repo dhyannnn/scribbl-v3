@@ -8,7 +8,7 @@ COPY prisma ./prisma
 RUN npm ci
 
 COPY . .
-RUN npm run build
+RUN npm run build && npx prisma generate
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM node:20-slim AS runner
@@ -39,12 +39,14 @@ ENV CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
 COPY package*.json .npmrc ./
 COPY prisma ./prisma
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 
-# Copy built output from builder stage
+# Copy built output and generated Prisma client from builder stage
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 EXPOSE 3000
 ENV NODE_ENV=production
