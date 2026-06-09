@@ -8,7 +8,8 @@ COPY prisma ./prisma
 RUN npm ci
 
 COPY . .
-RUN npm run build && npx prisma generate
+RUN npm run build
+RUN DATABASE_URL=postgresql://placeholder:placeholder@localhost/placeholder npx prisma generate
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM node:20-slim AS runner
