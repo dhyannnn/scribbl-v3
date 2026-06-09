@@ -46,7 +46,7 @@ export function PageSetupModal({
     };
     try {
       const { updateNotePageSetup } = await import("@/app/workspaces/[id]/notes/actions");
-      await updateNotePageSetup(noteId, settings);
+      await updateNotePageSetup(noteId, workspaceId, settings);
       onSave?.(settings);
       onClose();
     } finally {
