@@ -8,6 +8,15 @@ COPY prisma ./prisma
 RUN npm ci
 
 COPY . .
+
+# NEXT_PUBLIC_ vars must be present at build time — Next.js statically inlines them into the client bundle
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+ARG NEXT_LIVEBLOCKS_PUBLIC_KEY
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+ENV NEXT_LIVEBLOCKS_PUBLIC_KEY=$NEXT_LIVEBLOCKS_PUBLIC_KEY
+
 RUN npm run build
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
