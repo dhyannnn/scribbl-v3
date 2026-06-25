@@ -46,7 +46,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </p>
 
         {message ? (
-          <p className="mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-low)] px-4 py-3 text-sm text-[var(--color-muted)]">
+          <p
+            className={
+              isConfirmationMessage(message)
+                ? "mt-4 rounded-xl border border-[var(--color-success-dim)] bg-[var(--color-success-dim)] px-4 py-3 text-sm font-medium text-[var(--color-success)]"
+                : "mt-4 rounded-xl border border-[var(--color-danger-dim)] bg-[var(--color-danger-dim)] px-4 py-3 text-sm font-medium text-[var(--color-danger)]"
+            }
+          >
             {message}
           </p>
         ) : null}
@@ -143,12 +149,19 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </div>
 
         {/* Toggle sign in / sign up */}
-        <p className="mt-6 text-center text-sm text-[var(--color-muted)]">
-          {isSignup ? "Already have an account?" : "Need an account?"}{" "}
-          <Link href={modeHref} className="font-semibold text-[var(--color-secondary)] hover:underline">
-            {isSignup ? "Sign in" : "Create one"}
-          </Link>
-        </p>
+        <div className="mt-6 flex items-center gap-3">
+          <div className="flex-1 border-t border-[var(--color-border)]" />
+          <span className="font-mono text-xs uppercase tracking-widest text-[var(--color-subtle)]">
+            {isSignup ? "Already have an account?" : "New to Scribbl?"}
+          </span>
+          <div className="flex-1 border-t border-[var(--color-border)]" />
+        </div>
+        <Link
+          href={modeHref}
+          className="mt-4 flex min-h-11 w-full items-center justify-center rounded-full border border-[var(--color-secondary)] px-4 text-sm font-semibold text-[var(--color-secondary)] transition hover:bg-[var(--color-secondary-dim)]"
+        >
+          {isSignup ? "Sign in instead" : "Create an account"}
+        </Link>
       </div>
 
       {/* Footer */}
@@ -176,6 +189,10 @@ function GoogleIcon() {
   );
 }
 
+
+function isConfirmationMessage(message: string) {
+  return message === "Check your email to confirm your account";
+}
 
 function getSafeNext(value: string | undefined) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {

@@ -364,7 +364,7 @@ export default async function MeetingVideoPage({ params, searchParams }: PagePro
     type: artifact.type,
     source: artifact.source,
     createdAt: artifact.createdAt.toISOString(),
-    title: artifact.note?.title ?? artifact.file?.name ?? "Untitled artifact",
+    title: artifact.note?.title ?? artifact.file?.name ?? "Untitled attachment",
     detail:
       artifact.note?.owner?.displayName ??
       artifact.file?.uploadedBy.displayName ??

@@ -214,7 +214,7 @@ export function MeetingNotesSection({
         selectedId={selectedPrivateNoteId}
         preserveName="sharedNoteId"
         preserveValue={selectedSharedNoteId}
-        emptyText="Create private notes while the lesson is happening. They will not appear in shared artifacts."
+        emptyText="Create private notes while the meeting is happening. They will not appear in the shared notes and files for this meeting."
         onExpand={() => setFocused("private")}
       />
     </section>

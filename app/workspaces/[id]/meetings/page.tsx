@@ -169,7 +169,7 @@ export default async function MeetingsPage({ params, searchParams }: PageProps) 
             Meetings
           </h1>
           <p className="mt-1.5 text-sm text-[var(--color-muted)]">
-            Schedule sessions, track artifacts, and review past calls.
+            Schedule sessions, track notes and files, and review past calls.
           </p>
           {getMeetingStatusMessage(meetingStatus) ? (
             <p className="mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-muted)]">
@@ -446,7 +446,7 @@ function MeetingCard({
           </span>
           {meeting.artifacts.length > 0 ? (
             <span className="text-xs text-[var(--color-subtle)]">
-              {meeting.artifacts.length} artifact{meeting.artifacts.length === 1 ? "" : "s"}
+              {meeting.artifacts.length} attachment{meeting.artifacts.length === 1 ? "" : "s"}
             </span>
           ) : null}
         </div>

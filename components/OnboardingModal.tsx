@@ -19,6 +19,12 @@ const STEPS: Step[] = [
     hint: "Takes about 30 seconds",
   },
   {
+    icon: "🗂️",
+    title: "Workspaces & Meetings",
+    body: "A workspace is your shared home base — one per class, team, or project. Inside it, you can schedule meetings for live sessions, and create notes or whiteboards that stick around afterward, whether or not they're tied to a meeting.",
+    hint: "Meetings are for live sessions — notes and whiteboards are the lasting record",
+  },
+  {
     icon: "📝",
     title: "Notes & Whiteboards",
     body: "Create rich text notes with headings, math, code blocks, and tables — type / to open the command menu. Or switch to a whiteboard for freehand sketching and diagrams.",
