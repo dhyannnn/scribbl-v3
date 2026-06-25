@@ -2087,6 +2087,108 @@ async function enforceParticipantVideoPermission({
   });
 }
 
+export async function setWhiteboardAccessForAllParticipants(formData: FormData) {
+  const workspaceId = String(formData.get("workspaceId") ?? "");
+  const meetingId = String(formData.get("meetingId") ?? "");
+  const artifactId = getOptionalFormString(formData.get("artifactId"));
+  const stateValue = String(formData.get("state") ?? "");
+
+  if (!workspaceId || !meetingId || !isMeetingPermissionState(stateValue)) {
+    return;
+  }
+
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    return;
+  }
+
+  const [meeting, currentMembership, artifact] = await Promise.all([
+    prisma.meeting.findFirst({
+      where: { id: meetingId, workspaceId },
+      select: {
+        id: true,
+        createdByUserId: true,
+        participants: {
+          select: { userId: true },
+        },
+      },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: currentUser.id } },
+      select: { role: true, status: true },
+    }),
+    artifactId
+      ? prisma.meetingArtifact.findFirst({
+          where: { id: artifactId, meetingId },
+          select: { id: true },
+        })
+      : null,
+  ]);
+
+  if (!meeting || currentMembership?.status !== "ACTIVE" || (artifactId && !artifact)) {
+    return;
+  }
+
+  const targetUserIds = meeting.participants
+    .map((participant) => participant.userId)
+    .filter((userId) => userId !== currentUser.id);
+
+  if (targetUserIds.length === 0) {
+    return;
+  }
+
+  const targetMemberships = await prisma.workspaceMember.findMany({
+    where: { workspaceId, userId: { in: targetUserIds }, status: "ACTIVE" },
+    select: { userId: true, role: true },
+  });
+
+  const grantableUserIds = targetMemberships
+    .filter((member) =>
+      canManageMeetingParticipantPermissions({
+        currentUserId: currentUser.id,
+        meetingCreatedByUserId: meeting.createdByUserId,
+        currentUserRole: currentMembership.role,
+        targetUserId: member.userId,
+        targetUserRole: member.role,
+      }),
+    )
+    .map((member) => member.userId);
+
+  if (grantableUserIds.length === 0) {
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    for (const userId of grantableUserIds) {
+      const existingOverride = await tx.meetingPermissionOverride.findFirst({
+        where: { meetingId, userId, targetType: "WHITEBOARD", artifactId },
+        select: { id: true },
+      });
+
+      if (existingOverride) {
+        await tx.meetingPermissionOverride.update({
+          where: { id: existingOverride.id },
+          data: { state: stateValue, grantedByUserId: currentUser.id },
+        });
+      } else {
+        await tx.meetingPermissionOverride.create({
+          data: {
+            meetingId,
+            userId,
+            targetType: "WHITEBOARD",
+            artifactId,
+            state: stateValue,
+            grantedByUserId: currentUser.id,
+          },
+        });
+      }
+    }
+  });
+
+  revalidateMeetingPaths(workspaceId, meetingId);
+}
+
 async function upsertMeetingPermissionOverride({
   artifactId,
   grantedByUserId,

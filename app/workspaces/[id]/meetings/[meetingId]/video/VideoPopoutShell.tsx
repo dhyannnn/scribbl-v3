@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PermissionSubmitButton } from "@/components/PermissionSubmitButton";
 import { RealtimeChatPanel, type RealtimeChatChannel } from "@/components/RealtimeChatPanel";
 import { IncomingCallModal } from "@/components/IncomingCallModal";
+import { ActiveMeetingBridge } from "@/app/workspaces/[id]/meetings/[meetingId]/ActiveMeetingBridge";
+import { useActiveMeeting } from "@/components/ActiveMeetingContext";
 import { admitAllToMeeting, admitToMeeting, setMeetingPermissionOverride } from "@/app/workspaces/[id]/meetings/[meetingId]/actions";
 import { cancelCall, expireCall } from "@/app/workspaces/[id]/meetings/actions";
 import { hasRecentActiveVideoSession, MeetingVideoRoom } from "./MeetingVideoRoom";
@@ -183,6 +185,7 @@ export function VideoPopoutShell({
   callIncoming,
 }: VideoPopoutShellProps) {
   const router = useRouter();
+  const { setVideoHidden } = useActiveMeeting();
   const [isReturning, setIsReturning] = useState(false);
   const [callOverlayDismissed, setCallOverlayDismissed] = useState(false);
   const [callDeclined, setCallDeclined] = useState(false);
@@ -190,6 +193,7 @@ export function VideoPopoutShell({
   const [waitingUsers, setWaitingUsers] = useState<WaitingUser[]>([]);
   const waitingPollRef = useRef<number | null>(null);
   const [wasOpenedByHub, setWasOpenedByHub] = useState(false);
+  const [hasHydratedOpener, setHasHydratedOpener] = useState(false);
   const [shouldAutoJoin, setShouldAutoJoin] = useState(false);
   const [activePanelTab, setActivePanelTab] = useState<VideoPanelTab>("chat");
   const wasOpenedByHubRef = useRef(false);
@@ -221,7 +225,10 @@ export function VideoPopoutShell({
     const openedByHub = Boolean(window.opener);
 
     wasOpenedByHubRef.current = openedByHub;
-    window.setTimeout(() => setWasOpenedByHub(openedByHub), 0);
+    window.setTimeout(() => {
+      setWasOpenedByHub(openedByHub);
+      setHasHydratedOpener(true);
+    }, 0);
     window.setTimeout(() => {
       setShouldAutoJoin(openedByHub && hasRecentActiveVideoSession(meetingId));
     }, 0);
@@ -318,8 +325,41 @@ export function VideoPopoutShell({
     }
   }, [callIncoming, callIncomingDismissed, callsHref, router]);
 
+  // This page is reached via same-tab navigation far more often than via a real
+  // popout window (rejoin-call buttons, accepting an incoming call, recording
+  // links all push here directly). When that happens, `window.opener` is null and
+  // none of the popout continuity logic above applies — navigating away would
+  // otherwise hard-disconnect the call. Registering the bridge here hands the
+  // session off to the persistent floating video, same as the hub does. Skipped
+  // once we know this *was* opened by the hub, since the hub's own bridge already
+  // owns the active meeting in that case.
+  const shouldRegisterBridge = hasHydratedOpener && !wasOpenedByHub;
+
+  // This page renders its own full MeetingVideoRoom below. While it's mounted,
+  // hide the floating pip so the two don't both try to connect to the same
+  // LiveKit room at once (which would trip the multi-device conflict modal
+  // against yourself). Un-hide on unmount so the floating video reappears the
+  // moment the user navigates away from this page.
+  useEffect(() => {
+    if (!shouldRegisterBridge) return;
+    setVideoHidden(true);
+    return () => setVideoHidden(false);
+  }, [shouldRegisterBridge, setVideoHidden]);
+
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
+      {shouldRegisterBridge ? (
+        <ActiveMeetingBridge
+          meetingId={meetingId}
+          workspaceId={workspaceId}
+          videoHref={`/workspaces/${workspaceId}/meetings/${meetingId}/video`}
+          canRecord={canRecord}
+          recording={recording}
+          permissions={permissions}
+          raisedHandCount={participants.filter((p) => p.handRaised).length}
+          pendingRequestCount={accessRequests.length}
+        />
+      ) : null}
       {showCallOverlay ? (
         <CallerWaitingOverlay
           callPending={callPending}

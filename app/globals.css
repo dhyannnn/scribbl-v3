@@ -354,9 +354,11 @@ body.scribbl-video-split-active [data-split-stack] {
     padding-right: var(--scribbl-video-split-width);
   }
   body.scribbl-video-split-active [data-meeting-hub-main] {
-    /* Subtract sidebar width (set by WorkspaceSidebarShell) and the video split panel width */
+    /* Subtract sidebar width (set by WorkspaceSidebarShell) and the video split panel width.
+       min-width keeps embedded whiteboards usable instead of letting the drag-resize
+       handle in FloatingMeetingVideo squeeze hub content down to an unworkable width. */
     width: calc(100vw - var(--scribbl-sidebar-w, 0px) - var(--scribbl-video-split-width));
-    min-width: 0;
+    min-width: min(640px, 100vw - var(--scribbl-sidebar-w, 0px));
     overflow: hidden;
   }
   body.scribbl-video-split-active [data-meeting-hub-shell] {
