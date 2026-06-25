@@ -51,6 +51,7 @@ import {
   attachNoteToMeeting,
   lowerParticipantHand,
   setMeetingPermissionOverride,
+  setWhiteboardAccessForAllParticipants,
   updateCurrentUserParticipantStatus,
 } from "./actions";
 
@@ -661,7 +662,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
           <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-muted)]">
             <p className="font-semibold text-[var(--color-text)]">Recap mode</p>
             <p className="mt-1">
-              Notes and artifacts are locked now. Chat history, attendance, files, and saved notes remain visible.
+              Notes and whiteboards are locked now. Chat history, attendance, files, and saved notes remain visible.
             </p>
           </section>
         ) : null}
@@ -892,6 +893,20 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                     {meeting.participants.length} total / {countActiveParticipants(meeting.participants)} in session
                   </p>
                 </div>
+                {canManageMeeting && selectedSharedArtifact?.id && selectedSharedArtifact.type === "WHITEBOARD" ? (
+                  <form action={setWhiteboardAccessForAllParticipants}>
+                    <input type="hidden" name="workspaceId" value={id} />
+                    <input type="hidden" name="meetingId" value={meeting.id} />
+                    <input type="hidden" name="artifactId" value={selectedSharedArtifact.id} />
+                    <input type="hidden" name="state" value="ALLOWED" />
+                    <PendingSubmitButton
+                      pendingLabel="Granting..."
+                      className="min-h-9 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)] disabled:opacity-50"
+                    >
+                      Allow everyone to draw
+                    </PendingSubmitButton>
+                  </form>
+                ) : null}
               </div>
               {waitingUsers.length > 0 ? (
                 <WaitingRoomHubPanel
@@ -1095,7 +1110,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
         <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="font-display text-lg font-semibold text-[var(--color-text)]">Saved Shared Artifacts</h2>
+              <h2 className="font-display text-lg font-semibold text-[var(--color-text)]">Attached Notes &amp; Files</h2>
               <p className="mt-1 text-sm text-[var(--color-muted)]">
                 Attach shared workspace resources to keep the session record together.
               </p>
@@ -1164,7 +1179,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
             <p className="mt-4 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-low)] p-4 text-sm text-[var(--color-muted)]">
               {canMutateArtifacts
                 ? "All available shared notes and files are already attached, or there are no shared resources yet."
-                : "This meeting is in recap mode, so saved artifacts are view-only."}
+                : "This meeting is in recap mode, so attached notes and files are view-only."}
             </p>
           )}
 
@@ -1174,7 +1189,7 @@ export default async function MeetingSessionPage({ params, searchParams }: PageP
                 <article key={artifact.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-low)] p-4">
                   <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[var(--color-secondary)]">{formatEnumLabel(artifact.type)}</p>
                   <h3 className="mt-1.5 break-words font-display font-semibold text-[var(--color-text)]">
-                    {artifact.note?.title ?? artifact.file?.name ?? "Saved artifact"}
+                    {artifact.note?.title ?? artifact.file?.name ?? "Untitled attachment"}
                   </h3>
                   <p className="mt-1 text-xs text-[var(--color-subtle)]">
                     Added by {artifact.createdBy.displayName}
@@ -1842,7 +1857,7 @@ function getSessionStatusLine(state: MeetingLifecycleState, startsAt: Date, ends
     case "ended":
       return <>Ended around <LocalTime date={endsAt} short />.</>;
     case "canceled":
-      return "Canceled. Saved artifacts and chat history remain available.";
+      return "Canceled. Attached notes, files, and chat history remain available.";
     case "starting-soon":
       return <>Starts at <LocalTime date={startsAt} short />.</>;
     default:

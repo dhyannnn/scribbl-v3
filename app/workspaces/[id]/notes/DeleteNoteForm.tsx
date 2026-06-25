@@ -20,7 +20,7 @@ export function DeleteNoteForm({
       action={deleteWorkspaceNote}
       onSubmit={(event) => {
         const message = isMeetingAttached
-          ? "Delete this note? It will also be removed from meeting artifacts."
+          ? "Delete this note? It will also be removed from any meetings it's attached to."
           : "Delete this note?";
 
         if (!window.confirm(message)) {

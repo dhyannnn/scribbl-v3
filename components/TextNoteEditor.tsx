@@ -680,10 +680,11 @@ function TextNoteEditorInner({
             <button
               type="button"
               onClick={onCollapse}
-              title="Collapse editor"
-              className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] p-1.5 text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
+              title="Close and return"
+              className="ml-1 flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-surface-mid)]"
             >
               <CollapseDocIcon />
+              Close
             </button>
           )}
         </div>

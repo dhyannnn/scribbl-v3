@@ -21,7 +21,7 @@ export function DeleteFileForm({
       action={deleteWorkspaceFile}
       onSubmit={(event) => {
         const message = isMeetingAttached
-          ? "Delete this file? It will also be removed from meeting artifacts."
+          ? "Delete this file? It will also be removed from any meetings it's attached to."
           : "Delete this file?";
 
         if (!window.confirm(message)) {

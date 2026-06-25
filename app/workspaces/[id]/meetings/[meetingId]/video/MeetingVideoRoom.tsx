@@ -343,13 +343,15 @@ export function MeetingVideoRoom({
     );
   }
 
+  const devicePreference = getStoredDevicePreference(meetingId);
+
   return (
     <LiveKitRoom
       token={connection.token}
       serverUrl={connection.serverUrl}
       connect
-      audio
-      video
+      audio={devicePreference.mic}
+      video={devicePreference.camera}
       onConnected={() => {
         if (leaveTimeoutRef.current !== null) {
           window.clearTimeout(leaveTimeoutRef.current);
@@ -431,6 +433,27 @@ function getStoredClientSessionId(meetingId: string): string {
 
 function clearStoredClientSessionId(meetingId: string) {
   try { localStorage.removeItem(`scribbl-video-sid:${meetingId}`); } catch { /* ignore */ }
+}
+
+// Persist mic/camera on-off preference across reconnects (mode switches, popout
+// round-trips, rejoining after navigating away). Without this, every fresh
+// LiveKit join defaults both tracks back on regardless of what the user had set.
+function getStoredDevicePreference(meetingId: string): { mic: boolean; camera: boolean } {
+  try {
+    const raw = localStorage.getItem(`scribbl-video-devices:${meetingId}`);
+    if (!raw) return { mic: true, camera: true };
+    const parsed = JSON.parse(raw) as Partial<{ mic: boolean; camera: boolean }>;
+    return {
+      mic: typeof parsed.mic === "boolean" ? parsed.mic : true,
+      camera: typeof parsed.camera === "boolean" ? parsed.camera : true,
+    };
+  } catch {
+    return { mic: true, camera: true };
+  }
+}
+
+function storeDevicePreference(meetingId: string, prefs: { mic: boolean; camera: boolean }) {
+  try { localStorage.setItem(`scribbl-video-devices:${meetingId}`, JSON.stringify(prefs)); } catch { /* ignore */ }
 }
 
 function ConferenceSurface({
@@ -633,8 +656,8 @@ function ConferenceSurface({
           <StartMediaButton className={getControlClassName(mode, effectivePermissions.canUseMic || effectivePermissions.canUseCamera)} disabled={!effectivePermissions.canUseMic && !effectivePermissions.canUseCamera}>
             Start
           </StartMediaButton>
-          <PermissionTrackToggle enabled={effectivePermissions.canUseMic} mode={mode} source={Track.Source.Microphone}>Mic</PermissionTrackToggle>
-          <PermissionTrackToggle enabled={effectivePermissions.canUseCamera} mode={mode} source={Track.Source.Camera}>Cam</PermissionTrackToggle>
+          <PermissionTrackToggle enabled={effectivePermissions.canUseMic} meetingId={meetingId} mode={mode} source={Track.Source.Microphone}>Mic</PermissionTrackToggle>
+          <PermissionTrackToggle enabled={effectivePermissions.canUseCamera} meetingId={meetingId} mode={mode} source={Track.Source.Camera}>Cam</PermissionTrackToggle>
           {(permissions.canRaiseHand || permissions.handRaised) ? (
             <HandRaiseButton workspaceId={workspaceId} meetingId={meetingId} handRaised={permissions.handRaised} mode={mode} />
           ) : null}
@@ -697,8 +720,8 @@ function ConferenceSurface({
               >
                 Start
               </StartMediaButton>
-              <PermissionTrackToggle enabled={effectivePermissions.canUseMic} mode={mode} source={Track.Source.Microphone}>Mic</PermissionTrackToggle>
-              <PermissionTrackToggle enabled={effectivePermissions.canUseCamera} mode={mode} source={Track.Source.Camera}>Cam</PermissionTrackToggle>
+              <PermissionTrackToggle enabled={effectivePermissions.canUseMic} meetingId={meetingId} mode={mode} source={Track.Source.Microphone}>Mic</PermissionTrackToggle>
+              <PermissionTrackToggle enabled={effectivePermissions.canUseCamera} meetingId={meetingId} mode={mode} source={Track.Source.Camera}>Cam</PermissionTrackToggle>
               <PermissionTrackToggle enabled={effectivePermissions.canShareScreen} mode={mode} source={Track.Source.ScreenShare}>Share</PermissionTrackToggle>
               {(permissions.canRaiseHand || permissions.handRaised) ? (
                 <HandRaiseButton workspaceId={workspaceId} meetingId={meetingId} handRaised={permissions.handRaised} mode={mode} />
@@ -755,11 +778,13 @@ function HandRaiseButton({
 function PermissionTrackToggle({
   children,
   enabled,
+  meetingId,
   mode,
   source,
 }: {
   children: ReactNode;
   enabled: boolean;
+  meetingId?: string;
   mode: "full" | "floating";
   source: Track.Source.Microphone | Track.Source.Camera | Track.Source.ScreenShare;
 }) {
@@ -776,8 +801,16 @@ function PermissionTrackToggle({
     );
   }
 
+  // Only mic/camera state survives reconnects — screen share should never auto-resume.
+  const onChange = meetingId && (source === Track.Source.Microphone || source === Track.Source.Camera)
+    ? (nextEnabled: boolean) => {
+        const key = source === Track.Source.Microphone ? "mic" : "camera";
+        storeDevicePreference(meetingId, { ...getStoredDevicePreference(meetingId), [key]: nextEnabled });
+      }
+    : undefined;
+
   return (
-    <TrackToggle source={source} className={getControlClassName(mode)}>
+    <TrackToggle source={source} className={getControlClassName(mode)} onChange={onChange}>
       {children}
     </TrackToggle>
   );

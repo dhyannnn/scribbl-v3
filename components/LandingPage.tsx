@@ -210,7 +210,7 @@ function SessionHubMockup() {
               </div>
             </div>
             <div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[var(--color-live)]">
-              4 artifacts attached to this session
+              4 files attached to this session
             </div>
           </div>
         </div>
@@ -399,7 +399,7 @@ function HowItWorks() {
     {
       icon: <Mic size={21} />,
       title: "Keep the recap attached",
-      body: "Notes, files, recordings, meeting chats, and artifacts stay connected to the session and workspace.",
+      body: "Notes, files, recordings, and meeting chats stay connected to the session and workspace.",
     },
   ];
 
@@ -443,7 +443,7 @@ function GenericComparison() {
     { feature: "Rich shared notes", scribbl: true, videoOnly: false, whiteboardOnly: "Limited" },
     { feature: "Workspace chat", scribbl: true, videoOnly: false, whiteboardOnly: false },
     { feature: "Files, exports, and recordings", scribbl: true, videoOnly: "Scattered", whiteboardOnly: "Scattered" },
-    { feature: "Meeting artifacts linked together", scribbl: true, videoOnly: false, whiteboardOnly: false },
+    { feature: "Notes and files linked to each meeting", scribbl: true, videoOnly: false, whiteboardOnly: false },
     { feature: "Groups, roles, and billing controls", scribbl: true, videoOnly: "Limited", whiteboardOnly: "Limited" },
   ];
 

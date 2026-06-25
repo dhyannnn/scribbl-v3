@@ -71,6 +71,18 @@ const minimizedPanelWidth = 260;
 const snapDistance = 48;
 const minSplitVideoWidth = 320;   // minimum video panel width when split
 const maxSplitWidthRatio = 0.70;  // video panel can take at most 70% of viewport
+// Mirrors the [data-meeting-hub-main] min-width in globals.css — keeps an embedded
+// whiteboard (or any hub content) from being squeezed narrower than it can usefully
+// render at. The video panel's drag-resize must respect the same floor or the two
+// rules fight each other and the panel visually overlaps the hub content.
+const minHubWidthInSplit = 640;
+
+function getMaxSplitVideoWidth(viewportWidth: number) {
+  return Math.min(
+    Math.floor(viewportWidth * maxSplitWidthRatio),
+    Math.max(minSplitVideoWidth, viewportWidth - minHubWidthInSplit),
+  );
+}
 const SPLIT_WIDTH_KEY = "scribbl-video-split-width-v1";
 const portalPanelStyle = { zIndex: 2147483000, isolation: "isolate" } satisfies CSSProperties;
 
@@ -185,10 +197,14 @@ export function FloatingMeetingVideo({
     };
   }, [meetingId, router]);
 
-  // Re-clamp panel when window is resized (e.g. entering macOS split view)
+  // Re-clamp panel (and split width, if active) when window is resized — e.g.
+  // entering macOS split view. Without this, a wide split-video-width persisted
+  // from a larger window can squeeze the hub content (including an embedded
+  // whiteboard) below a usable width on a narrower one.
   useEffect(() => {
     function onResize() {
       setPanel((currentPanel) => clampPanel(currentPanel));
+      setSplitVideoWidth((currentWidth) => Math.min(currentWidth, getMaxSplitVideoWidth(window.innerWidth)));
     }
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
@@ -461,7 +477,7 @@ export function FloatingMeetingVideo({
               pointerId: e.pointerId,
               startX: e.clientX,
               startWidth: splitVideoWidth,
-              maxWidth: Math.floor(window.innerWidth * maxSplitWidthRatio),
+              maxWidth: getMaxSplitVideoWidth(window.innerWidth),
             };
           }}
         >
@@ -628,12 +644,13 @@ function loadStoredSplitWidth(): number {
     ? Math.floor(window.innerWidth * 0.42)
     : 500;
   if (typeof window === "undefined") return fallback;
+  const maxWidth = getMaxSplitVideoWidth(window.innerWidth);
   const stored = window.localStorage.getItem(SPLIT_WIDTH_KEY);
   if (stored) {
     const n = parseInt(stored, 10);
-    if (!isNaN(n) && n >= minSplitVideoWidth) return n;
+    if (!isNaN(n) && n >= minSplitVideoWidth) return Math.min(n, maxWidth);
   }
-  return fallback;
+  return Math.min(fallback, maxWidth);
 }
 
 function getStorageKey(meetingId: string) {
